@@ -1,0 +1,576 @@
+{
+  "id": "winter_disease",
+  "name": "冬雪之下·疾病计数器",
+  "description": "按原文自动结算疾病计数器：初始 100-2D10；默认从上次掷骰起满 1440 分钟恶化一次，首次 1D10、第二次 2D10、之后最多 3D10；维持 81-100/31-80/0-30 三阶段并设置 disease_phase2、disease_phase3、counter_zero；第二阶段让一名调查员患病、第三阶段增至两名；患病者每次恶化做体质检定，失败扣本次最高单骰并发理智检定，成功仍扣最低单骰，不改为扣 HP。不改写剧情、线索与图像。mitigate 降低以后恶化骰数（参数 1 或 2，累计上限 2，不低于 1D10，计数器不回升，不自动治好）；dramatic_tick 供关键节奏使用，同一回合不重复。 复核：每日与剧情两种节奏互斥；跨多天逐段补结算，每段使用更新后的体质；跳过已死亡调查员。",
+  "api_version": 1,
+  "version": "0.3.0",
+  "hooks": [
+    "start",
+    "turn",
+    "action"
+  ],
+  "capabilities": [
+    "dice",
+    "flag",
+    "attribute",
+    "condition",
+    "sanity"
+  ],
+  "actions": [
+    {
+      "name": "mitigate",
+      "description": "裁定员在调查员确有合理治疗或公共卫生措施时调用。arguments: reduction，整数 1 或 2；累计上限 2，骰数不低于 1D10，计数器不会回升，也不会自动治好疾病；非法参数不做任何改变。"
+    },
+    {
+      "name": "dramatic_tick",
+      "description": "供原作第二种 KP 节奏：调查员实际经历重大剧情变化且疾病确应推进时调用一次；同一回合重复调用被忽略；默认按天结算时不要使用。无参数。"
+    }
+  ],
+  "flags": {
+    "disease_phase2": "疾病计数器进入第二阶段（插件在实际跨过阈值时设置）",
+    "disease_phase3": "疾病计数器进入第三阶段（插件在实际跨过阈值时设置）",
+    "counter_zero": "疾病计数器归零，小镇不可避免走向灭亡（不可逆）"
+  },
+  "initial": {},
+  "tests": [
+    {
+      "name": "初始：100-2D10",
+      "event": {
+        "hook": "start"
+      },
+      "state": {},
+      "context": {
+        "minutes": 0
+      },
+      "dice": [
+        3,
+        4
+      ],
+      "checks": [],
+      "expected_state": {
+        "counter": 93,
+        "phase": 1,
+        "rolls": 0
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "不到一天不恶化",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 50,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": []
+      },
+      "context": {
+        "minutes": 600
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "counter": 50,
+        "last_tick": 0
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "进入第二阶段并感染一名调查员",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 85,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 1,
+        "infected": []
+      },
+      "context": {
+        "minutes": 1500,
+        "turn": 1,
+        "investigators": [
+          {
+            "id": "ant",
+            "characteristics": {
+              "体质": 60
+            }
+          },
+          {
+            "id": "thomas",
+            "characteristics": {
+              "体质": 55
+            }
+          }
+        ]
+      },
+      "dice": [
+        4,
+        5
+      ],
+      "checks": [],
+      "expected_state": {
+        "counter": 76,
+        "phase": 2,
+        "rolls": 2,
+        "infected": [
+          "ant"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "flag",
+          "key": "disease_phase2"
+        },
+        {
+          "kind": "condition",
+          "who": "ant",
+          "key": "患病",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "name": "患病者体质检定成功仍扣最低单骰",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 40,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": [
+          "thomas"
+        ]
+      },
+      "context": {
+        "minutes": 1500,
+        "turn": 2,
+        "investigators": [
+          {
+            "id": "ant",
+            "characteristics": {
+              "体质": 60
+            }
+          },
+          {
+            "id": "thomas",
+            "characteristics": {
+              "体质": 55
+            }
+          }
+        ]
+      },
+      "dice": [
+        2,
+        7
+      ],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "counter": 31,
+        "phase": 2,
+        "infected": [
+          "thomas"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "attribute",
+          "who": "thomas",
+          "key": "体质",
+          "amount": -2
+        }
+      ]
+    },
+    {
+      "name": "患病者体质检定失败扣最高单骰并发理智检定",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 40,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": [
+          "thomas"
+        ]
+      },
+      "context": {
+        "minutes": 1500,
+        "turn": 3,
+        "investigators": [
+          {
+            "id": "ant",
+            "characteristics": {
+              "体质": 60
+            }
+          },
+          {
+            "id": "thomas",
+            "characteristics": {
+              "体质": 55
+            }
+          }
+        ]
+      },
+      "dice": [
+        2,
+        7
+      ],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "counter": 31,
+        "phase": 2
+      },
+      "expected_effects": [
+        {
+          "kind": "attribute",
+          "who": "thomas",
+          "key": "体质",
+          "amount": -7
+        },
+        {
+          "kind": "sanity",
+          "who": "thomas"
+        }
+      ]
+    },
+    {
+      "name": "进入第三阶段并感染第二名调查员",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 40,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": [
+          "ant"
+        ]
+      },
+      "context": {
+        "minutes": 1500,
+        "turn": 4,
+        "investigators": [
+          {
+            "id": "ant",
+            "characteristics": {
+              "体质": 60
+            }
+          },
+          {
+            "id": "thomas",
+            "characteristics": {
+              "体质": 55
+            }
+          }
+        ]
+      },
+      "dice": [
+        5,
+        6
+      ],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "counter": 29,
+        "phase": 3,
+        "infected": [
+          "ant",
+          "thomas"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "flag",
+          "key": "disease_phase3"
+        },
+        {
+          "kind": "attribute",
+          "who": "ant",
+          "key": "体质",
+          "amount": -5
+        },
+        {
+          "kind": "condition",
+          "who": "thomas",
+          "key": "患病",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "name": "计数器归零且调查员列表为空",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 5,
+        "last_tick": 0,
+        "rolls": 2,
+        "phase": 3,
+        "infected": []
+      },
+      "context": {
+        "minutes": 1500,
+        "turn": 5,
+        "investigators": []
+      },
+      "dice": [
+        4,
+        6,
+        7
+      ],
+      "checks": [],
+      "expected_state": {
+        "counter": 0,
+        "phase": 3,
+        "counter_zero": true
+      },
+      "expected_effects": [
+        {
+          "kind": "flag",
+          "key": "counter_zero"
+        }
+      ]
+    },
+    {
+      "name": "非法减缓参数被忽略",
+      "event": {
+        "hook": "action",
+        "action": "mitigate",
+        "arguments": {
+          "reduction": 3
+        }
+      },
+      "state": {
+        "counter": 40,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": [],
+        "mitigation": 0
+      },
+      "context": {
+        "minutes": 100,
+        "turn": 6,
+        "investigators": []
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "counter": 40,
+        "mitigation": 0
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "合法减缓不回升计数器",
+      "event": {
+        "hook": "action",
+        "action": "mitigate",
+        "arguments": {
+          "reduction": 1
+        }
+      },
+      "state": {
+        "counter": 40,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": [],
+        "mitigation": 1
+      },
+      "context": {
+        "minutes": 100,
+        "turn": 8,
+        "investigators": []
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "counter": 40,
+        "mitigation": 2
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "减缓后恶化骰数仍不低于1D10",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 40,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": [],
+        "mitigation": 2
+      },
+      "context": {
+        "minutes": 1500,
+        "turn": 9,
+        "investigators": []
+      },
+      "dice": [
+        6
+      ],
+      "checks": [],
+      "expected_state": {
+        "counter": 34,
+        "phase": 2,
+        "rolls": 2,
+        "mitigation": 2
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "关键节奏同一回合不重复推进",
+      "event": {
+        "hook": "action",
+        "action": "dramatic_tick",
+        "arguments": {}
+      },
+      "state": {
+        "counter": 40,
+        "last_tick": 0,
+        "rolls": 1,
+        "phase": 2,
+        "infected": [],
+        "last_dramatic_turn": 7,
+        "cadence": "dramatic"
+      },
+      "context": {
+        "minutes": 100,
+        "turn": 7,
+        "investigators": []
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "counter": 40,
+        "last_dramatic_turn": 7
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "开局落在第二阶段时感染一名调查员",
+      "event": {
+        "hook": "start"
+      },
+      "state": {},
+      "context": {
+        "minutes": 0,
+        "turn": 0,
+        "investigators": [
+          {
+            "id": "ant",
+            "characteristics": {
+              "体质": 60
+            }
+          }
+        ]
+      },
+      "dice": [
+        10,
+        10
+      ],
+      "checks": [],
+      "expected_state": {
+        "counter": 80,
+        "phase": 2,
+        "infected": [
+          "ant"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "flag",
+          "key": "disease_phase2"
+        },
+        {
+          "kind": "condition",
+          "who": "ant",
+          "key": "患病",
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "name": "daily模式不额外按剧情恶化",
+      "event": {
+        "hook": "action",
+        "action": "dramatic_tick"
+      },
+      "state": {
+        "counter": 90,
+        "cadence": "daily",
+        "last_tick": 0
+      },
+      "context": {},
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "counter": 90
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "dramatic模式不按天自动恶化",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 90,
+        "cadence": "dramatic",
+        "last_tick": 0
+      },
+      "context": {
+        "minutes": 3000
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "counter": 90
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "跨两天先结算第一天并保留下一天",
+      "event": {
+        "hook": "turn"
+      },
+      "state": {
+        "counter": 100,
+        "phase": 1,
+        "rolls": 0,
+        "last_tick": 0,
+        "infected": []
+      },
+      "context": {
+        "minutes": 2880
+      },
+      "dice": [
+        1
+      ],
+      "checks": [],
+      "expected_state": {
+        "counter": 99,
+        "last_tick": 1440,
+        "rolls": 1
+      },
+      "expected_effects": []
+    }
+  ]
+}

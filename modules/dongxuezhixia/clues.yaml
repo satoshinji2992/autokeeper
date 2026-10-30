@@ -1,0 +1,585 @@
+items:
+- id: i_grimoire
+  name: 卡德威尔家的典籍
+  description: 一本古朴华美的旧书，书页被水泡过，画满无定形生物、球状物与咒语图示，页边有女孩子的笔迹
+  where: darvill_house
+  owner: ''
+  art: null
+- id: i_whisky
+  name: 药柜里的威士忌
+  description: 安特医生用来“清肺”的少量威士忌，标签都磨掉了
+  where: clinic
+  owner: ante
+  art: null
+- id: i_letters
+  name: 战场来信与军方电报
+  description: 一沓磨得起毛的信，夹着一张折过很多次的电报
+  where: darvill_caroline_room
+  owner: ''
+  art: null
+clues:
+- id: c_map
+  title: 拉特格夫妇手绘的地图
+  text: 弗朗西斯用铅笔在纸上画出埃斯内尔的几条路：出租屋、学校、邮局、教堂、安特医生的诊所、 达维尔家、绸缎山、西北的农场，还有东边的伊斯特曼家（也就是原卡德威尔家那边）。 他说只画他知道的地名，别的让你们自己去问。
+  where: ratger_house
+  feature: 客厅的餐桌
+  check: null
+  npc: doreen_ratger
+  core: true
+  handout: h_map_plain
+  requires: []
+  points_to:
+  - k_buried
+  sanity: null
+- id: c_gossip
+  title: 饭桌上的闲话
+  text: 多琳能数出镇上几乎每一户人家谁病了、谁刚下葬。说到年轻人，她压低声音： 卡洛琳·达维尔小姐和埃里·赫琴斯先生从小黏在一起，没结婚就那么来往，实在不成体统。 埃里从法国回来以后整个人都变了，现在替人拉尸体。卡洛琳还在诊所当护士。
+  where: ratger_house
+  feature: 客厅的餐桌
+  check: null
+  npc: doreen_ratger
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_caroline
+  sanity: null
+- id: c_cardwell_story
+  title: 原卡德威尔家的故事
+  text: 上了年纪的人一提起伊斯特曼家对面那栋破农舍就停不下来：鬼魂作祟、半夜的怪光、撒旦教徒出没。 也有人说那家的老族长从前是个有点法术的人，一场重伤竟奇迹般好了，同一时候他的儿媳却死于重病； 后来他的儿子杀了他，把尸体丢进了壁炉。房子在世纪之交就废弃了。
+  where: ratger_house
+  feature: 客厅的餐桌
+  check: null
+  npc: doreen_ratger
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_erie_false
+  - k_caroline
+  sanity: null
+- id: c_hauling
+  title: 拉尸体的人
+  text: 开卡车替人拉尸体的是埃里·赫琴斯。他瘦高、清秀，说话前先发出一阵软弱却刺耳的咳嗽。他不太眨眼，动作比常人慢半拍。
+  where: main_street
+  feature: 街角的卡车
+  check: null
+  npc: erie
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_erie_false
+  sanity: null
+- id: c_erie_odd
+  title: 埃里不对劲
+  text: 他看上去与常人无异，可总有哪里让人后背发凉：你说笑话他不笑，别人哭他也不看； 卡洛琳一开口，他立刻照做。仿佛这个人只是照着某个人的意思在动。
+  where: clinic
+  feature: 候诊室的门口
+  check:
+    skill: 心理学
+    difficulty: 常规
+    bonus: 0
+  npc: erie
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_erie_false
+  sanity: null
+- id: c_notes
+  title: 安特医生的病历
+  text: 两份病历记得极细：干咳、乏力、肌肉酸痛、抽筋，夜里睡不安稳、数次尖叫；体温从 101°F 升到 103°F， 随后只能偶尔醒来、精神错乱、对外界刺激无应答，最后死亡。另一名患者胸口发紧、呼吸困难，
+    呕吐、脸色苍白、浑身发冷、咳嗽带血，害怕入睡，只睡不到三十分钟。全程无肺炎迹象。
+  where: clinic
+  feature: 安特的病历本
+  check: null
+  npc: ante
+  core: true
+  handout: h_notes
+  requires: []
+  points_to:
+  - k_disease
+  sanity: null
+- id: c_examine
+  title: 检查活着的病人
+  text: 检查只会证实安特的观测：症状像流感，但凶险得多，而且没有任何病人有二次感染或肺炎的迹象。 这很不寻常——二次感染或肺炎才是流感的主要致死因素。想用拭子采样培养，需要时间， 而这段时间里病还会继续杀人。
+  where: clinic
+  feature: 六张病床
+  check:
+    skill: 医学
+    difficulty: 常规
+    bonus: 0
+  npc: null
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_disease
+  sanity: null
+- id: c_cure_records
+  title: 旧病历里的康复名单
+  text: 西班牙流感最凶的那几个月，有十几个命悬一线的埃斯内尔人奇迹般地康复了。 记录上看不出他们有什么共同点，除了护理栏里同一个签名。
+  where: clinic
+  feature: 安特的旧病历档案
+  check:
+    skill: 图书馆使用
+    difficulty: 常规
+    bonus: 0
+  npc: null
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_method
+  sanity: null
+- id: c_ante_cure
+  title: 安特医生证实的事
+  text: 安特证实那份康复名单是真的，但他认为那完全是合理护理的功劳。 被追问之下他才想起来：那些病人都是卡洛琳·达维尔护理的。
+  where: clinic
+  feature: 安特的病历本
+  check: null
+  npc: ante
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_method
+  sanity: null
+- id: c_cellar
+  title: 地下室那面墙
+  text: 地下室远端的墙因为水管爆裂而损坏，长满霉菌，看起来摇摇欲坠。牧师非常震惊， 因为本周早些时候那里还没有任何损坏或爆裂的迹象。停在这里的都是这几天的死者。
+  where: church_cellar
+  feature: 远端那面渗水的墙
+  check: null
+  npc: null
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_disease
+  sanity: null
+- id: c_autopsy
+  title: 尸检
+  text: 死者的内脏器官扭曲变形，看上去退化成了脆弱的果冻状物质；同样没有任何二次感染的迹象。
+  where: church_cellar
+  feature: 经开棺解剖后检查的内脏；仅检查尸体外表不足以发现
+  check:
+    skill: 医学
+    difficulty: 常规
+    bonus: 0
+  npc: null
+  core: true
+  handout: null
+  requires: []
+  points_to:
+  - k_disease
+  sanity: null
+- id: c_anna_tale
+  title: 安娜的讲述
+  text: 安娜说萨缪尔是镇上第一个病死的。他被带回家那晚已经开始胡言乱语，那时他身上还没有任何症状。 他说自己打猎时遇到了一个包裹全身的人，还说：“他回家了。他本来就在这，但他现在又回来了。” 埃里是她丈夫最长久的朋友之一。
+  where: post_office
+  feature: 安娜的柜台
+  check: null
+  npc: anna
+  core: true
+  handout: null
+  requires: []
+  points_to:
+  - k_nightmare
+  - k_erie_false
+  sanity: null
+- id: c_samuel_diary
+  title: 萨缪尔的日记与速写
+  text: 萨缪尔死前疯狂涂写，用难以辨别的潦草字迹写满了一整本日记，其中一页画着速写： 中央是一个涂黑的无脸人形，背景是许多重叠的圆圈与涂线。成功的克苏鲁神话检定能辨认出 这些图像与犹格-索托斯有关。
+  where: eastman_house
+  feature: 那本潦草的日记
+  check: null
+  npc: null
+  core: true
+  handout: h_nightmare
+  requires: []
+  points_to:
+  - k_nightmare
+  - k_buried
+  sanity: 0/1
+- id: c_cardwell_farm
+  title: 农舍里的痕迹
+  text: 一间卧室的地板上铺着一条发霉的野餐毯，还有一个被动物撕碎的野餐篮子；墙角堆着几本被水泡过的中学课本， 最新的一本出版于 1911 年；最有说服力的是一架书柜侧面深深刻着的姓名首字母：“EH
+    和 CD”。
+  where: cardwell_farm
+  feature: 铺在卧室地板上的野餐毯
+  check:
+    skill: 侦查
+    difficulty: 常规
+    bonus: 0
+  npc: null
+  core: true
+  handout: null
+  requires: []
+  points_to:
+  - k_caroline
+  sanity: null
+- id: c_wall_symbol
+  title: 墙皮下的符号
+  text: 仔细搜查会在一间房剥落的墙皮下发现烧焦的木头的痕迹。把墙皮破坏掉，是用火在墙上烧出的一个怪异符号， 与犹格-索托斯有所关联。
+  where: cardwell_farm
+  feature: 剥落墙皮的墙面
+  check:
+    skill: 侦查
+    difficulty: 困难
+    bonus: 0
+  npc: null
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_caroline
+  sanity: 0/1D2
+- id: c_nightmares
+  title: 相似的噩梦
+  text: 还能说话的病人和家属都说，发烧时做的梦相似得可怕：梦里有一个说不清哪里迷人的男人，从不出声， 意愿却直接刻进脑子里，他在向病人索取什么，醒来却记不得要的是什么。每个病人都坚持说这个人没有脸。
+    格外敏锐的人会注意到：在梦里拒绝过他的病人恶化得慢，顺从他的病人恶化得快。
+  where: clinic
+  feature: 六张病床
+  check:
+    skill: 说服
+    difficulty: 常规
+    bonus: 0
+  npc: null
+  core: true
+  handout: null
+  requires: []
+  points_to:
+  - k_nightmare
+  - k_method
+  sanity: null
+- id: c_cure_offer
+  title: 卡洛琳的请求
+  text: “这不是普通的疾病，你能看出来。我需要一具尸体，死于那种病的尸体。我会用它查明疾病的源头。 我能处理好这件事。让一切都恢复正常。你们相信我就是了。”
+  where: clinic
+  feature: 药柜旁的走廊
+  check: null
+  npc: caroline
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_method
+  - k_caroline
+  sanity: null
+- id: c_shadow
+  title: 阴影下的治疗
+  text: 卡洛琳用香炉烧一种混合粉末，让病人深吸入厚重辛辣的烟雾。几分钟后病人开始激烈地翻来覆去， 四肢在白床单上扭动。房间中央出现一道黑暗而夺目的阴影，里面传来低声的咒语。 阴影停留数小时后散去，半数病人显著恢复，另一半死去。
+  where: clinic
+  feature: 六张病床
+  check: null
+  npc: caroline
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_method
+  sanity: 1/1D4+1
+- id: c_theft
+  title: 尸体被盗
+  text: 第二天早上才知道，诊所里一具病人的尸体不见了。安特和值班护士都没目睹盗窃现场， 但护士说午夜过后听到过一阵软弱却刺耳的咳嗽声。
+  where: clinic
+  feature: 护士的值班记录
+  check: null
+  npc: null
+  core: true
+  handout: null
+  requires:
+  - flag:body_stolen
+  points_to:
+  - k_erie_false
+  sanity: null
+- id: c_theft_suspect
+  title: 她还要一具尸体
+  text: 卡洛琳希望调查员再帮她弄一具尸体以了解更多。
+  where: darvill_house
+  feature: 地下室的门
+  check: null
+  npc: caroline
+  core: false
+  handout: null
+  requires:
+  - flag:body_stolen
+  points_to:
+  - k_caroline
+  sanity: null
+- id: c_seance
+  title: 门后的招魂
+  text: 地下室的门没锁，积雪被清理过。贴近门口能清楚听见卡洛琳在向刚复生的魂灵提问。魂灵说： 他们睡梦时“掩藏者”呼唤他们的名字，仿佛很熟悉他们；他在头顶呼唤，也在脚下呼唤， 他们知道他在，却看不见他，他藏在炫目雪白的黑暗里；他要他们为他在黄色峰顶建起血肉的祭坛，
+    每次完工祭坛都塌下来，于是他们又劳作，直到黄色峰顶鲜血淋漓。
+  where: darvill_house
+  feature: 地下室的门
+  check:
+    skill: 聆听
+    difficulty: 常规
+    bonus: 0
+  npc: null
+  core: true
+  handout: null
+  requires:
+  - flag:body_stolen
+  points_to:
+  - k_buried
+  - k_nightmare
+  sanity: 1/1D6+1
+- id: c_parents_tale
+  title: 达维尔夫妇的话
+  text: 在妄想与呓语之间，事情是这样的：那个戴着面具的男人不是真正的埃里。他在夜里浑身是血地归来， 发现他们在看他，便对着他们笑，低声说面具是他的了，他杀掉了面具的主人，他会永远戴着这面具。 细心追问可知，那就是埃里跟萨缪尔·伊斯特曼去打猎、把后者送回家的同一天晚上。
+  where: darvill_house
+  feature: 楼上的房间
+  check:
+    skill: 说服
+    difficulty: 常规
+    bonus: 0
+  npc: darvill_parents
+  core: true
+  handout: null
+  requires: []
+  points_to:
+  - k_erie_false
+  sanity: null
+- id: c_grimoire
+  title: 卡德威尔家的典籍原本
+  text: 典籍描述犹格-索托斯以及通神的咒语。即使不懂神话，插图与图示也会让调查员想起卡德威尔家的印记和 萨缪尔的速写。其中有两条值得注意的咒语：一条召唤异界存在并把它固定成特定形态，一条吸取他人生命力
+    以恢复伤势。另有一条放逐这种无定形存在的咒语，注明此类存在“会完全篡夺实体的外貌，直至只有一方有此相貌”。 召唤咒旁有卡洛琳手写的注释：要把存在变成特定形态，需要目标亲属的血液或精盐。
+  where: darvill_house
+  feature: 客厅的笔记
+  check: null
+  npc: null
+  core: true
+  handout: h_grimoire
+  requires: []
+  points_to:
+  - k_caroline
+  - k_erie_false
+  sanity: 0/1D3
+- id: c_letters_telegram
+  title: 床畔的信与电报
+  text: 一沓埃里从战场写给她的信，都磨得起了毛，显然常被翻阅。其中夹着一封军方电报： 一等兵埃里·赫琴斯在敌人突袭炮击中阵亡，指挥官记得他提起家人和等在家中的未婚妻。
+  where: darvill_caroline_room
+  feature: 卡洛琳的床畔
+  check: null
+  npc: null
+  core: true
+  handout: h_telegram
+  requires: []
+  points_to:
+  - k_erie_false
+  sanity: null
+- id: c_cattle
+  title: 布鲁彻的牛
+  text: 征得雷吉同意查看牛只，能证实牛的症状与镇民相似：干咳、乏力、瘦得肋骨一根根支出来，站不起来。 雷吉坚持这是对城镇全部弊病的神圣超自然审判。
+  where: brucker_farm
+  feature: 病倒的牛
+  check: null
+  npc: reggie
+  core: false
+  handout: null
+  requires: []
+  points_to:
+  - k_disease
+  sanity: null
+- id: c_map_spread
+  title: 标出传播路径
+  text: 把已知的病例在拉特格夫妇的地图上一户户标出来，传播范围一圈圈往外扩，圈线的中心指向绸缎山。 东边萨缪尔·伊斯特曼家是唯一的例外——那是个干扰。
+  where: ratger_house
+  feature: 摊开的地图
+  check:
+    skill: 医学
+    difficulty: 常规
+    bonus: 0
+  npc: null
+  core: true
+  handout: h_map_full
+  requires:
+  - c_map
+  - flag:spread_reviewed
+  points_to:
+  - k_buried
+  sanity: null
+- id: c_hill_dream
+  title: 靠近时的幻象
+  text: 越靠近埋尸处，法术的影响越重：已经患病的调查员开始出现幻觉，看见梦里那个“掩藏者”为他们指路； 未患病的调查员开始咳嗽，觉得自己发起烧来。就这样，一行人被引到一小片矮树林。
+  where: satin_hill
+  feature: 山脊
+  check: null
+  npc: null
+  core: true
+  handout: null
+  requires: []
+  points_to:
+  - k_buried
+  sanity: null
+- id: c_hill_trace
+  title: 雪下的差异
+  text: 雪地上有极细微的差异，非极难侦查不能发现：这里的雪被从下方翻动过。 挖下去，就是“掩藏者”埋尸之处——他并非只施放了一个法术求生，而是多个； 每次吸到生命力就试图爬出这座冰雪坟墓，每次失败，只好再施一次法。
+  where: satin_hill
+  feature: 那片矮树林
+  check:
+    skill: 侦查
+    difficulty: 极难
+    bonus: 0
+  npc: null
+  core: true
+  handout: h_flower_reference
+  requires: []
+  points_to:
+  - k_buried
+  - k_antidote
+  sanity: null
+- id: c_entity_form_darvill_house
+  title: 亲眼见到的原形
+  text: 眼前的存在显露出非人的、无定形的本貌。
+  where: darvill_house
+  feature: 已经露出原形的异界存在
+  check: null
+  npc: null
+  core: false
+  handout: h_entity_form
+  requires:
+  - flag:entity_revealed
+  points_to:
+  - k_erie_false
+  sanity: null
+- id: c_entity_form_satin_hill
+  title: 亲眼见到的原形
+  text: 眼前的存在显露出非人的、无定形的本貌。
+  where: satin_hill
+  feature: 已经露出原形的异界存在
+  check: null
+  npc: null
+  core: false
+  handout: h_entity_form
+  requires:
+  - flag:entity_revealed
+  points_to:
+  - k_erie_false
+  sanity: null
+- id: c_old_rite_note
+  title: 旧葬仪簿里的旁注
+  text: 地下室的旧葬仪簿里夹着一页没署名的旁注，字迹很老。上面说绸缎山下的雪“埋过不该埋的人”，只要那个人不安宁，镇上的病就不会断根；要么让他真正归于土，要么让他自己从雪里站起来。旁注边角画着一小片矮树林。
+  where: church_cellar
+  feature: 地下室木柜里一本旧葬仪簿的夹页
+  check:
+    skill: 图书馆使用
+    difficulty: 常规
+  points_to:
+  - k_antidote
+- id: c_reggie_mutter
+  title: 雷吉灌酒时的嘟囔
+  text: 雷吉灌下一口酒，盯着牛棚嘟囔：牛不是病，是地底下有东西在啃。他说老辈人讲过，要么把土里的东西烧干净，要么等它自己爬出来，不然这地方好不了。说完他又摇头，说自己只是胡说。
+  where: brucker_farm
+  feature: 雷吉拎着酒瓶站在牛棚边时的嘟囔
+  check:
+    skill: 说服
+    difficulty: 常规
+  points_to:
+  - k_antidote
+handouts:
+- id: h_map_plain
+  title: 分发材料 1a——埃斯内尔地图（黑字地名版）
+  kind: 手绘地图
+  text: '弗朗西斯用铅笔画的埃斯内尔，黑字地名包括：
+
+    出租屋 / 学校 / 邮局 / 教堂 / 安特医生的诊所 / 达维尔家 / 绸缎山 / 西北农场 / 伊斯特曼家（原卡德威尔家）。
+
+    此时地图上只有这些地点，没有传播圈线。'
+  images: []
+  paper: card
+- id: h_map_full
+  title: 分发材料 1——埃斯内尔地图（完整）
+  kind: 手绘地图
+  text: '地图上补全了第一阶段、第二阶段、第三阶段的传播圈线。
+
+    一圈套一圈，中心指向绸缎山。东边的伊斯特曼家落在圈外。'
+  originals:
+  - source/source/images/p09_image02.png
+  images: []
+  paper: card
+- id: h_notes
+  title: 分发材料 2a、2b——安特医生的病历
+  kind: 病历
+  text: "病历 2a：\n01/12/21：患者男，37 岁，感到浑身乏力，伴有咳嗽。开了少量威士忌，无痰或其他感染症状。\n01/14/21：病人抱怨肌肉酸痛、严重抽筋，离开诊所时摔倒在地，留其过夜观察。夜里睡眠不安稳，\n\
+    \          没有醒来但常有活动，数次尖叫出声。开始发烧（101°F）。\n01/15/21：发烧程度加重（103°F），身体过于虚弱无法起床。第二剂威士忌。无肺炎迹象。\n01/16/21：只能偶尔醒过来，精神错乱、语无伦次，对外界刺激无应答、无法叫醒。下午\
+    \ 2:19 去世。\n\n病历 2b：\n01/15/21：患者女，54 岁，胸口发紧，有束缚感，呼吸困难，无淤血或炎症迹象。想留她过夜观察，\n          被坚持回家的病人拒绝。\n\
+    01/16/21：丈夫打来电话，病人时常严重反胃、呕吐；她仍拒绝到诊所过夜。丈夫和此前就诊的两子没有症状。\n          指导如何避免感染。\n01/18/21：病人脸色苍白、浑身发冷，肌肉力量下降，咳嗽带血，难以集中注意力；丈夫说前两晚睡眠不佳。\n\
+    01/21/21：病情明显恶化，睡眠不超过 30 分钟，害怕入睡，发现幻觉。开镇静剂帮助休息。\n          丈夫称自己的胸闷气短、偶尔咳嗽。\n01/22/21：患者昨晚去世。\n"
+  originals:
+  - source/source/images/p11_image01.png
+  - source/source/images/p12_image01.png
+  images: []
+  paper: diary
+- id: h_nightmare
+  title: 分发材料 3——萨缪尔的速写
+  kind: 速写
+  text: '一页潦草的画：中央是一个涂黑的无脸人形，背景是许多重叠的圆圈与涂线，
+
+    圈线的中心隐约指向某个更高的地方。
+
+    '
+  originals:
+  - source/source/images/p14_image01.png
+  images: []
+  paper: card
+- id: h_telegram
+  title: 分发材料 4——军队电报
+  kind: 电报
+  text: '致赫琴斯先生及夫人：
+
+    美国远征部队 439571 号一等兵埃里·赫琴斯不幸身亡。在敌人一次突袭炮击中，他闯入无人区
+
+    拯救被围困的中队，为保护战友战斗到最后一刻，挽救数人生命。指挥官记得他深情提起家人
+
+    及等在家中的未婚妻；信中表达沉痛哀悼与慰问。
+
+    中尉马修·海德福斯，来自第 4 师指挥官 L.A.P. 普拉格少将与美国远征部队指挥官约翰·J·潘兴将军办公室。
+
+    '
+  originals:
+  - source/source/images/p19_image01.png
+  images: []
+  paper: wire
+- id: h_grimoire
+  title: 卡德威尔家的典籍（关键部分摘抄）
+  kind: 典籍
+  text: "书页被水浸过又干，插图上画着令人不安的无定形生物和怪异的球状物。\n· 通向犹格-索托斯的咒语与图示。\n· 召唤异界存在、并将其控制、固定成特定形态的咒语。旁有卡洛琳手写的注释：\n\
+    \  要让它化成某个人的形态，需要那个人亲属的血液或精盐。\n· 吸取他人生命力以恢复自身伤势的咒语。\n· 放逐上述无定形存在的咒语，注明此类存在“会完全篡夺实体的外貌，直至只有一方有此相貌”。\n"
+  images: []
+  paper: book
+- id: h_entity_form
+  title: 它本来的样子
+  kind: 图画
+  text: 原作插图：半边是人脸，半边是没有固定形态的东西。
+  originals:
+  - source/source/images/p06_image02.png
+  images: []
+  paper: card
+- id: h_flower_reference
+  title: 绸缎花（原作外观参考）
+  kind: 参考插图
+  text: 绸缎山因春夏开放的黄色绸缎花得名。此图是原作提供的花卉外观参考；现在是冬季，眼前的山坡覆盖着积雪。
+  originals:
+  - source/source/images/p20_image03.png
+  images: []
+  paper: card
+sketches:
+- id: sk_map
+  ask: 把已知病例在一张埃斯内尔简图上标出来，画出传播的范围
+  target: 一圈套一圈的传播圈线，各圈中心落在西边的绸缎山；东边的伊斯特曼家孤立在圈外
+  threshold: 0.6
+  sanity: null
+  clue: null
+  after: c_map_spread
+- id: sk_faceless
+  ask: 照病人的描述，把梦里那个男人的样子画下来
+  target: 一个人形，有眼睛鼻子嘴的轮廓，但整张脸被涂黑、认不出五官；背景有重叠的圆圈
+  threshold: 0.65
+  sanity: 0/1D2
+  clue: null
+  after: c_nightmares

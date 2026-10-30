@@ -1,0 +1,215 @@
+conclusions:
+- id: k_disease
+  text: 这场病不是细菌或病毒引起的，而是法术在吸取埃斯内尔居民的生命力——所以隔离、消毒、培养病源都没有用
+- id: k_nightmare
+  text: 病人在梦里被同一个没有脸的男人索取；顺从他的恶化快，拒绝他的恶化慢
+- id: k_method
+  text: 卡洛琳的熏香“治疗”与全镇的病是同一路法术，她救活过的那十几个人正是她施法的对象
+- id: k_erie_false
+  text: 现在这个“埃里”不是真正的埃里·赫琴斯；真正的埃里被杀死，埋在绸缎山下
+- id: k_buried
+  text: “掩藏者”的尸体埋在绸缎山的矮树林下，那里是全镇苦痛的中心
+- id: k_caroline
+  text: 卡洛琳从卡德威尔家的典籍里学会了法术，召唤了那个无定形存在并给了它爱人的形象；她一边救人也一边是病源的一部分
+- id: k_antidote
+  text: 无论摧毁“掩藏者”还是复活他，都能让埃斯内尔摆脱这场病
+events:
+- id: e_arrival
+  title: 抵达埃斯内尔
+  when: visit:ratger_house
+  text: >-
+    开局必发：相隔几个房子处，正有人把两具蒙着白布的尸体抬上卡车。让调查员一到这里就注意到。
+    安特医生上报得很快，但疾病发作极快，调查员到达时已有多人死亡。
+    这是抵达出租屋时同一场面的远处见闻，和门口迎客衔接，不再另演一次抵达或催促调查；是否上前查看、询问或先安顿由玩家决定。
+  read_aloud: >-
+    相隔几栋房子，一辆卡车放下了后厢挡板。两具蒙着白布的尸体正被抬上车，搬运的人扶住担架，
+    等车旁的人把后厢腾空。街上很静，木板碰撞的声音传到了出租屋门口。
+  sets: []
+  sanity: null
+  damage: null
+  move_to: null
+  performer: null
+  performance: ''
+  ending: null
+  present:
+  - doreen_ratger
+- id: e_market_erie
+  title: 街上遇见的拉尸人
+  when: visit:main_street
+  text: 调查员必然会在调查初期遇见“埃里”，因为他负责开车运送死者的尸体。这很重要： 模组后期病人尸体被偷时，他标志性的咳嗽声是一条关键线索。
+  read_aloud: 一辆卡车停在街角，车斗里并排放着两口盖好的木箱。驾驶座上的人下来，瘦高，清秀。 他开口前先咳了一声——软弱，却刺耳，像铁片刮过玻璃。
+  sets:
+  - met_erie
+  sanity: null
+  damage: null
+  move_to: null
+  performer: null
+  performance: ''
+  ending: null
+  present:
+  - erie
+- id: e_milk
+  title: 早饭时的牛奶
+  when: flag:breakfast_phase2
+  text: 疾病进入第二阶段后的早饭：多琳惊声尖叫着把牛奶罐掉在地上。罐子碎了，里面的牛奶腐坏发臭、 凝结成块，泼洒得到处都是。如果调查员此时手里正拿着某些线索或文件，可能被泼坏。
+  read_aloud: 多琳把牛奶罐往桌上一放，手一滑——罐子砸在地上碎了。泼出来的牛奶不是白的， 又黄又稠，结成了块，那股酸臭一下子压过了炉子上的面包味。
+  sets: []
+  sanity: null
+  damage: null
+  move_to: null
+  performer: null
+  performance: ''
+  ending: null
+  present:
+  - doreen_ratger
+- id: e_porch
+  title: 后廊塌了
+  when: flag:meal_phase3
+  text: 疾病进入第三阶段后，当调查员坐下来吃饭时，会听到房子里传来痛苦的呻吟声和碰撞的回声。 后廊的屋顶被积雪压垮了，弗朗西斯半个身子被埋在下面，毫无知觉。 医生检查结果是健康状况堪忧，生命垂危。
+  read_aloud: 桌子刚摆好，屋后传来一声闷响，接着是木头断裂的连串爆响，和一声压在喉咙里的呻吟。 众人冲过去，后廊的屋顶塌了，雪和碎木堆里露出弗朗西斯的一条胳膊。
+  sets: []
+  sanity: null
+  damage: null
+  move_to: null
+  performer: null
+  performance: ''
+  ending: null
+  present:
+  - francis_ratger
+- id: e_theft
+  title: 当晚，尸体被盗
+  when: flag:theft_discovered
+  text: 卡洛琳越发想弄清是什么法术抵消了自己的法术，于是命令那个异界存在当晚偷走一具病人的尸体， 想复活它来细问。除非调查员有妄想症或特别幸运，否则要到第二天早上才得知。 安特和值班护士都没目睹现场，但护士说午夜过后听到一阵软弱却刺耳的咳嗽声。
+  read_aloud: 第二天早上，诊所里有一张床是空的。床单被掀到一边，窗子从里面打开着，窗台上的雪被蹭掉了。 值班护士脸色发白，说她午夜后好像听见有人在走廊里咳了一声。
+  sets:
+  - body_stolen
+  sanity: null
+  damage: null
+  move_to: null
+  performer: null
+  performance: ''
+  ending: null
+- id: e_storm
+  title: 追踪途中的暴风雪
+  when: flag:chase_erie
+  text: 调查员离开诊所去追“埃里”回达维尔家时，天气骤然恶化，整个埃斯内尔被猛烈的暴风雪笼罩。 在风雪中开车，驾驶员需成功进行困难驾驶检定以避免冲出路边撞到雪堆；即使成功，大雪也会造成暂时性失明。
+    利用这一场景深入扮演调查员的恐惧症或躁狂症，尤其当他们自己也病了；可用幻视或幻听给出细微线索。 徒步找地方避雪时，暴露在刺骨寒风中非常危险：体质检定失败受 1D10 点伤害。他们离达维尔家并不很远。
+  read_aloud: 风声一下子变成了实心的东西，横着砸在挡风玻璃上。车前只剩两三码是白的，别的什么都没有。 雪地里的车辙立刻被填平，连自己的脚印都看不见了。
+  sets: []
+  sanity: null
+  damage: null
+  move_to: null
+  performer: null
+  performance: ''
+  ending: null
+- id: e_hill_arrival
+  title: 绸缎山上的两个人
+  when: flag:hill_found
+  text: 除非调查员尽力阻止，否则在他们抵达埋尸地点时或不久后，卡洛琳和“埃里”就会前来，但这不会立即引发冲突。 卡洛琳这时也有明显的疾病症状，“埃里”看上去完全不受影响。从这里起结局取决于卡洛琳和调查员。
+  read_aloud: 坡下传来踩雪的咯吱声。两个人影从树间上来，走在前面的女人裹着围巾，脚步不稳，呼出的白气又短又急。 她身后的年轻人替她提着一盏灯，走上坡来一点也不喘。
+  sets: []
+  sanity: null
+  damage: null
+  move_to: null
+  performer: null
+  performance: ''
+  ending: null
+  present:
+  - caroline
+  - erie
+endings:
+- id: too_late
+  title: 太迟了
+  condition: flag:counter_zero
+  text: 即使调查员此后仍阻止了“掩藏者”复活，这场胜利也付出了高昂的代价。死亡人数如此之多， 埃斯内尔已经无望恢复，整个镇子最终会荒废，被掩藏在大雪之下。
+  reward: ''
+- id: stopped_in_time
+  title: 归零之前阻止了复活
+  condition: flag:hidden_destroyed
+  text: 疾病没有等到收走整个镇子就被止住了：症状迅速消失，但要完全康复还需要更长的日子。 埃斯内尔人会为死者悲痛，然后团结起来成为一个整体。若调查员同时把那个异界存在放逐回原属位面， 再额外恢复
+    1D4 点 SAN。
+  reward: 理智 +1D6；若同时 flag:entity_banished，再 +1D4
+- id: revived
+  title: 复活“掩藏者”
+  condition: flag:hidden_revived
+  text: 真埃里从雪下被拉了出来，法术随之终止，病也止住了。至于这座镇子和卡洛琳接下来要面对什么， 只有他们自己知道。若调查员已深陷卡洛琳的支配，她非常愿意牺牲其中一两个人的生命来完成复活术。
+  reward: 疾病停止；参与复活仪式的调查员按 KP 判断理智损失
+# 大场景：整屏展示一张大图，每局每个最多一次（engine/showcase.py）。图在本机生成，放在 saves/showcases/，不进仓库。
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 冬雪之下的埃斯内尔
+    prompt: 1921 年北达科他的乡下小城，房子都压着厚厚的雪帽，烟囱冒着细烟，街上没什么人；几栋房子外，两个男人把裹着白布的担架抬上一辆卡车的后厢，风雪迷蒙
+    base: ratger_house
+  - id: sc_clinic
+    kind: 重要场景
+    when: visit:clinic
+    title: 安特医生的诊所
+    prompt: 一栋改建的旧宅诊所，候诊室里坐满了咳嗽的病人，有人靠着墙睡；里间六张病床，床单洗得发白，窗外是冬日刺眼的雪光
+    base: clinic
+  - id: sc_erie
+    kind: 突发
+    when: event:e_market_erie
+    title: 街上遇见的拉尸人
+    prompt: 雪墙夹着的小城主街，街角停着一辆卡车，车斗里并排放着两口盖好的木箱，一个瘦高清秀的年轻人刚从驾驶座下来，捂着嘴咳嗽
+    base: main_street
+  - id: sc_milk
+    kind: 突发
+    when: event:e_milk
+    title: 早饭时的牛奶
+    prompt: 出租屋的早餐桌旁，一只牛奶罐摔碎在地板上，泼出来的牛奶又黄又稠、结成了块，炉子上的面包还冒着热气
+    base: ratger_house
+  - id: sc_porch
+    kind: 危机
+    when: event:e_porch
+    title: 后廊塌了
+    prompt: 木屋的后廊屋顶塌了下来，积雪和断裂的木头堆成一堆，碎木里露出一条胳膊，几个人正从屋里冲出来
+    base: ratger_house
+  - id: sc_theft
+    kind: 突发
+    when: event:e_theft
+    title: 空床
+    prompt: 清晨的诊所病房，一张空床，床单被掀到一边，窗子从里面打开着，窗台上的积雪被蹭掉了一片
+    base: clinic
+  - id: sc_storm
+    kind: 危机
+    when: event:e_storm
+    title: 暴风雪
+    prompt: 暴风雪里的一辆老式汽车，从车里望出挡风玻璃，车灯前只剩两三码白茫茫的雪，雪横着砸过来，四周什么都看不见
+  - id: sc_hill
+    kind: 重要场景
+    when: visit:satin_hill
+    title: 绸缎山
+    prompt: 风雪中的小山坡，只有雪、风和一丛丛矮树；往下望是整个小城，烟囱的细烟像插在雪里的针，天色铅灰
+    base: satin_hill
+  - id: sc_entity
+    kind: 最终boss
+    when: flag:entity_revealed
+    title: 不属于这里的东西
+    prompt: 雪夜里一个瘦高清秀的人形正在崩解，皮肤之下翻涌出无定形的、不属于这个世界的东西，提灯的光被它一点点吞没
+  - id: sc_end_late
+    kind: 结局
+    when: ending:too_late
+    title: 太迟了
+    prompt: 大雪掩埋的荒废小城，没有一缕炊烟，窗户黑洞洞的，雪地上没有一个脚印
+    base: main_street
+  - id: sc_end_stopped
+    kind: 结局
+    when: ending:stopped_in_time
+    title: 雪停了
+    prompt: 雪停后的清晨，阳光照在小城被雪覆盖的屋顶上，几户人家的烟囱重新冒出细烟，街上有人在扫雪
+    base: main_street
+  - id: sc_end_revived
+    kind: 结局
+    when: ending:revived
+    title: 从雪下拉出来的人
+    prompt: 夜里的雪坡上，几个人从雪下拉出一个冻僵的年轻人，一盏提灯放在雪地里，灯光映着呼出的白气
+    base: satin_hill
+prelude:
+- art: main_street
+  text: 1921 年，北达科他州沃德县。埃斯内尔下了一周的雪，通往镇上的路，只剩雪犁清出的那一条。
+- art: clinic
+  text: 安特医生从镇上发出了警报。新的病人不断出现，症状像流感，却恶化得更快。县卫生部门决定派人前往。
+- art: ratger_house
+  text: 拉特格家的客房已经备好。雪还没有停，门内的炉火从午后就一直烧着，等远道而来的客人。

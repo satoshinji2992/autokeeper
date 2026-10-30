@@ -1,0 +1,355 @@
+relations:
+- a: caroline
+  b: erie
+  kind: 支配
+  value: 85
+  why: 她召来它、给它埃里的脸和声音，它一举一动都照她的指示
+- a: erie
+  b: caroline
+  kind: 服从
+  value: 90
+  why: 它只听卡洛琳的命令，没有指示时才偶尔按自己的想法行动
+- a: ante
+  b: caroline
+  kind: 信任
+  value: 60
+  why: 他靠她护理满屋病人，西班牙流感时那十几个奇迹康复的也都是她照看的
+- a: caroline
+  b: ante
+  kind: 隐瞒
+  value: -35
+  why: 她绝不让他看出自己的熏香治疗和全镇的病是同一路法术
+- a: caroline
+  b: players
+  kind: 拉拢
+  value: 40
+  why: 她要借外来人的手查清“是什么法术抵消了我的法术”，必要时还要一具尸体
+- a: erie
+  b: players
+  kind: 戒备
+  value: -45
+  why: 卡洛琳交代过对外人说什么，问起咳嗽就答胸腔里卡着弹片
+- a: darvill_parents
+  b: erie
+  kind: 恐惧
+  value: -75
+  why: 他们记得那个男人浑身是血地回来，笑着说面具是他的了，会永远戴着
+- a: erie
+  b: darvill_parents
+  kind: 监视
+  value: -50
+  why: 他们知道面具不是他的，说出去就完了
+- a: anna
+  b: erie
+  kind: 怀疑
+  value: -40
+  why: 萨缪尔死前说打猎遇到一个包裹全身的人，还说过与埃里关系紧张
+- a: anna
+  b: players
+  kind: 倾诉
+  value: 55
+  why: 她一直想找个人说丈夫临死前究竟怎么了，一开口就停不下来
+- a: doreen_ratger
+  b: players
+  kind: 招待
+  value: 50
+  why: 她想让客人住得安稳，别在饭桌上谈死人——她自己已经咳了两天
+- a: francis_ratger
+  b: erie
+  kind: 不安
+  value: -30
+  why: 他记得埃里从战场回来整个人就不对，如今还替人拉尸体
+- a: doreen_ratger
+  b: caroline
+  kind: 非议
+  value: -25
+  why: 她念叨卡洛琳和埃里当年“没结婚就那样来往”的旧事
+- a: reggie
+  b: players
+  kind: 戒心
+  value: -35
+  why: 他怕人看出他在盘算把农场抵出去，把牛的死一概说成天罚
+foreshadow:
+- id: porch_stain
+  hint: 弗朗西斯端着汤绕开后廊那一步，抬头看了一眼天花板上的水渍，什么也没说；那圈水渍比昨天大了一圈。
+  where: ratger_house
+  pays_off: e_porch
+  stages:
+  - hint: 后廊水渍的边缘垂下一滴水，弗朗西斯把接水的盆往墙边挪了挪。
+    when: flag:disease_phase2
+    flag: sign_porch_stain_1
+- id: same_hour_wake
+  hint: 候诊室里靠墙睡着的男人忽然抽了一下，嘟囔“别再往上堆了”，随后几个睡着的病人几乎在同一刻翻身、皱眉，像被同一个声音点到。
+  where: clinic
+  pays_off: k_nightmare
+  stages:
+  - hint: 候诊室里又有人睡着时猛地抽动，旁边原本打盹的人立刻撑开眼皮，把椅子挪离了墙。
+    when: flag:disease_phase2
+- id: lime_dust
+  hint: 长椅底下扫出一小堆石灰渣，是从地下室门口被风吹上来的；牧师说上周地上还是干净的，那面墙也从没渗过水。
+  where: church
+  pays_off: k_disease
+  stages:
+  - hint: 牧师刚扫净地下室门槛，搬棺木的脚步一震，又有几粒灰渣顺着台阶滚下来。
+    when: flag:disease_phase2
+ties:
+- id: anna_penpal
+  hook: 安娜·伊斯特曼是调查员战前通信多年的笔友，萨缪尔死后她只寄来过一张没写字的明信片。
+  npc: anna
+  fits:
+  - 重要之人
+- id: doreen_mother_friend
+  hook: 多琳·拉特格是调查员母亲的旧同窗，每年圣诞都寄一张埃斯内尔的风景卡。
+  npc: doreen_ratger
+  fits:
+  - 重要之人
+- id: church_grandmother
+  hook: 调查员的祖母在类似的小镇教堂里做了一辈子管风琴手，他答应替她给埃斯内尔的教堂捐一本赞美诗。
+  place: church
+  fits:
+  - 意义非凡之地
+  - 思想与信念
+- id: ante_public_health
+  hook: 调查员坚信公共卫生是政府最不容推卸的责任，安特医生越级上报的做法在他看来不是恐慌，而是尽责。
+  npc: ante
+  fits:
+  - 思想与信念
+  - 职业
+- id: ante_stethoscope
+  hook: 调查员随身带着亡父留下的老式听诊器，听说埃斯内尔只有安特医生一人撑诊所，便想亲手交给他用。
+  npc: ante
+  fits:
+  - 宝贵之物
+  - 职业
+- id: francis_war_wounded
+  hook: 调查员在法国见过被炮火毁掉脸的伤兵，弗朗西斯·拉特格一句“埃里回来后人不对”会让他想起那些病例。
+  npc: francis_ratger
+  fits:
+  - 职业
+  - 思想与信念
+- id: caroline_classmate
+  hook: 卡洛琳·达维尔是调查员大学药学班的旧同学，听说她在埃斯内尔照护病人，调查员出发前给她写过一封信。
+  npc: caroline
+  place: darvill_house
+  fits:
+  - 重要之人
+  - 职业
+mechanics:
+- name: 疾病计数器
+  rules: 开场 100 减 2D10 作为计数器（可事先保密，也可公开掷）。默认每满 1440 分钟（一游戏日）结算一次恶化：第一次 1D10，第二次 2D10，之后最多 3D10；每次都从计数器减去。81-100 为第一阶段，31-80 为第二阶段，0-30 为第三阶段；归零后小镇不可逆（counter_zero），之后即使阻止复活也只走 too_late。跨阶段时设置 disease_phase2
+    / disease_phase3。第二阶段让一名调查员染病，第三阶段增至两名。患病调查员每次恶化做体质检定：失败则失去等于本次最高单骰点数的体质，并做理智 0/1D6；成功也失去等于最低单骰点数的体质。治疗或公共卫生主意经守秘人判断后调用 mitigate，累计最多少掷两颗 D10（每次恶化至少 1D10），计数器不回升、不自动治愈。跨多天逐段结算，跳过已死亡调查员。
+  why: 全程计时；第二阶段、第三阶段染病；诊所治疗、隔离等主意；结局判定
+  plugin: winter_disease
+  runs: 插件
+- name: 早饭牛奶与后廊塌方
+  rules: 只在对应阶段且调查员正在拉特格出租屋吃饭时触发，不得提前或在别处触发。breakfast_phase2：多琳尖叫，牛奶罐碎，牛奶腐坏发臭；若调查员手里有文件，可以被泼坏，但被泼坏的必须仍能从原处再次取得（如地图可以再向拉特格夫妇要），不能因此永久丢失关键线索。meal_phase3：屋里传来呻吟与碰撞，后廊屋顶被雪压垮，弗朗西斯半身埋在下面、失去知觉；医生判断生命垂危。此场景只是描写与压力，不替调查员完成救人或医学检定。
+  why: e_milk 第二阶段早饭；e_porch 第三阶段吃饭；拉特格夫妇日常晴雨表
+  runs: 守秘人
+- name: 暴风雪与驾车
+  rules: 风雪只在追踪埃里回达维尔家途中等场景骤然出现，入场不受伤。驾车：驾驶员做困难驾驶检定（核心规则）；失败则冲出路边撞上雪堆；即使成功也暂时失明，守秘人裁定持续时间与能看清的范围。徒步：只有调查员身处风雪中、无处避寒时，才做体质检定；失败受 1D10 点伤害，成功不受伤。此伤害必须以上述条件为前提裁定，不得无条件扣血。幻视、幻听可用来给细微线索，线索内容按原文另行给出。
+  why: e_storm 追踪途中的暴风雪；达维尔家附近
+  runs: 守秘人
+- name: 地图分阶段揭示
+  rules: 开场只给 h_map_plain（黑字地名，无圈线）。只有调查员实际收集病例分布、在地图上逐户标出并比较传播路径（c_map_spread，医学常规）后，才设置 spread_reviewed 并给出 h_map_full（圈线中心指向绸缎山）。老练的调查员会想到画传播地图；陷入困境时，守秘人可以用一次成功的灵感检定提出这个建议。单纯索要完整地图不设置该标记，也不给传播结论。守秘人不得把地图的传播信息说得含糊；伊斯特曼家位于圈外，是干扰信息。
+  why: 分发材料 1；c_map、c_map_spread；KP 地图使用说明
+  runs: 守秘人
+- name: 剧情标记设置条件
+  rules: 标记只在对应事实真实发生后设置，不因调查员的承诺、猜测或只听说而设置。met_erie：见到拉尸的埃里。caroline_cure：阴影治疗场景实际发生。caroline_ally：调查员明确回应合作（只是表示听听不算）。body_stolen：当夜实际被盗。seance_heard：实际在地下室门口听见招魂。grimoire_found：实际拿到典籍原本。parents_told：实际从达维尔夫妇口中得到那段话。hill_found：实际在绸缎山找到埋尸的矮树林。entity_revealed：异界存在实际露出非人原形（猜测或只见普通外貌不算）。spread_reviewed
+    见地图条目。其余标记（nightmares_known、caroline_fled、chase_erie、hidden_destroyed、hidden_revived、entity_banished、theft_discovered）同理，以实际发生为准。
+  why: 全部剧情标记
+  runs: 守秘人
+- name: 尸体被盗的隔夜与次晨
+  rules: 当夜由卡洛琳授意，异界存在偷走一具病人尸体，body_stolen 在当夜成立。调查员除非妄想或特别幸运，否则要到次日早上亲自到诊所，才能获知失窃（设置 theft_discovered 并给 c_theft）；不能因答应合作就立刻设置。护士说午夜后听到软弱刺耳的咳嗽，这一声可在次晨诉说，作为通往埃里的线索。不得跳过时间或调查员的行动。
+  why: e_theft；c_theft；c_theft_suspect
+  runs: 守秘人
+- name: 卡洛琳的索求升级与支配
+  rules: 卡洛琳会自行调查，即使被拒也会频繁出现。她的请求按顺序升级：先要一具尸体（c_cure_offer 需说服常规才能从她口中得到），再要更多尸体，最后要活着的病人作仪式献祭以定位掩藏者。阻止她继续时她逃跑，并让埃里殿后（caroline_fled）。若调查员过度受她支配，她会乐意牺牲其中一人或几人来完成复活术。是否支配到这一步由守秘人依调查员的实际行为判断，不靠数值记账。
+  why: 答案的诱惑；卡洛琳的请求；结局 revived
+  runs: 守秘人
+- name: 掩藏者的吸取生命法术
+  rules: 掩藏者施放的是腐烂外皮之恩惠的进阶版：在几天之内让目标长期陷入噩梦与疾病，以 5:1 比例恢复自身 HP，施法者的理智消耗为恢复 HP 的两倍。掩藏者没有人物卡，此数值只用于描述他的恢复进度与病人恶化的表现，不要求调查员记账，也不另设数器（计数器已是时钟）。
+  why: 治疗方案与法术描写；发烧时的噩梦
+  runs: 守秘人
+- name: 病人噩梦的顺从分支
+  rules: 病人在梦中拒绝掩藏者者恶化较慢，顺从者恶化较快。这是 NPC 病人的病程描写，由守秘人在病历与病况里体现，不由插件计算；调查员被梦中索求时的理智与线索，按梦境条款单独裁定。
+  why: 发烧时的噩梦；c_nightmares
+  runs: 守秘人
+- name: 阴影治疗的结果
+  rules: 卡洛琳用香炉烧粉末，在调查员协助下进行治疗。目睹者做理智检定 1/1D4+1。阴影持续数小时，期间病人起伏不定。阴影散去后，守秘人把病人分为半数显著恢复、半数死去（六名病人时各三人），并标记 caroline_cure。卡洛琳能认出这是犹格-索托斯的咒语，其他人需成功的克苏鲁神话检定才能认出。
+  why: c_shadow；治疗场景
+  runs: 守秘人
+- name: 靠近埋尸处的效应
+  rules: 调查员靠近绸缎山矮树林时，已患病者出现幻觉，看见掩藏者为他们指路；未患病者开始咳嗽、觉得发烧。患病状态取自 winter_disease。找到埋尸处只能靠极难侦查检定（c_hill_trace）并设置 hill_found；只到山脊或只听见地名不算到达。埋尸处雪被从下方翻动。卡洛琳与埃里会在到达时或不久后出现，除非调查员尽力阻止；卡洛琳显出疾病症状，埃里不受影响，不立即冲突。
+  why: satin_hill；c_hill_dream；c_hill_trace；e_hill_arrival
+  runs: 守秘人
+- name: 异界存在埃里的战斗特性
+  rules: 以埃里外表出现时，无理智损失。一旦攻击或造成伤害，暴露异界形态，目击者做理智检定 1/1D4+1（核心规则）。每轮恢复 1 点 HP（守秘人执行，不需要调查员记录）。剧本没有安排战斗流程，只在它真的动手时使用此条。实际露出原形后设置 entity_revealed 并可给 c_entity_form。
+  why: 埃里·赫琴斯（异界存在）属性；c_entity_form_*
+  runs: 守秘人
+- name: 结局理智恢复
+  rules: 由守秘人先定结局，再结算理智。stopped_in_time：仅当计数器未归零且 hidden_destroyed 时，每人恢复 1D6 点理智；若同时 entity_banished，再额外恢复 1D4。too_late（counter_zero 已设）与 revived（hidden_revived）不设理智恢复。恢复后不超过理智上限。
+  why: 结局：stopped_in_time、too_late、revived
+  runs: 核心规则
+- name: 患病调查员
+  rules: 进入第二阶段时让一名调查员出现症状，进入第三阶段时再让一名（按人数调整）。此后每当为疾病计数器掷骰，患病调查员做体质检定：失败失去等于本次掷骰中最高单个 D10 的体质，成功也失去等于最低单个 D10 的体质；需要体力活动时 KP 可给惩罚骰。每次体质检定失败，还要做理智检定 0/1D6（噩梦与高烧梦境）；噩梦可用于给出线索、法术片段或增长克苏鲁神话技能。
+  why: 把计数器推进直接落到调查员身上；噩梦内容对应 k_nightmare 与 c_samuel_diary 里的无脸男人。
+  plugin: winter_disease
+  runs: 守秘人
+agendas:
+- npc: caroline
+  goals:
+  - 查明是什么法术抵消了自己的法术
+  - 必要时再要一具尸体，最终要活人献祭以定位掩藏者
+  steps:
+  - id: caroline_request_body
+    text: 与调查员交谈时把话往“需要一具死于那种病的尸体”上引；只有说服成功，她才把请求讲明。
+    meet: true
+    once: false
+    source: c_cure_offer「卡洛琳的请求」；守秘人须知：卡洛琳的索求升级与支配
+  - id: caroline_pointout_nightmare
+    text: 调查员还没提到病人的梦时，她可以主动谈起病人的梦；梦里的细节需说服才讲全。
+    meet: true
+    once: false
+    source: c_nightmares「相似的噩梦」；原文：卡洛琳会指出病人噩梦的相似性
+  - id: cure_on_request
+    text: 调查员当面提议由她来治疗诊所里的病人时，她立刻答应，并用香炉烧粉末安排这场治疗（阴影场景）。
+    meet: true
+    ruling: true
+    source: 治疗方案：如果调查员这样提议，她很愿意尽快治好诊所里的病人；c_shadow「阴影下的治疗」
+  - id: cure_self_initiated
+    text: 若调查员从未跟她谈起治疗，第二阶段中后期她主动向安特医生提出由自己来治疗病人，随后施法。
+    when: flag:disease_phase2
+    ruling: true
+    source: 治疗方案：如果调查员没有跟卡洛琳谈话……这应该发生在疾病第二阶段中后期
+  - id: caroline_fled
+    text: 调查员阻止她继续以法术调查时，她逃跑，并让埃里殿后。
+    only_if: 调查员实际阻止她继续，由守秘人裁定
+    ruling: true
+    source: 守秘人须知：阻止她继续时她逃跑，并让埃里殿后
+  - id: caroline_at_hill
+    text: 调查员找到埋尸处后，她与埃里前来；她显出疾病症状。
+    when: flag:hill_found
+    does: at:caroline:satin_hill
+    meet: false
+    only_if: 调查员没有先尽力阻止她（caroline_fled 未设）
+    source: e_hill_arrival「绸缎山上的两个人」；守秘人须知：靠近埋尸处的效应
+- npc: erie
+  goals:
+  - 服从卡洛琳的命令
+  - 没有命令时按自己的想法行动，替卡洛琳殿后
+  steps:
+  - id: erie_hauling
+    text: 开卡车替人拉尸体。被问起时，先咳嗽一阵，说胸腔里卡着一片弹片。
+    meet: true
+    once: false
+    source: c_hauling「拉尸体的人」；c_erie_odd「埃里不对劲」；守秘人须知：异界存在埃里的战斗特性
+  - id: erie_theft
+    text: 卡洛琳起了弄清是什么法术抵消了自己法术的念头后，命它当夜潜入诊所偷走一具病人的尸体。
+    does: flag:body_stolen
+    meet: false
+    only_if: 卡洛琳当天已起意（调查员到过诊所、与她谈过话或她自行调查之后），命它“当晚”动手；原文没有指定日期，若调查员已阻止她继续（caroline_fled）由守秘人裁定
+    source: e_theft「当晚，尸体被盗」；守秘人须知：尸体被盗的隔夜与次晨
+  - id: erie_rear_guard
+    text: 卡洛琳逃走后，埃里留下来殿后，挡住追查她的调查员。
+    when: flag:caroline_fled
+    ruling: true
+    source: 守秘人须知：阻止她继续时她逃跑，并让埃里殿后（caroline_fled）
+- npc: ante
+  goals:
+  - 把这场病按流感治下去，不让镇子慌起来
+  - 不愿承认超自然，但已经开始怀疑自己控制不住局面
+  steps:
+  - id: ante_briefing
+    text: 第一次见面，他说“州里终于来人了”，用病历式的短句交代病况，坚持按流感处理。
+    meet: true
+    once: true
+    source: clinic 守秘人须知；ante 人物资料
+  - id: ante_notes_guard
+    text: 被问到病程时，他只重复“这只是流感，我们会压下去的”；病历本只在被说服后才拿出来。
+    meet: true
+    once: false
+    source: c_notes「安特医生的病历」（说服常规）；c_ante_cure「安特医生证实的事」
+  - id: ante_sedatives
+    text: 病人越来越多，他仍给几个病人开镇静剂助眠，并暗自怀疑局面控制不住，却不说出口。
+    when: flag:disease_phase2
+    meet: false
+    source: 真相；守秘人须知：安特医生不知道镇静剂会加速死亡
+  - id: ante_allow_caroline
+    text: 卡洛琳向他提出由自己来治疗诊所里的病人，他同意，把这当作合理护理。
+    when: flag:disease_phase2
+    meet: false
+    source: 治疗方案（卡洛琳会向安特医生提出由自己来治疗病人，发生在疾病第二阶段中后期）
+- npc: anna
+  goals:
+  - 找个人说说萨缪尔临死前到底怎么了
+  - 别一个人回家，别一个人碰那本日记
+  steps:
+  - id: tell_samuel
+    text: 在柜台后面一边盖戳一边讲萨缪尔是镇上第一个死的，死前就胡言乱语。
+    when: at:anna:post_office
+    meet: true
+    once: true
+  - id: show_diary
+    text: 若有人愿意听下去，下班后带他们回伊斯特曼家，取出那本潦草的日记。
+    when: at:anna:eastman_house
+    meet: true
+    once: true
+- npc: pastor
+  goals:
+  - 让这几天的死者体面下葬，让活人别慌
+  - 弄明白地下室那面墙为什么忽然坏了
+  steps:
+  - id: open_cellar
+    text: 领调查员到地下室看停着等雪停的棺木。
+    when: at:pastor:church
+    meet: true
+    once: true
+  - id: insist_burial
+    text: 镇子越来越糟时，坚持雪一停就立刻下葬，不再等。
+    when: flag:disease_phase3
+    meet: false
+history:
+- when: 多年前，大战之前
+  text: 埃里·赫琴斯与卡洛琳·达维尔在原卡德威尔家的废弃农舍里找到一本属于犹格-索托斯的典籍，两人一起研习其中的法术。
+  who:
+  - caroline
+  where: cardwell_farm
+- when: 多年前，两人一起研习典籍的时期
+  text: 埃里与卡洛琳私下约定，等他打完欧洲战场那一仗回来就成婚。镇上人只当他们是一对没结婚就那样来往的男女。
+  who:
+  - caroline
+  known_by:
+  - doreen_ratger
+- when: 1918—1919 年西班牙流感最凶的时候
+  text: 镇上十几个濒死的人奇迹般康复，而康复名单上的病人都是卡洛琳·达维尔护理的。安特医生把这份名单记进了旧病历档案。
+  who:
+  - caroline
+  - ante
+  where: clinic
+  known_by:
+  - ante
+- when: 西班牙流感那几年
+  text: 卡洛琳用同一路法术把濒死的父母“治”了过来；达维尔夫妇从此只会断断续续地嘟囔、突然发笑。
+  who:
+  - caroline
+  - darvill_parents
+  where: darvill_house
+- when: 战事将尽时
+  text: 卡洛琳收到军方电报，称埃里阵亡。她不肯接受，召来一个无定形的异界存在，赋予它埃里的外表与声音，留在身边，对外称作“埃里”。
+  who:
+  - caroline
+  - erie
+  where: darvill_house
+- when: 战后，这场病开始之前
+  text: 真正的埃里只是重伤，被丢在法国乡下；他康复后回到埃斯内尔，撞见那个顶着自己相貌的东西。它夜里浑身是血地回来，对达维尔夫妇笑着说，它杀掉了面具的主人，面具从此归它了。
+  who:
+  - erie
+  where: satin_hill
+- when: 就在被杀的那一刻
+  text: 临死前，埃里施法让自己悬停在生死之间；这道法术不断吸取埃斯内尔居民的生命力，直到他恢复、挣脱雪墓。
+  where: satin_hill
+- when: 开局前不久
+  text: 萨缪尔·伊斯特曼是镇上第一个死于这场病的人。死前他还没有任何症状，就开始胡言乱语：打猎时遇到一个包裹全身的人，“他回家了。他本来就在这，但他现在又回来了。”
+  who:
+  - anna
+  where: eastman_house

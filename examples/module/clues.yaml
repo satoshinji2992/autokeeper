@@ -1,0 +1,46 @@
+clues:
+  - id: c_notice
+    title: 广场告示
+    where: square
+    feature: 告示栏
+    points_to: [k_motive]
+    text: 告示说钟楼即日起谢绝参观，落款是守钟人。
+  - id: c_gears
+    title: 齿轮间
+    where: tower
+    feature: 齿轮间
+    check: {skill: 侦查, difficulty: 困难}
+    core: true
+    sanity: 0/1D2
+    points_to: [k_tower]
+    text: 最大的那只齿轮背后缠着一圈不属于钟的东西，像干枯的藤，还在动。
+  - id: c_diary
+    title: 守钟人的日记
+    where: tower
+    npc: warden
+    handout: h_diary
+    points_to: [k_tower, k_motive]
+    text: 日记里写着：“它在钟里很安静，只要钟一直走。”
+  - id: c_archive
+    title: 旧报
+    where: office
+    feature: 旧报合订本
+    check: {skill: 图书馆使用}
+    core: true
+    points_to: [k_tower]
+    text: 三十年前的报道：钟楼刚落成那年，午夜钟声也多敲过一下。
+handouts:
+  - id: h_diary
+    title: 守钟人的日记
+    kind: 日记
+    text: |
+      它在钟里很安静，只要钟一直走。
+      钟要是停了，就要出事。
+    paper: diary
+sketches:
+  - id: sk_coil
+    ask: 把齿轮背后那圈东西画出来
+    target: 一圈缠在齿轮上的螺旋状枯藤，末端分成三股
+    threshold: 0.6
+    sanity: 1/1D4
+    after: c_gears

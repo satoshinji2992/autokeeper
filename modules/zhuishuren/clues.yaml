@@ -1,0 +1,252 @@
+clues:
+  - id: c_neighbor
+    title: 邻居的印象
+    where: jiefang
+    feature: 邻居们
+    points_to: [k_reader]
+    text: 附近的邻居们所知甚少，也没见过可疑的人。有一位邻居记得道格拉斯·金博尔：“是个和蔼的人。”
+  - id: c_odell
+    title: 奥黛尔夫人的回忆
+    where: jiefang
+    feature: 莉拉·奥黛尔
+    npc: odell
+    points_to: [k_reader]
+    text: |
+      奥黛尔夫人在这里住了很久。她记得道格拉斯·金博尔还住在墓地旁那栋屋子时，大多数日子都胳膊下夹着本书走向墓地。
+      “他总是在读书。”她好多年没见过他了。“他是过世了吗？我想他侄子继承了那栋房子。”
+  - id: c_jefferson_tomb
+    title: 道格拉斯最喜欢的墓碑
+    where: mudi
+    feature: 梅洛迪亚斯·杰弗逊
+    npc: jefferson
+    core: true
+    points_to: [k_reader]
+    text: |
+      守墓人想念道格拉斯：那时金博尔常陪他聊天，从天气聊到政治，还讲异国他乡的故事。
+      他指给你看一块低矮的旧墓碑——道格拉斯过去读书时常坐的就是那一块。
+  - id: c_jefferson_hiding
+    title: 守墓人有所隐瞒
+    where: mudi
+    feature: 梅洛迪亚斯·杰弗逊
+    npc: jefferson
+    points_to: [k_figure]
+    text: 一问起墓地里的怪事或可疑的人，杰弗逊就收住话头，推说活多要走。他知道的比他说的更多。
+  - id: c_flask
+    title: 外套口袋里的酒瓶
+    where: mudi
+    feature: 杰弗逊的外套口袋
+    check: {skill: 侦查}
+    points_to: [k_figure]
+    text: 杰弗逊的外套口袋里微微露出一截瓶子——禁酒令下，那多半是酒。这可以拿来要挟他，或者以后带瓶酒来贿赂他。
+  - id: c_jefferson_ghost
+    title: 墓碑旁的人影
+    where: mudi
+    feature: 梅洛迪亚斯·杰弗逊
+    npc: jefferson
+    points_to: [k_figure]
+    text: |
+      杰弗逊终于承认：最近深夜，他在道格拉斯·金博尔以前常坐的那块墓碑旁见过人影。
+      他相信那是金博尔的鬼魂，太害怕了，没敢上前。“这类事最好别去深究。”他言尽于此。
+  - id: c_library_article
+    title: 十多年前的旧报道
+    where: tushuguan
+    feature: 旧报合订本
+    check: {skill: 图书馆使用}
+    handout: h_article
+    points_to: [k_creatures]
+    text: |
+      一篇十多年前《阿诺兹堡广告报》的报道：有人声称看见一群明显未着寸缕的人在毗邻金博尔宅的墓地里狂欢嬉戏。
+      警察赶到搜遍公墓，始终没找到这批怪人，但形状怪异的脚印无言地证明他们确实存在过。
+  - id: c_police_burglary
+    title: 警方：附近的入室盗窃
+    where: jingju
+    feature: 值班警官
+    npc: jingguan
+    points_to: [k_not_burglar]
+    text: |
+      这一带已经有一段时间没有入室盗窃报案了。最近一桩在一年前，罪犯杰克·“六指”·汤普森是个著名飞贼，已落网，至今还在狱中服刑。
+      最近也没有关于怪家伙或长相奇怪的人的报告。
+  - id: c_police_cemetery
+    title: 警方：公墓的情况
+    where: jingju
+    feature: 值班警官
+    npc: jingguan
+    points_to: [k_creatures]
+    text: |
+      公墓在僻静的街区，没什么特别的传闻。大约六七年前，有人报告那里深夜传出怪声，巡警把公墓纳入巡逻好几周，
+      什么也没看见、没听见。“那里安静得就像是座坟墓！”警官打趣道。
+  - id: c_police_douglas
+    title: 警方：失踪的道格拉斯
+    where: jingju
+    feature: 值班警官
+    npc: jingguan
+    points_to: [k_not_burglar]
+    text: 警官记得道格拉斯·金博尔失踪时发过寻人启事，照片也广为传播，但始终没有找到这个人。
+  - id: c_ward_notes
+    title: 希尔达·沃德的陈述
+    where: ziliaoshi
+    feature: 资料室里记者的笔记
+    check: {skill: 图书馆使用}
+    handout: h_ward
+    points_to: [k_creatures]
+    text: |
+      一位记者留下的笔记，记着一段从未发表的陈述，来自 64 岁、患失眠症的邻居希尔达·沃德女士：
+      二十多年来她时常看见“魔鬼的子嗣”出没于墓地附近——轮廓像人，却有犬类的特征，足部呈蹄状，浑身沾满腐烂的泥土。
+      记者写道，沃德女士已搬去底特律，其他邻居谁也不曾见过、或不承认见过这些东西。
+  - id: c_shelf_gap
+    title: 书架上的空档
+    where: shufang
+    feature: 书架上的空档
+    core: true
+    points_to: [k_not_burglar]
+    text: 书架上少了好几本书，空档很显眼。屋里其他值钱的东西一样没少。
+  - id: c_window
+    title: 松动的窗锁
+    where: shufang
+    feature: 书房窗户
+    points_to: [k_not_burglar]
+    text: 书房窗户的锁因为年久已经松了。从外侧用足力气，就能轻松把这扇窗打开——而窗外正对着公墓。
+  - id: c_diary
+    title: 道格拉斯的日记
+    where: shufang
+    feature: 旧书桌
+    check: {skill: 侦查}
+    core: true
+    handout: h_diary
+    points_to: [k_underground, k_joined]
+    text: |
+      一本道格拉斯·金博尔的日记。最后一条写于他失踪的前一天，隐晦地提到他已经“做出决定”，要加入“我在地下的朋友们”。
+      更早的条目似乎暗示公墓地下有一个隧道网络，里面住着他晚上在墓地周边看见的神秘“生物”。
+  - id: c_footprints
+    title: 墓碑旁的怪足迹
+    where: mudi
+    feature: 墓碑周围的地面
+    check: {skill: 侦查}
+    points_to: [k_tunnel, k_creatures]
+    text: |
+      那块旧墓碑饱经风雨，表面光滑，墓主身份已无法辨认。墓碑周围有若干奇怪的足迹，
+      像是脚趾处呈偶蹄状的成年人赤足留下的。足迹穿过墓地，通向一座陵墓的门前。（追踪检定也可发现）
+  - id: c_tunnel
+    title: 陵墓里的隧道
+    where: lingmu
+    feature: 陵墓内部
+    check: {skill: 力量}
+    points_to: [k_tunnel, k_underground]
+    text: 石门打开，一股积蓄已久的可怕腐臭扑面而来。陵墓里有一条徒“手”挖掘、通向地底的隧道。
+  - id: c_douglas_truth
+    title: 道格拉斯的自白
+    where: mudi
+    feature: 道格拉斯最喜欢的墓碑
+    npc: douglas
+    core: true
+    sanity: 1D4/1D4
+    mythos: 3
+    points_to: [k_ghoul, k_last_night, k_joined]
+    text: |
+      他说，他只是厌倦了人类社会的种种俗事。他唯一的诉求是随时随地读书、不被打扰，可其他人一直在侵占他的人生。
+      作为食尸鬼的生活甚合他意：不再需要钱，不必为晚餐打扮，除了用餐时间不必与人相见，白天黑夜想读就读。
+      但其他食尸鬼正要关闭这处出入口，今晚是他能回来取书的最后一晚。地下有太多可看、可体验的事，他打算据此写一本新书。
+      他请你不要告诉他的侄子，他还在人世（不如说，还没死透）。
+      （听取这令人不快的真相损失 1D4 理智；克苏鲁神话技能 +3%）
+  - id: c_unmasked
+    title: 人影的脸
+    where: jinboer_jia
+    feature: 倒地的人影
+    sanity: 0/1D6
+    points_to: [k_ghoul]
+    text: |
+      一头丑陋的人型生物，浑身赤裸，满身结块的泥土和霉菌，长着野兽般的脸和巨大的犬齿，本该是鼻子的地方是犬科一样的吻状突起。
+      最令人惊恐的是——它的脸与道格拉斯·金博尔惊人地相似。
+  - id: c_borrow_records
+    title: 借阅登记簿上的名字
+    text: 登记簿上，道格拉斯·金博尔失踪前那一年借的书换了口味：园艺手册、异国游记少了，多了好些讲地下世界、洞穴、冥府传说和掘地生物的书，一本接一本。管理员在旁边批了一句：“他向来按时还，还回来时书页间总夹着干土。”
+    where: tushuguan
+    feature: 借阅台后的旧登记簿（道格拉斯·金博尔名下的记录）
+    check:
+      skill: 图书馆使用
+      difficulty: 常规
+    points_to:
+    - k_underground
+    - k_joined
+  - id: c_tomb_subsidence
+    title: 陵墓底下的旧传闻
+    text: 一叠旧剪报里提到，公墓深处那座石砌陵墓多年前地面塌过一回，工人来填土，越挖越觉得底下是空的；镇上有老人说，那一带地底下“自古以来就有路”。这条报道没登出来，只在记者笔记里留了一行。
+    where: ziliaoshi
+    feature: 资料室里一叠关于本地旧事的记者剪报
+    check:
+      skill: 图书馆使用
+      difficulty: 常规
+    points_to:
+    - k_tunnel
+  - id: c_annotated_books
+    title: 只剩批注的主人
+    text: 架子上剩下的书里，有一小批页边写满铅笔小字、被翻得起了毛边，空档正好落在它们中间：被拿走的不是随手抓的几本，而是这些被人反复读过、做过批注的。剩下书脊上的灰，也有人抹过。
+    where: shufang
+    feature: 书架上还留着的书（书页边角的铅笔批注）
+    check:
+      skill: 侦查
+      difficulty: 常规
+    points_to:
+    - k_ghoul
+    - k_not_burglar
+  - id: c_tunnel_sealed
+    title: 越走越窄的路
+    text: 前方一条岔道被新填的湿土和碎石堵死了，土色比四壁新，爪痕到此为止。旁边另一条岔道也有同样的痕迹，像有人在一条条地把路封上。空气里的甜腐味压得很低。
+    where: suidao
+    feature: 隧道里一处岔道口
+    check:
+      skill: 侦查
+      difficulty: 常规
+    points_to:
+    - k_last_night
+    - k_underground
+  - id: c_odell_night_sounds
+    title: 夜里的闷响
+    text: 奥黛尔夫人压低了声音说，近来深更半夜，墓地那头常传来沉闷的响动——像有人搬石头、往坑里填土，一下一下的，听得人心里发毛。她说从前可没这动静，还劝你天黑后别往那边去。
+    where: jiefang
+    feature: 莉拉·奥黛尔（在门口和人说话时提起）
+    points_to:
+    - k_last_night
+handouts:
+  - id: h_diary
+    title: 道格拉斯·金博尔的日记（节选）
+    kind: 日记
+    text: |
+      （AutoKeeper 依原文大意补写）
+
+      ……又是满月。我照旧坐在那块老碑上读书，读到看不清字。那扇门又开了，我的朋友探出头来，轻轻叫了一声。
+      它们住在下面——比我想的深得多，也大得多。它说，整片墓地底下都是路。
+
+      ……它们不问我挣多少钱，不问我为什么不结婚，不问我为什么总是一个人。它们只问我今天读了什么。
+
+      （最后一条，失踪前一天）
+      我已经做出决定。明晚，我要去加入我在地下的朋友们。书房的书，我会想念的。
+    paper: diary
+  - id: h_article
+    title: 《阿诺兹堡广告报》旧报道
+    kind: 报纸
+    text: |
+      （AutoKeeper 依原文大意补写）
+      【本报讯】昨夜有居民报告，在艾尔斯伯里大街金博尔宅毗邻的公墓中，看见一群明显未着寸缕之人狂欢嬉戏。
+      警员接报赶到并搜索了整片公墓，未能找到任何人。现场仅留下若干形状怪异的脚印。
+    paper: news
+  - id: h_ward
+    title: 记者笔记：希尔达·沃德的陈述（未发表）
+    kind: 笔记
+    text: |
+      （AutoKeeper 依原文大意补写）
+      受访人：希尔达·沃德女士，64 岁，墓地附近住户，长年失眠。
+      “二十多年了，我夜里睡不着，总看见它们——魔鬼的子嗣，在墓地附近转悠。样子像人，
+      可脸像狗，脚是蹄子，浑身都是烂泥。”
+      附记：沃德女士已经搬去底特律市，而其他哪位邻居谁也不曾见过，或者承认曾见过希尔达所谓的“魔鬼子嗣”。
+    paper: diary
+sketches:
+  - id: footprint
+    ask: 把你在墓碑旁泥地上看到的那种足迹画出来
+    target: 一个成年人大小的赤足脚印，脚掌像人，但脚趾处分成两瓣，像偶蹄动物的蹄子；一串脚印从墓碑通向远处的一座陵墓
+    threshold: 0.6
+    after: c_footprints
+  - id: douglas_face
+    ask: 画出托马斯描述的叔叔道格拉斯·金博尔的样子，好拿去问人
+    target: 一个中年男人的头像：白发、秃顶、中等身材、戴圆框眼镜
+    threshold: 0.5

@@ -1,0 +1,19 @@
+# 格式样例：只用来演示字段和跑测试，不是可玩的模组，也不会出现在模组菜单里。
+id: example
+title: 格式样例·钟楼
+subtitle: 字段齐全的最小样例
+system: CoC7
+era: 1920 年代
+setting: 一座虚构的小镇
+players: 1 人
+duration: 约 30 分钟
+source: AutoKeeper 格式样例
+license: CC0-1.0
+hook: 镇上的钟楼每到午夜都会多敲一下。报社托你去看看。
+truth: 守钟人在钟里藏了一样东西，多出的那一下是它在敲。午夜之前停下钟，它就出不来。
+keeper_notes: 样例只演示格式：一个枢纽地点、两个分支地点、一次定时布道、两个结局。
+flags:
+  bell_stopped: 钟被停下了
+start: square
+start_time: D1 14:00
+opening: 午后的广场上没什么人，钟楼的影子斜斜地压在石板路上。

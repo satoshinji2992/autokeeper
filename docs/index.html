@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#0b0806">
+    <meta name="description" content="AutoKeeper：AI 担任守秘人的中文《克苏鲁的呼唤》第 7 版跑团游戏。真彩字符画、边玩边写的配乐，一个人玩或和朋友用浏览器联机。">
+    <meta property="og:title" content="AutoKeeper · AI 守秘人">
+    <meta property="og:description" content="AI 担任守秘人的中文《克苏鲁的呼唤》第 7 版跑团游戏：真彩字符画、实时配乐、单人与联机。">
+    <meta property="og:image" content="https://satoshinji2992.github.io/autokeeper/img/title.png">
+    <meta property="og:url" content="https://satoshinji2992.github.io/autokeeper/">
+    <link rel="canonical" href="https://satoshinji2992.github.io/autokeeper/">
+    <link rel="icon" href="site/favicon.svg" type="image/svg+xml">
+    <link rel="preload" href="site/fonts/fusion-pixel-12px-sc.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="site/style.css?v=20261031">
+    <script src="site/main.js?v=20261031" defer></script>
+    <title>AutoKeeper · AI 守秘人</title>
+</head>
+<body>
+    <header class="hero">
+        <canvas id="cover" aria-hidden="true"></canvas>
+        <div class="hero-inner">
+            <p class="epigraph">Ph'nglui mglw'nafh Cthulhu R'lyeh wgah'nagl fhtagn.</p>
+            <h1 class="logo-text">AutoKeeper</h1>
+            <canvas id="logo" role="img" aria-label="AutoKeeper"></canvas>
+            <p class="tagline">《克苏鲁的呼唤》第 7 版 · AI 守秘人</p>
+            <p class="pitch">AI 担任守秘人的中文跑团游戏。你扮演调查员，用自然语言行动、交谈和探索；可以一个人玩，带上 AI 同伴，也可以让朋友用浏览器加入同一场故事。</p>
+            <nav class="actions" aria-label="开始">
+                <a class="button primary" href="#install">安装</a>
+                <a class="button" href="#gallery">实机画面</a>
+                <a class="button" href="https://github.com/satoshinji2992/autokeeper">GitHub</a>
+            </nav>
+            <p class="meta">Windows / macOS / Linux · 终端与浏览器 · 新版安装包准备中</p>
+        </div>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+        <ol>
+            <li><a href="#play">怎么玩</a></li>
+            <li><a href="#party">联机</a></li>
+            <li><a href="#art">画面</a></li>
+            <li><a href="#music">配乐</a></li>
+            <li><a href="#rules">规则</a></li>
+            <li><a href="#modules">模组</a></li>
+            <li><a href="#gallery">图集</a></li>
+            <li><a href="#install">安装</a></li>
+        </ol>
+    </nav>
+
+    <main>
+        <section id="play">
+            <h2>一局跑团怎么进行</h2>
+            <p class="lead">《追书人》从早班火车驶入阿诺兹堡开始。委托人托马斯住在小镇尽头的公墓旁，你可以先向站务员问路、在餐馆吃早饭，或者去图书馆翻旧报纸。在输入框写下想做的事，守秘人（KP，跑团的主持人）判断要不要检定、花多少时间、能发现什么，再把结果讲给你听。</p>
+            <figure>
+                <img src="img/game.png" width="1830" height="1074" alt="追书人游戏界面：在图书馆查旧报，检定的骰子落定，守秘人讲出报上的内容">
+                <figcaption>《追书人》：在阿诺兹堡图书馆翻旧报。检定的骰子落定后，守秘人讲出报上的内容；右栏是人物状态、调查经过和玩家自己的笔记。</figcaption>
+            </figure>
+            <div class="features">
+                <article class="feature"><h3>模组只是起点</h3><p>走到原作没写的地方，守秘人会补出新的人物、线索和支线；想严格按原作玩，可以关掉即兴。</p></article>
+                <article class="feature"><h3>记得住的世界</h3><p>每个人在哪、手里有什么、说过和答应过什么都有记录。撞开的门、受过的伤，都会留到下一次遭遇。</p></article>
+                <article class="feature"><h3>有自己打算的人物</h3><p>NPC 会帮忙、隐瞒、撒谎、抢先一步，也会被说服或打动。不在场的人按自己的日程行动。</p></article>
+                <article class="feature"><h3>照规则书结算</h3><p>检定、孤注一掷、理智与疯狂、战斗和追逐按第 7 版规则结算，骰子由物理模拟投出。</p></article>
+                <article class="feature"><h3>看得见，也听得见</h3><p>照片转成真彩字符画，画面随时间、天气和剧情变化；配乐由程序边玩边写。</p></article>
+                <article class="feature"><h3>什么故事都能开团</h3><p>导入自己的模组，AI 整理成可以直接玩的版本；也可以只给一句设定，写一本原创模组。</p></article>
+            </div>
+        </section>
+
+        <section id="party">
+            <h2>和朋友一起：分头行动，各看各的</h2>
+            <p class="lead">房主开好房间，把网址发给朋友，对方用浏览器就能加入，不用安装，也不用配置模型。分头调查时各组同时推进，各自看到所在现场的叙述；个人观察、私信和手稿只发给实际的收件人。各组共用同一个世界：同一个 NPC 不会同时出现在两处，一组拿走的东西，另一组就找不到了。</p>
+            <figure>
+                <img src="img/apart.png" width="3684" height="1074" alt="同一局冬雪之下里两位玩家的屏幕：左边在主街向铲雪的人打听消息，右边在布鲁彻农场跟着雷吉去牛棚；右栏各自显示队友所在的地点">
+                <figcaption>同一局《冬雪之下》里两位玩家的屏幕：一人在主街向铲雪的人打听，一人在布鲁彻农场跟着雷吉去牛棚。各自只看到自己现场的叙述，右栏显示队友在哪。</figcaption>
+            </figure>
+            <p>检定结果要不要公开、要不要接受队友替你提的行动，都由你自己决定。有人断线时，AI 暂时替他行动，重连后交还。每个座位可以是真人，也可以交给 AI 调查员。</p>
+        </section>
+
+        <section id="art">
+            <h2>画面跟着故事变</h2>
+            <p class="lead">模组里的照片和插图会转成真彩字符画。天色随游戏时间变化，雨、雪、雾叠在画面上；在场人物的小像嵌在画面一角。按 <kbd>Ctrl+A</kbd> 换画法：</p>
+            <figure>
+                <img src="img/styles.png" width="2652" height="960" alt="同一张雪中房屋照片的四种画法：块字符、点阵、速写、纯 ASCII">
+                <figcaption>同一张照片的四种画法：块字符、点阵、速写、纯 ASCII。另有两种带轮廓线的块字符画法。</figcaption>
+            </figure>
+            <p>同一个地点的画面会随剧情换版本：某人来了、线索找到了、天黑了，画面就换成相应的版本，构图不变，事情过去再换回来。编译时还会给值得细看的东西准备特写。这些版本由 AI 照原图绘制，需要本机装有 Codex。</p>
+            <figure>
+                <img src="img/variants.png" width="2652" height="960" alt="冬雪之下的画面版本：主街平时与埃里在时，农舍墙面在发现线索前后">
+                <figcaption>《冬雪之下》：埃里在主街时，街角多了他的卡车；发现线索后，农舍的墙皮下露出烧出来的符号。</figcaption>
+            </figure>
+            <div class="pair">
+                <figure>
+                    <img src="img/showcase.png" width="1830" height="1074" alt="追书人开场的大场景：早班火车停在阿诺兹堡">
+                    <figcaption>开场、危机和结局用整屏大场景呈现。</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/paper.png" width="1830" height="1074" alt="道格拉斯·金博尔的日记：米色纸张、红色页边、斜体手写正文">
+                    <figcaption>信件、日记、剪报、电报各有纸色和版式，墨迹逐字显现。</figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <section id="music">
+            <h2>边玩边写的配乐</h2>
+            <p class="lead">配乐不是预先录好的曲子，而是程序边玩边写。守秘人叙述的气氛变了，音乐在下一小节跟着变；战斗、追逐和理智损失由游戏直接处理，室外和夜晚的音色也不同。每局有自己的调性和主题，常用 7/8、5/8 这样的奇数拍，弦乐、钢琴、竖琴、八音盒、管风琴、玻璃琴、长笛、大提琴、圆号、马林巴轮流出现。终端和浏览器都能播放。</p>
+            <div class="tracks">
+                <div class="track"><h3>悬疑</h3><p>调查和打听时：钢琴与拨弦在奇数拍上推进。</p><audio controls preload="none" src="media/music-mystery.mp3"></audio></div>
+                <div class="track"><h3>恐怖</h3><p>不该看见的东西出现时：男声吟唱，长音压低。</p><audio controls preload="none" src="media/music-dread.mp3"></audio></div>
+                <div class="track"><h3>紧迫</h3><p>追逐和战斗时：铜管领奏，136 拍每分。</p><audio controls preload="none" src="media/music-action.mp3"></audio></div>
+            </div>
+            <figure>
+                <img src="img/music.png" width="2652" height="1212" alt="三段配乐前十二小节的钢琴卷帘图：悬疑、恐怖、紧迫，按乐器分色，标出拍号与重音分组">
+                <figcaption>上面三段试听的前十二小节，按乐器分色；竖线是小节线，淡线是重音分组（3+2+2 即一个 7/8 小节）。试听由游戏的作曲与合成代码离线渲染。</figcaption>
+            </figure>
+        </section>
+
+        <section id="rules">
+            <h2>照规则书结算</h2>
+            <p class="lead">需要检定时，你亲手掷 3D 物理模拟的十面骰。失败后可以花幸运，也可以说明新的做法孤注一掷，由裁定员复核实际耗时和后果。理智损失、临时与不定性疯狂、重伤与濒死都按规则结算；手上有规则书的话，裁定员会按页查原文，施法的魔法值与理智消耗也照条目原文结算。</p>
+            <div class="pair">
+                <figure>
+                    <img src="img/fight.png" width="1830" height="1074" alt="追书人书房里的战斗：对手只显示伤势描述，被攻击时按 Tab 切换应对">
+                    <figcaption>战斗逐轮结算，对手只显示伤势描述，被攻击时按 Tab 切换应对。</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/chase.png" width="1830" height="1074" alt="墓园里的追逐：右侧是通往出口的路线和障碍">
+                    <figcaption>追逐沿地图路线展开，翻墙、钻灌木、撞门各有检定。</figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <section id="modules">
+            <h2>什么故事都能开团</h2>
+            <p class="lead">把 PDF、Word、Markdown、纯文本或 ZIP 拖进「导入模组」。AI 读完原文，整理出人物的知识与动机、线索的发现条件、事件日程、房间与平面图、战斗数值和追逐路线，保留原有的插图和手稿，再对照原文复核一遍。年代照原文，不限于 1920 年代；也可以只给一句设定，写一本原创模组：</p>
+            <pre data-copy><code>autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian</code></pre>
+            <p>游戏自带《追书人》《冬雪之下》《有些人油盐不进》三本模组，第一次玩推荐单人入门的《追书人》。</p>
+            <div class="pair">
+                <figure>
+                    <img src="img/map.png" width="1830" height="1074" alt="冬雪之下的地图：主街、诊所、教堂、邮局与农场之间的路">
+                    <figcaption>地图只画已知的地点和道路，选中地点可以直接前往。</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/plan.png" width="1830" height="1074" alt="追书人金博尔家的平面图">
+                    <figcaption>在楼里打开地图是平面图，标出每个房间里的人。</figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <section id="gallery">
+            <h2>更多实机画面</h2>
+            <ul class="gallery">
+                <li><figure><img src="img/lobby.png" width="1830" height="1074" loading="lazy" alt="冬雪之下开房间：安排真人与 AI 座位"><figcaption>开房间：安排真人与 AI 座位</figcaption></figure></li>
+                <li><figure><img src="img/telegram.png" width="1830" height="1074" loading="lazy" alt="冬雪之下的军队电报"><figcaption>军队电报</figcaption></figure></li>
+                <li><figure><img src="img/cards.png" width="1830" height="1074" loading="lazy" alt="角色库：自己创建和导入的人物卡"><figcaption>角色库</figcaption></figure></li>
+                <li><figure><img src="img/sheet.png" width="1830" height="1074" loading="lazy" alt="人物卡：背景、属性与完整技能列表"><figcaption>人物卡</figcaption></figure></li>
+                <li><figure><img src="img/module.png" width="1830" height="1074" loading="lazy" alt="选模组：故事介绍、人数、时长和场景预览"><figcaption>选模组</figcaption></figure></li>
+                <li><figure><img src="img/saves.png" width="1830" height="1074" loading="lazy" alt="继续调查：存档的时间、地点与预览"><figcaption>存档</figcaption></figure></li>
+                <li><figure><img src="img/models.png" width="1830" height="1074" loading="lazy" alt="模型设置：各分工可以分别指定模型"><figcaption>模型设置</figcaption></figure></li>
+                <li><figure><img src="img/plugins.png" width="1830" height="1074" loading="lazy" alt="规则插件：本局生效的特殊规则，一句话添加家规"><figcaption>规则插件</figcaption></figure></li>
+            </ul>
+        </section>
+
+        <section id="install">
+            <h2>安装</h2>
+            <p class="lead">新版安装包正在准备中，暂时无法安装。发布后会在这里提供 Windows、macOS 和 Linux 的一键安装命令。</p>
+            <ol class="steps">
+                <li>运行 <code>autokeeper</code>，在首次配置里选择模型、填写密钥。支持 DeepSeek、Claude、Codex、Ollama 和 OpenAI 兼容接口。</li>
+                <li>选「新的调查」，挑一个模组和调查员；<code>autokeeper serve</code> 可以在浏览器里玩。</li>
+                <li>在输入框写下行动或台词。朋友加入你的房间只需要浏览器。</li>
+            </ol>
+            <p>游戏和模型调用都在你自己的电脑上运行，这个网页只做介绍。完整说明见<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>。</p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="inner">
+            <nav aria-label="链接">
+                <a href="https://github.com/satoshinji2992/autokeeper">GitHub</a>
+                <a href="https://github.com/satoshinji2992/autokeeper#readme">README</a>
+                <a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>
+                <a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/module-format.md">模组格式</a>
+            </nav>
+            <p>AutoKeeper 程序不开源；仓库公开玩法文档、项目网页、模组格式与自带模组，授权见仓库的 LICENSE。终端界面基于 Textual，照片转字符画使用 chafa，掷骰使用 BCDice。自带模组为同人改编，原作版权归各自作者与出版方所有；模组选用的历史照片来自 Wikimedia Commons，署名见各模组的 art/credits.yaml。</p>
+            <p>标题画面取自 Dominique Signoret 的画作 <a href="https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg">Cthulhu and R'lyeh</a>（<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>），经裁剪、调色与字符化处理。标题字体为 TakWolf 的 Fusion Pixel（SIL Open Font License 1.1），随网页提供。Call of Cthulhu 是 Chaosium Inc. 的注册商标，本项目与 Chaosium 无关。</p>
+        </div>
+    </footer>
+
+    <dialog id="viewer" aria-label="查看大图">
+        <header><span data-caption></span><span><a href="img/game.png" target="_blank" rel="noopener">原图</a>　<button type="button">关闭</button></span></header>
+        <img src="img/game.png" alt="">
+    </dialog>
+</body>
+</html>

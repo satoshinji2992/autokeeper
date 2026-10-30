@@ -1,0 +1,582 @@
+locations:
+- id: main_street
+  name: 主街
+  read_aloud: 主街只有两个街区长。雪犁推出来的雪墙比人还高，杂货铺的窗玻璃上结着霜花， 马车和一辆卡车停在路边，车辙很快就又被风抹平。诊所的方向有人压着帽子快步走过。
+  keeper: AutoKeeper 补充的中转地点，只用于问路、歇脚和辨认方向，不放新线索、怪兆或强制检定。 镇民这时只当是一场凶险的流感，愿意指路，也乐于谈谁家又倒了人。
+  features:
+  - 杂货铺门口
+  - 铲雪的人
+  - 街角告示板
+  art: main_street
+  public: true
+  weather:
+  - snow
+  scene_root: true
+  outdoors: true
+  ground: street
+  looks:
+  - when: at:erie:main_street
+    change: 街角停着一辆没熄火的卡车，车斗里铺着一条旧毯子，车辙周围的路面被踩得发黑。
+- id: ratger_house
+  name: 拉特格出租屋
+  read_aloud: 门廊的木板被踩得发亮，门内传来炉火声。一位系着围裙的老妇人擦着手开了门。 “我是多琳·拉特格，房间已经备好了。进来暖暖吧。”她扶着门，给门口让出地方。
+  keeper: 开局地点。开场素材交代抵达，地点描写交代门口的接待，e_arrival 交代同一时刻几栋房子外两具蒙白布尸体被抬上卡车；把它们接成一个场面，不各自重讲一次。 拉特格夫妇终生住在这里，退休后靠出租房间贴补，事先已为调查员备好客房，希望客人住得舒适，每天做早晚饭。
+    开场到门口即可让玩家接话或行动，进屋、放行李、坐下和出发随玩家选择；直接去查搬尸的卡车或前往诊所也可以，不必先完成入住寒暄。 弗朗西斯在屋内，可以在实际接触时由多琳介绍，或自己报上姓名，不把两人的身世和全部消息塞进招呼。
+    夫妇认识许多受影响的家庭，能介绍调查员过去，也能手绘地图指路到安特医生的诊所（分发材料 1，初次只有黑色地名）。 原有接待安排是晚饭六点。地图、当地闲话和用餐安排随实际交谈自然带出；他们可以主动提供帮助，但不替调查员接受帮助、取图或决定路线。
+    背景改编准备的联系人要有来访依据，并在首次出面时交代身份与来意；不要求每位调查员的私人牵连都在开场同时登门求助，可在相应地点与后续交往中展开。
+  features:
+  - 客厅的餐桌
+  - 弗朗西斯的抽屉
+  - 后廊
+  - 楼上的客房
+  art: ratger_house
+  public: true
+  weather:
+  - snow
+  looks:
+  - when: flag:sign_porch_stain_1
+    change: 后廊天花板的水渍向墙角延伸，下面多了一只接水盆。
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: ratger_back_porch_ceiling
+    label: 后门廊的顶棚
+    features:
+    - 后廊
+    prompt: 屋后不大的木门廊，顶棚上压着厚厚一层雪，木板天花板上一圈黄褐色水渍，靠墙放着一只接水的铁盆，地面上结着霜。
+- id: clinic
+  name: 安特医生的诊所
+  read_aloud: 诊所是一栋改过的宅子，候诊室里坐满了人，有人靠着墙睡，有人低声咳。诊室里有六张床， 都躺着人；床单洗得发白。杰里迈亚·安特医生把听诊器挂在脖子上，抬头看了你们一眼，说： “州里终于来人了。”两名护士在换水盆，其中一位年轻女子动作最利落。
+  keeper: 安特医生会把详尽的病历笔记交给来协助的县府人员（分发材料 2a、2b）。 诊所里 6 名患者正在接受治疗，其他患者在家休养；两名护士轮班，其中一位正是卡洛琳·达维尔。 安特笃信科学，即使证据堆积如山也不肯接受超自然的解释。
+  features:
+  - 六张病床
+  - 安特的病历本
+  - 药柜里的威士忌
+  - 护士的值班记录
+  art: clinic
+  public: true
+  weather:
+  - snow
+  - flicker
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: clinic_six_beds
+    label: 诊所里的六张病床
+    features:
+    - 六张病床
+    prompt: 改作病房的屋子里并排挤着六张铁架床，床单洗得发白起褶，被子下的人一动不动，床头小柜上摆着水盆、玻璃杯和叠好的毛巾，窗玻璃结着霜。
+- id: church
+  name: 埃斯内尔的教堂
+  read_aloud: 教堂不大，长椅上还留着上一场礼拜的赞美诗本。牧师迎接你们时手上还带着灰，说地下室出了点麻烦， 这几天的死者都停在那里等雪停了下葬。
+  keeper: 镇上唯一一座教堂，死者停放在地下室。地下室远端的墙壁因水管爆裂而损坏，长满霉菌，看起来摇摇欲坠； 牧师非常震惊，因为本周早些时候还没有任何损坏或爆裂的迹象。 开棺解剖并检查内脏时进行医学检定，无论成败都能发现
+    c_autopsy。成功只发现脏器异常；失败才因失手使内脏裂开，房间里充满腐烂与死亡的气味，在场者理智检定0/1D4。 这段发现与失败后果来自原文“进行尸检”；普通外观检查不包含替调查员决定解剖，须由玩家声明或接受进一步检查。
+  features:
+  - 地下室
+  - 远端那面渗水的墙
+  - 停放的棺木
+  art: church
+  public: true
+  weather:
+  - snow
+  - flicker
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: post_office
+  name: 邮局
+  read_aloud: 邮局里只有一位职员，安娜·伊斯特曼，正在给一叠信盖戳。炉子忽然“砰”地响了一声， 靠炉子那半边热得发烫，离炉子两步就冷得让人缩脖子。她抬头，问你们要寄什么。
+  keeper: 邮局里非常令人不适：炉子时不时发出刺耳响声，屋子温度忽冷忽热。 安娜起初不愿交谈，但调查员的问题很快会让她滔滔不绝——这是她发泄悲伤的出口。
+  features:
+  - 安娜的柜台
+  - 分信格
+  - 炉子
+  art: post_office
+  public: true
+  weather:
+  - snow
+  - flicker
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: eastman_house
+  name: 伊斯特曼家
+  read_aloud: 屋子拉着窗帘，门口堆着没人扫的雪。门厅里有一股久未开窗的气味，安娜的钥匙在锁孔里转了半圈才转动。 马路对面就是那栋破败的农舍，半埋在雪里。
+  keeper: 萨缪尔·伊斯特曼是第一个患病的人，在调查员抵达前就已身亡。安娜会尽可能避免回家， 但愿意给调查员一把钥匙去看那本日记。日记并非真正的克苏鲁神话典籍， 翻阅笔记需要理智检定（0/1）；成功的克苏鲁神话检定能在速写中辨认出与犹格-索托斯相关的图像。
+  features:
+  - 萨缪尔的书桌
+  - 那本潦草的日记
+  - 卧室
+  art: eastman_house
+  public: false
+  weather:
+  - snow
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: cardwell_farm
+  name: 原卡德威尔家
+  read_aloud: 农舍被雪压得微微倾斜，门没有锁，一推就开。屋里积着厚厚的灰，墙壁和地板都已腐朽， 能看到动物筑过巢的痕迹。空气里除了霉味，还有某种更冷的、像土一样的气味。
+  keeper: 世纪之交废弃的老宅，被传成鬼屋、常有怪异的光、有撒旦教徒出没。事实是这家族长崇拜犹格-索托斯， 本身也小有法力；他曾奇迹般从重伤中恢复，同时儿媳死于重病，于是儿子杀了他，尸体丢进壁炉。
+    正是从这位族长的日记和书籍中，卡洛琳和埃里开始接触法术。屋内更近的活动痕迹是多年前两人留下的。
+  features:
+  - 铺在卧室地板上的野餐毯
+  - 墙角泡过水的课本
+  - 刻着字母的书柜
+  - 剥落墙皮的墙面
+  - 壁炉
+  art: cardwell_farm
+  public: false
+  weather:
+  - snow
+  - dust
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: cardwell_wall_symbol
+    label: 剥落墙皮的墙面
+    features:
+    - 剥落墙皮的墙面
+    prompt: 积灰的房间墙角，一片灰泥墙皮鼓起、裂开，边缘翘起，底下的木板发黑，地板上落着一层碎屑。
+  looks:
+  - when: knows:players:clue:c_wall_symbol
+    change: 墙皮被剥掉一块，露出的木板上有一道用火烧出的怪异符号，焦痕深黑，边缘的木纹扭成不像人手的弧线。
+    'on': cardwell_wall_symbol
+- id: darvill_house
+  name: 达维尔家
+  read_aloud: 房子属于卡洛琳的父母，院子里没人扫雪。窗后没有灯，但屋后雪地上有一道被清理过的痕迹，通向地下室的门。 客厅里堆着许多古怪物件，地上散落着关于咒语、符文和药剂的笔记。
+  keeper: 卡洛琳大部分法术都在地下室进行，包括死者复活。房子里住着卡洛琳的父母——他们被卡洛琳试图分享典籍知识后发疯， 又染上西班牙流感，被卡洛琳“治疗”之后成了眼神呆滞、洋洋自得、流口水的模样。
+    证据齐全：典籍原本、床畔的信件与军方电报、父母那番关于面具的话。
+  features:
+  - 客厅的笔记
+  - 地下室的门
+  - 卡洛琳的床畔
+  - 楼上的房间
+  - 地下室里的香炉
+  art: darvill_house
+  public: false
+  weather:
+  - snow
+  - flicker
+  chase:
+  - id: cellar
+    name: 达维尔家的地下室
+    look: 地下室里飘着辛辣的烟，香炉还没凉
+    place: darvill_house
+  - id: cellar_door
+    name: 屋后的地下室门
+    look: 门前的积雪被清理过，一道痕迹通向院子
+    place: darvill_house
+  - id: yard
+    name: 没人扫雪的院子
+    look: 院子里的雪没人扫过
+    place: darvill_house
+    links:
+    - parlor
+    obstacle:
+      kind: hazard
+      what: 院子里的积雪
+      skill: 敏捷
+      methods:
+      - id: track
+        label: 踩着清理过的痕迹跑
+        skill: 敏捷
+      - id: wade
+        label: 硬蹚过去
+        skill: 力量
+  - id: lane
+    name: 院外的街
+    look: 身后那栋房子的窗口全是黑的
+  - id: snow_wall
+    name: 主街外的雪墙
+    look: 雪犁推出来的雪墙比人还高
+    place: main_street
+    obstacle:
+      kind: barrier
+      what: 比人还高的雪墙
+      skill: 攀爬
+      methods:
+      - id: climb
+        label: 翻过去
+        skill: 攀爬
+      - id: dig
+        label: 扒开一个口子
+        skill: 力量
+        opens: true
+  - id: main_road
+    name: 主街
+    look: 杂货铺的窗玻璃上结着霜花
+    place: main_street
+    exit: true
+  - id: parlor
+    name: 堆满古怪物件的客厅
+    look: 地上散落着关于咒语、符文和药剂的笔记
+    place: darvill_house
+    obstacle:
+      kind: hazard
+      what: 满地的笔记和古怪物件
+      skill: 敏捷
+      methods:
+      - id: weave
+        label: 绕开杂物
+        skill: 敏捷
+      - id: leap
+        label: 跨过去
+        skill: 跳跃
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: darvill_grimoire
+    label: 客厅桌上摊开的旧书
+    features:
+    - 客厅的笔记
+    prompt: 客厅的桌上摊着散乱的笔记和纸页，中间压着一本厚重古朴的旧书，书页边缘被水泡得发皱，封面的花纹磨得看不清了。
+  looks:
+  - when: knows:players:clue:c_grimoire
+    change: 书翻开在画着无定形生物与怪异球状物的一页，页边多出几行细小的铅笔字。
+    'on': darvill_grimoire
+- id: brucker_farm
+  name: 布鲁彻农场
+  read_aloud: 农场在镇外西北方向，雪把栅栏埋了半截。牛棚里传出断断续续的哀叫，几头牛躺在地上起不来， 肋骨一根根支出来。雷吉·布鲁彻拎着一只酒瓶走过来，问你们是不是也来看他倒霉的。
+  keeper: “掩藏者”的法术不只影响人。雷吉把牛的病和镇上人的病联系起来，称这是对城镇全部弊病的神圣超自然审判； 他以酗酒应对，这个人醉醺醺的恶劣状态正是埃斯内尔未来的预示。征得他同意查看牛只，能证实牛的症状与镇民相似。
+    地图上的“西北农场”即这一带的农场区。
+  features:
+  - 牛棚
+  - 病倒的牛
+  - 雷吉的威士忌瓶
+  art: brucker_farm
+  public: true
+  weather:
+  - snow
+  scene_root: true
+  outdoors: true
+  ground: fields
+- id: satin_hill
+  name: 绸缎山
+  read_aloud: 山坡上只有雪、风和一丛丛矮树。风把脚印抹平，往上看是一片白，往下看是整个埃斯内尔， 烟囱的细烟像插在雪里的针。走到这里，连呼吸都像在喝冰水。
+  keeper: 绸缎山因春夏山坡盛开大片黄色绸缎花而得名；这是“掩藏者”埋尸之处，也是埃斯内尔苦痛的中心。 地图上的传播路径圈线、萨缪尔·伊斯特曼的描述、魂灵提到的黄色峰顶、卡洛琳的法术都指向这里。
+    确切地点很难找，只有极难侦查检定能发现雪中埋尸地的微小差异；靠近时法术影响加重（见线索）。 除非调查员尽力阻止，否则他们抵达埋尸地点的同时或不久后，卡洛琳和“埃里”会前来，但不立即引发冲突。 卡洛琳此时也显出明显病状，“埃里”完全不受影响。
+  features:
+  - 那片矮树林
+  - 被从下方翻动过的雪
+  - 山脊
+  art: satin_hill
+  public: false
+  weather:
+  - snow
+  chase:
+  - id: slope
+    name: 风雪里的山坡
+    look: 风把脚印抹平，往上看是一片白
+    place: satin_hill
+    obstacle:
+      kind: hazard
+      what: 被风吹硬的雪坡
+      skill: 敏捷
+      harm: 1D3
+      methods:
+      - id: steady
+        label: 稳住脚步跑
+        skill: 敏捷
+  - id: scrub
+    name: 一丛丛矮树
+    look: 矮树在雪里露出黑色的枝条
+    place: satin_hill
+    obstacle:
+      kind: hazard
+      what: 压着雪的矮树丛
+      skill: 敏捷
+      methods:
+      - id: push
+        label: 拨开冲过去
+        skill: 敏捷
+      - id: duck
+        label: 矮身钻过去
+        skill: 闪避
+  - id: below_slope
+    name: 山坡下的雪地
+    look: 往下看是整个埃斯内尔，烟囱的细烟像插在雪里的针
+    place: satin_hill
+  - id: fence
+    name: 埋了半截的栅栏
+    look: 雪把农场的栅栏埋了半截
+    place: brucker_farm
+    obstacle:
+      kind: hazard
+      what: 埋了半截的栅栏
+      skill: 跳跃
+      methods:
+      - id: leap
+        label: 跳过去
+        skill: 跳跃
+      - id: climb
+        label: 翻过去
+        skill: 攀爬
+  - id: barn
+    name: 布鲁彻农场的牛棚
+    look: 牛棚里传出断断续续的哀叫
+    place: brucker_farm
+  - id: road
+    name: 回镇上的路
+    look: 车辙刚碾出来就被风抹平
+  - id: snow_wall
+    name: 主街外的雪墙
+    look: 雪犁推出来的雪墙比人还高
+    place: main_street
+    obstacle:
+      kind: barrier
+      what: 比人还高的雪墙
+      skill: 攀爬
+      methods:
+      - id: climb
+        label: 翻过去
+        skill: 攀爬
+      - id: dig
+        label: 扒开一个口子
+        skill: 力量
+        opens: true
+  - id: main_road
+    name: 主街
+    look: 杂货铺的窗玻璃上结着霜花
+    place: main_street
+    exit: true
+  scene_root: true
+  outdoors: true
+  ground: woods
+  looks:
+  - when: at:caroline:satin_hill
+    change: 矮树林边的雪被踩出一行新脚印，其中一串走得很慢，另一串笔直通向树丛。
+- id: church_cellar
+  name: 教堂地下室
+  read_aloud: 地下室又冷又潮，几具棺木并排停着，等雪停了下葬。远端那面墙水迹斑斑，长满霉菌，墙面鼓起，看起来摇摇欲坠。空气里是霉味和石灰的气味。
+  within: church
+  keeper: 这几天的死者都停在这里等待下葬。远端墙壁因水管爆裂而损坏、长满霉菌，牧师很震惊，因为本周早些时候还没有任何损坏迹象。开棺尸检进行医学检定，无论成败都发现内脏扭曲成果冻状、没有二次感染；失败则失手使内脏裂开，房间里每个人都要理智检定（0/1D4）。
+  features:
+  - 停放的棺木
+  - 远端那面渗水的墙
+  - 地下室木柜
+  art: church_cellar
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:pastor:church_cellar
+    change: 并排停放的棺木之间多了一副新打的松木棺，盖板上还落着一层没化的雪。
+  - when: knows:players:clue:c_cellar
+    change: 墙脚的霉斑连成一片灰绿，鼓起的灰泥裂开一道缝，水正顺着缝往下淌。
+    'on': church_cellar_wall
+  views:
+  - key: church_cellar_wall
+    label: 远端渗水的墙
+    features:
+    - 远端那面渗水的墙
+    prompt: 地下室尽头那面墙水迹斑斑，灰泥鼓起、开裂，墙脚湿了一片，地上积着一小滩水，空气里是霉味和石灰味。
+- id: darvill_cellar
+  name: 达维尔家地下室
+  read_aloud: 地下室低矮昏暗，空气里有辛辣的烟味。屋后通院子的那扇门透进冷风，门前的积雪被清理过。
+  within: darvill_house
+  keeper: 卡洛琳大部分法术都在地下室进行，包括死者复活；尸体被盗后，她在这里拷问死去病人的魂灵，埃里也和她一起待在地下室。屋后有直通院子的地下室门，没有上锁，积雪被清理过；前门锁着，敲门无人应答。目睹刚复生的魂灵须理智检定（1/1D6+1）。
+  features:
+  - 地下室里的香炉
+  - 屋后通院子的地下室门
+  art: darvill_cellar
+  outdoors: false
+  ground: building
+  views:
+  - key: darvill_cellar_censer
+    label: 地下室里的香炉
+    features:
+    - 地下室里的香炉
+    prompt: 低矮昏暗的地下室里，一只铜香炉搁在矮凳上，炉膛里积着灰白的粉末和几块没烧尽的黑色碎屑，炉壁熏得发黑，旁边的地上散着几只小碟和一盒火柴。
+- id: darvill_caroline_room
+  name: 卡洛琳的卧室
+  read_aloud: 一间收拾得还算整齐的卧室，床头边放着一沓被翻得起毛的信。
+  within: darvill_house
+  keeper: 卡洛琳的床畔有一沓埃里从战场写给她的信，夹着美国军方的阵亡电报（分发材料 4），信都磨损了，显然常被翻阅。
+  features:
+  - 卡洛琳的床畔
+  art: darvill_caroline_room
+  outdoors: false
+  ground: building
+- id: ratger_back_porch
+  name: 后门廊
+  read_aloud: 屋后的门廊不大，木顶棚上压着厚厚的积雪。
+  within: ratger_house
+  keeper: 疾病进入第三阶段后，调查员坐下吃饭时，后门廊的屋顶被积雪压垮，弗朗西斯半个身子被埋在里面，毫无知觉；医生检查后认为他生命垂危。
+  features:
+  - 后廊的顶棚
+  art: ratger_back_porch
+  outdoors: false
+  ground: building
+- id: ratger_guest_room
+  name: 客房
+  read_aloud: 客房已经收拾好，床上铺着厚被子，窗玻璃上结着霜花，屋里比楼下冷一些。
+  within: ratger_house
+  keeper: 拉特格夫妇在调查员到来之前已为他们安排好的房间，平日租给旅客和季节工。
+  features:
+  - 床铺
+  - 结霜的窗户
+  art: ratger_guest_room
+  outdoors: false
+  ground: building
+passages:
+- id: main_street__ratger_house
+  a: main_street
+  b: ratger_house
+  kind: road
+  minutes: 5
+- id: main_street__clinic
+  a: main_street
+  b: clinic
+  kind: road
+  minutes: 8
+- id: main_street__church
+  a: main_street
+  b: church
+  kind: road
+  minutes: 10
+- id: main_street__post_office
+  a: main_street
+  b: post_office
+  kind: road
+  minutes: 6
+- id: main_street__brucker_farm
+  a: main_street
+  b: brucker_farm
+  kind: road
+  minutes: 40
+- id: main_street__darvill_house
+  a: main_street
+  b: darvill_house
+  kind: road
+  minutes: 20
+- id: main_street__satin_hill
+  a: main_street
+  b: satin_hill
+  kind: road
+  minutes: 60
+- id: ratger_house__clinic
+  a: ratger_house
+  b: clinic
+  kind: road
+  minutes: 10
+  one_way: true
+- id: post_office__eastman_house
+  a: post_office
+  b: eastman_house
+  kind: road
+  minutes: 10
+- id: eastman_house__cardwell_farm
+  a: eastman_house
+  b: cardwell_farm
+  kind: road
+  minutes: 10
+- id: brucker_farm__satin_hill
+  a: brucker_farm
+  b: satin_hill
+  kind: road
+  minutes: 10
+- id: church__church_cellar
+  a: church
+  b: church_cellar
+  kind: stairs
+  minutes: 0
+  perception: 楼梯口能喊话；地下室里的动静在礼拜堂只隐约听得见
+- id: darvill_house__darvill_cellar
+  a: darvill_house
+  b: darvill_cellar
+  kind: stairs
+  minutes: 0
+  perception: 楼梯口能听见地下室里的说话声
+- id: darvill_house__darvill_caroline_room
+  a: darvill_house
+  b: darvill_caroline_room
+  kind: stairs
+  minutes: 0
+  perception: 楼梯口能喊话
+- id: ratger_house__ratger_back_porch
+  a: ratger_house
+  b: ratger_back_porch
+  kind: door
+  minutes: 0
+  perception: 在屋里能听见后廊的呻吟和碰撞声（原文）
+- id: ratger_house__ratger_guest_room
+  a: ratger_house
+  b: ratger_guest_room
+  kind: stairs
+  minutes: 0
+  perception: 楼梯口能喊话，楼下的说话声隐约传上来
+plans:
+- building: church
+  floors:
+  - name: 一层
+    rooms:
+    - place: church
+      label: 礼拜堂
+      x: 0
+      y: 0
+      w: 22
+      h: 6
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: church_cellar
+      x: 0
+      y: 0
+      w: 16
+      h: 5
+  basis: 原文写明死者停放在教堂地下室，尸检与墙壁损坏都在地下室；礼拜堂与地下室之间的楼梯为 AutoKeeper 补充：原文未写入口形式。
+- building: darvill_house
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: darvill_caroline_room
+      x: 0
+      y: 0
+      w: 16
+      h: 5
+  - name: 一层
+    rooms:
+    - place: darvill_house
+      label: 客厅
+      x: 0
+      y: 0
+      w: 22
+      h: 6
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: darvill_cellar
+      x: 0
+      y: 0
+      w: 18
+      h: 5
+  basis: 原文写明地下室（屋后有通往地下室的门）和卡洛琳的床畔；屋内楼梯与卧室所在楼层为 AutoKeeper 补充。达维尔夫妇和典籍原文没写在哪一间，不动。
+- building: ratger_house
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: ratger_guest_room
+      x: 0
+      y: 0
+      w: 16
+      h: 5
+  - name: 一层
+    rooms:
+    - place: ratger_house
+      label: 客厅
+      x: 11
+      y: 0
+      w: 22
+      h: 6
+    - place: ratger_back_porch
+      x: 0
+      y: 0
+      w: 12
+      h: 5
+  basis: 原文写明出租屋的房间与后门廊；客厅（饭桌）沿用模组原有布置，楼梯与客房所在楼层为 AutoKeeper 补充。

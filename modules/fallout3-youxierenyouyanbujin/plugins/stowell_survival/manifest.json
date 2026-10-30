@@ -1,0 +1,395 @@
+{
+  "id": "stowell_survival",
+  "name": "混沌黎明生存规则",
+  "description": "按原文实现有福者暴走那天的躲藏、杀出重围与狙击手规则。躲藏或徒步离镇时，用潜行（安静移动到特定地点）、侦查（确定无人跟踪）或攀爬（爬墙钻窗）检定，成功即到达隐蔽地；失败后可以再给一次机会，再失败就麻烦了。午夜为隐藏的调查员作一次集体幸运检定：失败则有普通镇民来同一地点避难并引来有福者；通过则之后每小时检定一次。杀出重围时，为完成任务杀死一名有福者后作幸运检定：单人行动时，通过表示在场只有这一名有福者，可以继续任务；失败则又出现一名有福者。多人共同行动时，最后一击者幸运检定成功，就攒下一次脱身机会，攒下的机会不会作废，之后可以直接让不在战斗中的调查员脱身。战斗中通过困难闪避后，还可再投幸运，成功即脱身。屋顶狙击手：幸运检定通过就不会引起他的兴趣，失败则被子弹擦伤，伤害最多 1D6。守秘人可以在黎明前半小时跳过检定，直接安排有福者追逐镇民过来，这一步由守秘人决定，插件不代劳。",
+  "api_version": 1,
+  "version": "0.1.0",
+  "hooks": [
+    "action"
+  ],
+  "capabilities": [
+    "dice",
+    "note",
+    "damage"
+  ],
+  "actions": [
+    {
+      "name": "hide_move",
+      "description": "调查员躲藏、或徒步寻找离镇路线时调用。arguments: who（调查员 id，字符串）, skill（只能是 潜行、侦查、攀爬 之一）。失败后再次调用同一 who 即视为再给的一次机会。"
+    },
+    {
+      "name": "night_luck",
+      "description": "午夜时，以及此后每小时，为躲藏中或徒步离镇的调查员作集体幸运检定。arguments: who（代表全组投骰的调查员 id）。"
+    },
+    {
+      "name": "kill_blessed",
+      "description": "调查员为完成任务杀死一名有福者后调用。arguments: who（作最后一击的调查员 id）, together（布尔值，是否多名调查员共同行动）。"
+    },
+    {
+      "name": "dodge_escape",
+      "description": "调查员在战斗中已通过困难闪避后调用，投幸运决定能否脱身。arguments: who（调查员 id）, dodge_passed（必须为 true）。"
+    },
+    {
+      "name": "use_escape",
+      "description": "使用攒下的脱身机会，让不在战斗中的调查员脱身。arguments: count（正整数，不能超过已攒的次数）。"
+    },
+    {
+      "name": "sniper",
+      "description": "调查员经过屋顶狙击手的射界时调用。arguments: who（调查员 id）。"
+    }
+  ],
+  "flags": {},
+  "initial": {
+    "escapes": 0,
+    "hide_retry": {},
+    "night_phase": "until_midnight"
+  },
+  "tests": [
+    {
+      "name": "躲藏成功",
+      "event": {
+        "hook": "action",
+        "action": "hide_move",
+        "arguments": {
+          "who": "betty",
+          "skill": "潜行"
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "hide_retry": {}
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "检定成功，到达了隐蔽处。"
+        }
+      ]
+    },
+    {
+      "name": "躲藏首次失败可再试",
+      "event": {
+        "hook": "action",
+        "action": "hide_move",
+        "arguments": {
+          "who": "betty",
+          "skill": "攀爬"
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "hide_retry": {
+          "betty": true
+        }
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "检定失败：前方出现险情。可以放弃，也可以再检定一次。"
+        }
+      ]
+    },
+    {
+      "name": "躲藏再次失败",
+      "event": {
+        "hook": "action",
+        "action": "hide_move",
+        "arguments": {
+          "who": "betty",
+          "skill": "侦查"
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {
+          "betty": true
+        },
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "hide_retry": {}
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "再次失败，麻烦了。"
+        }
+      ]
+    },
+    {
+      "name": "非法技能不检定",
+      "event": {
+        "hook": "action",
+        "action": "hide_move",
+        "arguments": {
+          "who": "betty",
+          "skill": "话术"
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "escapes": 0
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "午夜幸运失败",
+      "event": {
+        "hook": "action",
+        "action": "night_luck",
+        "arguments": {
+          "who": "bert"
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "night_phase": "found"
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "有普通镇民也跑到这里避难，身后引来了有福者。"
+        }
+      ]
+    },
+    {
+      "name": "午夜幸运通过转每小时",
+      "event": {
+        "hook": "action",
+        "action": "night_luck",
+        "arguments": {
+          "who": "bert"
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "night_phase": "hourly"
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "这一小时平安无事。"
+        }
+      ]
+    },
+    {
+      "name": "多人击杀攒脱身机会",
+      "event": {
+        "hook": "action",
+        "action": "kill_blessed",
+        "arguments": {
+          "who": "fred",
+          "together": true
+        }
+      },
+      "state": {
+        "escapes": 1,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "escapes": 2
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "混乱中出现了一个空当，攒下一次脱身机会。"
+        }
+      ]
+    },
+    {
+      "name": "单人击杀失败又来一个",
+      "event": {
+        "hook": "action",
+        "action": "kill_blessed",
+        "arguments": {
+          "who": "fred",
+          "together": false
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "escapes": 0
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "又一名有福者扑了上来。"
+        }
+      ]
+    },
+    {
+      "name": "使用超过攒下的机会无效",
+      "event": {
+        "hook": "action",
+        "action": "use_escape",
+        "arguments": {
+          "count": 3
+        }
+      },
+      "state": {
+        "escapes": 2,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "escapes": 2
+      },
+      "expected_effects": []
+    },
+    {
+      "name": "使用两次脱身机会",
+      "event": {
+        "hook": "action",
+        "action": "use_escape",
+        "arguments": {
+          "count": 2
+        }
+      },
+      "state": {
+        "escapes": 2,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "escapes": 0
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "用掉 2 次脱身机会，相应人数的调查员脱离了战斗。"
+        }
+      ]
+    },
+    {
+      "name": "闪避后幸运脱身",
+      "event": {
+        "hook": "action",
+        "action": "dodge_escape",
+        "arguments": {
+          "who": "annabelle",
+          "dodge_passed": true
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {},
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "趁乱脱身，可以继续任务。"
+        }
+      ]
+    },
+    {
+      "name": "狙击手擦伤",
+      "event": {
+        "hook": "action",
+        "action": "sniper",
+        "arguments": {
+          "who": "wesley"
+        }
+      },
+      "state": {
+        "escapes": 0,
+        "hide_retry": {},
+        "night_phase": "until_midnight"
+      },
+      "context": {},
+      "dice": [
+        4
+      ],
+      "checks": [
+        false
+      ],
+      "expected_state": {},
+      "expected_effects": [
+        {
+          "kind": "damage",
+          "who": "wesley",
+          "amount": 4
+        },
+        {
+          "kind": "note",
+          "text": "屋顶传来一声枪响，子弹擦伤了你。"
+        }
+      ]
+    }
+  ]
+}

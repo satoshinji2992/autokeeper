@@ -1,0 +1,935 @@
+locations:
+- id: meeting_house
+  name: 聚会的小屋
+  art: meeting_house
+  weather:
+  - flicker
+  public: true
+  aliases:
+  - 小屋
+  - 调查员家
+  - 聚会的地方
+  read_aloud: 一间带门廊的木板小屋，客厅里摆着旧沙发和茶几，厨房的炉子上煮着咖啡。后门通向院子，卫生间在走廊尽头。窗外是大街的路灯。
+  keeper: AutoKeeper 补充的开局地点（原文只说“某调查员家”）。开局麦克迪会绕屋找没关的门窗突入，先对落单者（煮咖啡、上厕所）动手；聆听成功可发现有人入室。之后可在这里歇脚、商量、打电话。
+  features:
+  - 门窗
+  - 厨房
+  - 电话
+  - 门廊
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: meeting_porch_body
+    label: 门廊上的尸体
+    features:
+    - 门廊
+    prompt: 木板小屋的门廊，门灯亮着，几级木台阶通向大街，栏杆边堆着旧花盆，门虚掩着。
+  looks:
+  - when: knows:players:clue:c_mccurdy_body
+    change: 门廊地板上躺着一具衣衫褴褛、满身污秽和伤疤的男尸，眼睛还睁着。
+    'on': meeting_porch_body
+- id: main_street
+  name: 斯托威尔大街
+  art: main_street
+  public: true
+  aliases:
+  - 大街
+  - 主街
+  - 镇中心
+  - 街上
+  read_aloud: 斯托威尔的大街两旁是面包店、杂货店、药店、糖果店和五金店，阿尔的顶级车行的橱窗里摆着新福特。高高的电话线杆一路排开，街角有人在发传单。
+  keeper: 枢纽地点，可问路。老头皮尔森常坐在电话线杆顶上窃听，对路人微笑挥手。可能遇到眼部带伤、喃喃说“天上的眼睛”的崩溃者，也可能遇到布拉德和托德在争论物理。
+  features:
+  - 电话线杆
+  - 街角传单
+  - 商店橱窗
+  - 路过的镇民
+  looks:
+  - when: flag:chaos_dawn
+    change: 大街上一片狼藉：橱窗破碎，门板被砸开，路上散落着翻倒的杂物
+  - when: flag:sign_pole_tapping_1
+    change: 电话线杆上多了一只悬挂的面包篮。
+  - when: at:jensen:main_street
+    change: 街边停着一辆沾满干泥的旧轿车，车门没锁，车头还挂着草屑。
+  chase:
+  - id: poles
+    name: 电话线杆下
+    look: 街边的电话线杆一根接一根
+    place: main_street
+  - id: barricade
+    name: 筑起街垒的小巷
+    look: 有人用家具和门板把小巷堵了一半
+    obstacle:
+      kind: hazard
+      what: 街垒后面的守卫者
+      skill: 闪避
+      harm: 1D3
+      methods:
+      - id: dodge
+        label: 躲着冲过去
+        skill: 闪避
+  - id: dogs
+    name: 放出饿狗的院子
+    look: 院门开着，狗链拖在地上
+    obstacle:
+      kind: hazard
+      what: 见人就咬的饿狗
+      skill: 闪避
+      harm: 1D6
+      methods:
+      - id: dodge
+        label: 躲开狗嘴
+        skill: 闪避
+  - id: sniper
+    name: 屋顶下的路口
+    look: 对面屋顶上坐着一个端枪的人
+    obstacle:
+      kind: hazard
+      what: 屋顶上的狙击手
+      skill: 幸运
+      harm: 1D6
+      methods:
+      - id: luck
+        label: 低头跑过去
+        skill: 幸运
+  - id: fire
+    name: 街上的火障
+    look: 街当中烧着一道火障
+    obstacle:
+      kind: hazard
+      what: 火障
+      skill: 跳跃
+      harm: 1D6
+      methods:
+      - id: leap
+        label: 跳过去
+        skill: 跳跃
+  - id: flood
+    name: 泥沙俱下的街道
+    look: 雨水裹着泥沙从坡上冲下来
+    obstacle:
+      kind: hazard
+      what: 浊流
+      skill: 敏捷
+      methods:
+      - id: brace
+        label: 稳住脚步
+        skill: 敏捷
+  - id: roadblock
+    name: 警用路障
+    look: 一道警用路障横在路上
+    obstacle:
+      kind: barrier
+      what: 警用路障
+      skill: 攀爬
+      hp: 15
+      methods:
+      - id: climb
+        label: 翻过去
+        skill: 攀爬
+  - id: woods
+    name: 镇外的树林
+    look: 树林那边就出了镇
+    exit: true
+  scene_root: true
+  outdoors: true
+  ground: street
+- id: ferguson_house
+  name: 弗格森家
+  art: ferguson_house
+  aliases:
+  - 格兰达家
+  - 卫斯理姐姐家
+  read_aloud: 一栋整洁的两层住宅，厨房里飘出烤蛋糕的香味。门口的狗窝空着。
+  keeper: 格兰达（崩溃，痴傻）会应门，不冷不热地请人吃蛋糕喝咖啡。熟人会发现家里的宠物不见了（已被解剖）。双胞胎雪莉和马克辛（有福）很快端来一盘解剖好的青蛙，拉调查员一起研究，摸底他们的文化水平；能学到东西就学，学不到就赶人走，或设法拘禁调查员当实验材料。地下室里，被打了镇静剂的唐纳德是双胞胎的解剖对象。
+  features:
+  - 厨房
+  - 空狗窝
+  - 地下室门
+  - 青蛙标本盘
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: ferguson_doghouse
+    label: 空着的狗窝
+    features:
+    - 空狗窝
+    prompt: 屋侧草地上一只小木狗窝，门洞里空空的，铁链挂在木桩上，食盆搁在窝口。
+  looks:
+  - when: knows:players:clue:c_ferguson_pets
+    change: 狗窝里只剩一条空项圈，项圈边的泥地被刨得乱七八糟。
+    'on': ferguson_doghouse
+- id: mcdermott_house
+  name: 麦克德莫特家
+  art: mcdermott_house
+  aliases:
+  - 阿诺德家
+  read_aloud: 屋里没人。餐桌上还摆着两副餐具，灶里的柴早已燃尽，锅里的肉烧成了炭，蔬菜干枯发黑。门口不见那辆车。
+  keeper: 阿诺德夫妇四天前看完望远镜就再没回家。
+  features:
+  - 餐桌
+  - 灶台
+  - 门口车位
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: church
+  name: 美以美会堂
+  art: church
+  public: true
+  aliases:
+  - 教堂
+  - 菲茨杰拉德的教堂
+  - 美以美会
+  read_aloud: 白色尖顶的木结构教堂，长椅排得整整齐齐，管风琴立在讲坛一侧。门口告示写着：每日两次布道，欢迎所有人。
+  keeper: 菲茨杰拉德牧师每天布道两次，礼拜后巡视会众、挑人单独谈话，觉得行的人被叫来参加半夜的特别弥撒，然后被送到教授家看望远镜。镇上另有圣家族天主堂与公理会堂，与此事无关。
+  features:
+  - 讲坛
+  - 管风琴
+  - 长椅
+  - 牧师书房
+  scene_root: true
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:fitzgerald:church & hour:0-2
+    change: 教堂门口停着几辆熄了火的车，彩窗里透出烛光和人影。
+  - when: knows:players:clue:c_church_list
+    change: 书页间夹着一张折起的纸条，摊开是一行行人名，几个名字后面打了钩。
+    'on': church_pulpit_bible
+  views:
+  - key: church_pulpit_bible
+    label: 讲坛上的圣经
+    features:
+    - 讲坛
+    prompt: 木质讲坛的栏杆后摊着一本翻开的大圣经，旁边一只水杯，讲坛一侧立着管风琴，长椅排得整整齐齐。
+- id: lowry_house
+  name: 劳里家
+  art: lowry_house
+  aliases:
+  - 伯特家
+  - 雷蒙德家
+  read_aloud: 客厅里堆满乐器：钢琴、小提琴，还有奶酪刨、搓衣板、轮毂、油壶改成的怪东西。一阵没有规律的声音从里面传出来。
+  keeper: 露希尔趴在餐桌上哭。雷蒙德会探头叫“嘿！来听！”，然后回客厅演奏。乍听是噪音，听几分钟就会甘之如饴、感到精密的旋律；听久了可能产生共感，看到乐曲的颜色。
+  features:
+  - 客厅乐器堆
+  - 餐桌
+  - 钢琴
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: steakhouse
+  name: 埃尔默牛排馆
+  art: steakhouse
+  public: true
+  aliases:
+  - 牛排馆
+  - 埃尔默
+  - 饭店
+  read_aloud: 镇上最好的饭店，红格子桌布，墙上挂着牛头。今天菜不如从前，服务员们低着头，不敢多说一句。后门对着一条堆垃圾的小巷。
+  keeper: 菲利克斯（有福）铁腕掌店，用崩溃者做清洁工、洗碗工和厨师（含阿诺德）。除点单外的任何问题都会让菲利克斯以外的店员非常紧张，谁被怀疑乱说话就会被暗中痛殴；奴隶们知道走漏教授和望远镜的事，亲朋就会遭报复。原店主伦纳德只是反复洗那点盘子，等待报仇。晚上很多有福者来此吃几乎没煎的久久熟成牛排。
+  features:
+  - 厨房
+  - 洗碗池
+  - 后门小巷
+  - 餐厅
+  scene_root: true
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:bingham:steakhouse
+    change: 靠墙的长桌拼在一起，坐着几个衣着体面的客人，盘里的牛排几乎没煎过。
+- id: bank
+  name: 斯托威尔商业信托储蓄银行
+  art: bank
+  public: true
+  aliases:
+  - 银行
+  - 储蓄银行
+  read_aloud: 大理石柜台后，职员们埋头算账，没人抬头。经理室的门关着，门里传来不停翻动账本的声音。
+  keeper: 宾汉经理（有福）提高贷款门槛，派执行员收回房产。信用评级不到 50 的人通过职员安排会见基本不可能。职员不愿和欠银行钱的人接触，逼问可能吓瘫、逃跑或大叫逼债不怪他们。
+  features:
+  - 柜台
+  - 经理室
+  - 职员
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: police_station
+  name: 警察局
+  art: police_station
+  public: true
+  aliases:
+  - 警局
+  read_aloud: 一栋砖砌小楼，工作时间总有人值班。后面只有四间牢房。
+  keeper: 副警长斯坦利（有福）实际掌权，原局长马丁·卡瓦诺（崩溃）成了替他打杂的傀儡。报案不会有用，只会让调查员被盯上。被俘调查员可能关在这里。
+  features:
+  - 值班台
+  - 牢房
+  - 局长办公室
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: mother_bakers
+  name: 贝克妈妈菜
+  art: mother_bakers
+  public: true
+  aliases:
+  - 贝克妈妈
+  - 餐厅
+  - 贝克太太的店
+  read_aloud: 主道边一家热闹的餐厅，华夫饼上浇着新糖浆，汉堡里夹着说不清是什么的馅料，客人们吃得眯起眼睛。
+  keeper: 贝克太太看了望远镜后推出新菜，好评如潮，但不是问题根源（红鲱鱼）。贝蒂在这里工作了十年。
+  features:
+  - 新菜单
+  - 厨房
+  - 柜台
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: gregson_store
+  name: 格雷格森商店
+  art: gregson_store
+  public: true
+  aliases:
+  - 杂货店
+  - 格雷格森
+  read_aloud: 一家货架堆得满满的杂货店，柜台边有汽水机，孩子们常在这儿买汽水。
+  keeper: 麦克迪原本在镇上杂货店理货。阿诺德可能来这里买食材；布拉德和托德聊腻了物理会来喝汽水。
+  features:
+  - 货架
+  - 汽水机
+  - 柜台
+  scene_root: true
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:brad_todd:gregson_store
+    change: 汽水机旁站着两个穿背带裤的男孩，手里攥着汽水瓶，对着货架争个不停。
+- id: park_mine
+  name: 公园和金矿
+  art: park_mine
+  public: true
+  aliases:
+  - 公园
+  - 金矿
+  - 裸石山
+  read_aloud: 公园里有秋千和人力旋转木马。旁边的裸石山脚下新搭了一排棚子，日夜传出锤凿声，一群面无表情的人在挖。
+  keeper: 克劳德·马西（有福）指挥崩溃者奴隶日夜挖掘，刚发现金矿脉；金子也是某些有福者不可或缺的实验材料。
+  features:
+  - 棚子
+  - 挖掘的人
+  - 秋千
+  scene_root: true
+  outdoors: true
+  ground: fields
+- id: hospital
+  name: 斯托威尔医院
+  art: hospital
+  public: true
+  aliases:
+  - 医院
+  read_aloud: 一座不大的医院，有住院部，走廊里飘着消毒水味。
+  keeper: 常见病都能治，疑难杂症和大手术要去市里。可在这里处理伤口。
+  features:
+  - 病房
+  - 急诊室
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: jensen_farm
+  name: 詹森农场
+  art: jensen_farm
+  aliases:
+  - 詹森家
+  - 农场
+  - 养猪场
+  read_aloud: 镇东头一条烂泥路通到一座破农场。田里停满了各式汽车，猪圈里的猪拱着泥。农舍的窗户钉着木板。
+  keeper: 詹森和三个喽啰的据点。场院里停着从崩溃者那里弄来的车，包括阿诺德的车。屋里关着供詹森一伙使唤和欺凌的崩溃者，包括格拉迪斯。开局的尸体会被拉到这里，最后喂猪。伯奇平时从这里买私酿原浆。
+  features:
+  - 停车的田地
+  - 猪圈
+  - 农舍
+  - 被钉住的窗户
+  chase:
+  - id: farmhouse
+    name: 农舍里
+    look: 窗户钉着木板，屋里昏暗
+    place: jensen_farm
+  - id: boarded_window
+    name: 被钉住的窗户
+    look: 窗户钉着木板
+    place: jensen_farm
+    obstacle:
+      kind: barrier
+      what: 钉着木板的窗户
+      skill: 力量
+      hp: 10
+      methods:
+      - id: force
+        label: 撞开木板
+        skill: 力量
+        opens: true
+  - id: pigsty
+    name: 猪圈边
+    look: 猪圈里的猪拱着泥
+    place: jensen_farm
+    obstacle:
+      kind: hazard
+      what: 猪圈边的烂泥
+      skill: 敏捷
+      methods:
+      - id: run
+        label: 冲过去
+        skill: 敏捷
+      - id: wade
+        label: 硬蹚过去
+        skill: 力量
+  - id: car_field
+    name: 停满汽车的田地
+    look: 田里停满了各式汽车
+    place: jensen_farm
+  - id: mud_road
+    name: 烂泥路
+    look: 一条烂泥路通向镇东头
+    obstacle:
+      kind: hazard
+      what: 没过脚面的烂泥
+      skill: 敏捷
+      methods:
+      - id: run
+        label: 冲过去
+        skill: 敏捷
+      - id: wade
+        label: 硬蹚过去
+        skill: 力量
+  - id: east_end
+    name: 镇东头
+    look: 一排工人住的房子
+  - id: town_street
+    name: 斯托威尔大街
+    look: 高高的电话线杆一路排开
+    place: main_street
+    exit: true
+  scene_root: true
+  outdoors: true
+  ground: fields
+- id: hart_house
+  name: 哈特教授宅
+  art: hart_house
+  aliases:
+  - 教授家
+  - 哈特家
+  - 镇西老宅
+  read_aloud: 镇西一栋漂亮的老宅，几只猫在门廊上打盹。房后连着一座玻璃温室，夜里亮着灯，头顶那片天总是晴的。
+  keeper: 教授与若干有福者研究助手同住，崩溃者奴隶伺候起居。全天有有福者和崩溃者守卫，发现闯入会尽力抵挡并呼叫增援。猫是教授的命根子。工作室里有修望远镜所需的大量备件。
+  features:
+  - 门廊的猫
+  - 工作室
+  - 守卫
+  - 温室入口
+  chase:
+  - id: glasshouse
+    name: 玻璃温室
+    look: 铜管望远镜斜斜指向夜空
+    place: greenhouse
+  - id: greenhouse_door
+    name: 温室入口
+    look: 温室连在老宅后面
+    place: hart_house
+  - id: workshop
+    name: 工作室
+    look: 桌上架上堆满了东西
+    place: hart_house
+    obstacle:
+      kind: hazard
+      what: 堆满的杂物
+      skill: 敏捷
+      methods:
+      - id: weave
+        label: 绕开杂物
+        skill: 敏捷
+  - id: porch
+    name: 门廊
+    look: 几只猫在门廊上打盹
+    place: hart_house
+    obstacle:
+      kind: hazard
+      what: 脚下的猫
+      skill: 敏捷
+      methods:
+      - id: step
+        label: 跨过去
+        skill: 敏捷
+      - id: leap
+        label: 跳下门廊
+        skill: 跳跃
+  - id: front
+    name: 老宅门前
+    look: 镇西一栋漂亮的老宅
+    place: hart_house
+  - id: west_road
+    name: 镇西的路
+    look: 路灯一盏接一盏
+  - id: town_street
+    name: 斯托威尔大街
+    look: 高高的电话线杆一路排开
+    place: main_street
+    exit: true
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: greenhouse
+  name: 温室天文台
+  within: hart_house
+  art: greenhouse
+  weather:
+  - dust
+  aliases:
+  - 温室
+  - 天文台
+  - 望远镜
+  read_aloud: 玻璃温室里立着一架铜管望远镜，镜筒斜斜指向夜空中昴星团附近。不管外面天气如何，那块天空总是晴的。
+  keeper: 望远镜要先由教授校准；从接目镜看约 1 分钟即有感觉，异象异声，如被催眠，抓住不放，最后受福或崩溃各半。毁掉它（或让教授一夜无法操作）即设置 telescope_destroyed。
+  features:
+  - 望远镜
+  - 接目镜
+  - 校准装置
+  outdoors: false
+  ground: building
+  views:
+  - key: greenhouse_scope
+    label: 温室里的望远镜
+    features:
+    - 望远镜
+    prompt: 玻璃温室中央架着一具铜管望远镜，镜筒斜斜指向夜空，木座上散着几块擦镜布和一只小木箱；玻璃顶棚外，那块天密密麻麻全是星。
+  looks:
+  - when: knows:players:clue:c_greenhouse_scope
+    change: 镜旁一本摊开的记录本，写满一行行人名，每个名字后面标着两种不同的记号。
+    'on': greenhouse_scope
+- id: ferguson_kitchen
+  name: 弗格森家厨房
+  read_aloud: 厨房里暖烘烘的，烤箱开着，案板上摆着面粉和蛋糕模子，炉子上的咖啡壶冒着热气。
+  within: ferguson_house
+  keeper: 格兰达平时在这里烤蛋糕；她会应门，把客人让进屋，端来蛋糕和咖啡。
+  features:
+  - 烤箱
+  - 蛋糕
+  - 咖啡壶
+  art: ferguson_kitchen
+  outdoors: false
+  ground: building
+- id: ferguson_basement
+  name: 弗格森家地下室
+  read_aloud: 楼梯通向一间昏暗的地下室，一股药水和血腥混在一起的气味扑面而来。
+  within: ferguson_house
+  keeper: 唐纳德被打了镇静剂关在这里，是双胞胎的解剖对象；镇静剂麻痹了他的痛觉，在街上不大听得见惨叫。双胞胎很快会需要更多标本，拘禁的调查员也可能被关到这里。之后可能起火，整座房子烧毁。
+  features:
+  - 解剖台
+  - 解剖刀和骨锯
+  art: ferguson_basement
+  outdoors: false
+  ground: building
+  views:
+  - key: basement_table
+    label: 地下室里的解剖台
+    features:
+    - 解剖台
+    prompt: 昏暗的地下室，一张带皮束带的木台，旁边白托盘里摆着解剖刀和骨锯，地面湿漉漉的，墙上一盏灯泡发黄。
+- id: steakhouse_kitchen
+  name: 牛排馆后厨
+  read_aloud: 后厨里油烟呛人，几个厨工低头忙活，没人说话。水槽边一个胖大的男人围裙湿透，一遍遍洗着同一摞盘子。
+  within: steakhouse
+  keeper: 崩溃者奴隶在这里当厨师、洗碗工（阿诺德烹制青豆和秘酱，原店主伦纳德反复洗那点盘子）。除点单外的问题都会让店员非常紧张，谁被菲利克斯怀疑乱说话就会被暗中痛殴；奴隶们知道走漏教授和望远镜的事，亲朋就会遭报复。
+  features:
+  - 灶台
+  - 水槽
+  - 肉案
+  art: steakhouse_kitchen
+  outdoors: false
+  ground: building
+- id: steakhouse_alley
+  name: 牛排馆后巷
+  read_aloud: 后门外是一条窄巷，墙根堆着垃圾桶，地上汪着油水。
+  within: steakhouse
+  keeper: 阿诺德会从后门运垃圾出来，这里是避开菲利克斯和他说话的地方，但他担心妻子安全，不太愿意交谈。
+  features:
+  - 垃圾桶
+  - 后门
+  art: steakhouse_alley
+  outdoors: true
+  ground: street
+- id: police_cell_corridor
+  name: 牢房过道
+  read_aloud: 值班室后面是一条窄过道，一侧排着四扇铁栅栏门，灯泡昏黄。
+  within: police_station
+  keeper: |-
+    通往四间牢房。
+    （AutoKeeper 补充：原文只说“只有四间牢房”，补一条过道连通四间牢房。）
+  features:
+  - 铁栅栏门
+  - 钥匙挂钩
+  art: police_cell_corridor
+  outdoors: false
+  ground: building
+- id: police_cell_1
+  name: 一号牢房
+  read_aloud: 一间窄小的牢房，一张铁床，一只便桶，墙上刻满划痕。
+  within: police_station
+  keeper: 被俘调查员可能被关在这里。
+  features:
+  - 铁床
+  - 便桶
+  art: police_cell
+  outdoors: false
+  ground: building
+- id: police_cell_2
+  name: 二号牢房
+  read_aloud: 一间窄小的牢房，一张铁床，一只便桶。
+  within: police_station
+  keeper: 被俘调查员可能被关在这里。
+  features:
+  - 铁床
+  - 便桶
+  art: police_cell
+  outdoors: false
+  ground: building
+- id: police_cell_3
+  name: 三号牢房
+  read_aloud: 一间窄小的牢房，一张铁床，一只便桶。
+  within: police_station
+  keeper: 被俘调查员可能被关在这里。
+  features:
+  - 铁床
+  - 便桶
+  art: police_cell
+  outdoors: false
+  ground: building
+- id: police_cell_4
+  name: 四号牢房
+  read_aloud: 一间窄小的牢房，一张铁床，一只便桶。
+  within: police_station
+  keeper: 被俘调查员可能被关在这里。
+  features:
+  - 铁床
+  - 便桶
+  art: police_cell
+  outdoors: false
+  ground: building
+- id: hart_workshop
+  name: 教授的工作室
+  read_aloud: 一间宽敞的工作室，工作台和架子上堆满了东西，空气里有金属屑和油的味道。
+  within: hart_house
+  keeper: 教授修造望远镜所需的大量备件和设备都在这里；望远镜被毁后，教授只要能拿到备件、用上这里的设备，一天内就能造出新的。
+  features:
+  - 工作台
+  - 备件架
+  - 工具
+  art: hart_workshop
+  outdoors: false
+  ground: building
+  views:
+  - key: workshop_parts
+    label: 工作间的备件架
+    features:
+    - 备件架
+    - 工作台
+    prompt: 靠墙的架子上码着一排排透镜毛坯和铜镜筒，工作台上摊着磨镜工具、卡尺和一层金属屑，空气里有油味。
+- id: hart_kitchen
+  name: 哈特宅厨房
+  read_aloud: 厨房里几个人默默干活，洗菜、烧水、给猫碗添食，谁也不抬头。
+  within: hart_house
+  keeper: 伺候教授与助手们饮食起居的崩溃者奴隶在这里干活。
+  features:
+  - 灶台
+  - 猫食碗
+  art: hart_kitchen
+  outdoors: false
+  ground: building
+- id: hart_bedrooms
+  name: 二楼卧室
+  read_aloud: 楼上一条走廊连着几间卧室，床铺凌乱，桌上摊着写满算式的纸。
+  within: hart_house
+  keeper: |-
+    教授和同住的有福者研究助手们在这里起居。
+    （AutoKeeper 补充：原文只说教授与若干有福者研究助手同住老宅，补上二楼卧室。）
+  features:
+  - 床铺
+  - 书桌
+  art: hart_bedrooms
+  outdoors: false
+  ground: building
+passages:
+- id: meeting_house__main_street
+  a: meeting_house
+  b: main_street
+  kind: road
+  minutes: 10
+- id: main_street__ferguson_house
+  a: main_street
+  b: ferguson_house
+  kind: road
+  minutes: 10
+- id: main_street__mcdermott_house
+  a: main_street
+  b: mcdermott_house
+  kind: road
+  minutes: 10
+- id: main_street__church
+  a: main_street
+  b: church
+  kind: road
+  minutes: 10
+- id: main_street__lowry_house
+  a: main_street
+  b: lowry_house
+  kind: road
+  minutes: 10
+- id: main_street__steakhouse
+  a: main_street
+  b: steakhouse
+  kind: road
+  minutes: 10
+- id: main_street__bank
+  a: main_street
+  b: bank
+  kind: road
+  minutes: 10
+- id: main_street__police_station
+  a: main_street
+  b: police_station
+  kind: road
+  minutes: 10
+- id: main_street__mother_bakers
+  a: main_street
+  b: mother_bakers
+  kind: road
+  minutes: 10
+- id: main_street__gregson_store
+  a: main_street
+  b: gregson_store
+  kind: road
+  minutes: 10
+- id: main_street__park_mine
+  a: main_street
+  b: park_mine
+  kind: road
+  minutes: 10
+- id: main_street__hospital
+  a: main_street
+  b: hospital
+  kind: road
+  minutes: 10
+- id: main_street__jensen_farm
+  a: main_street
+  b: jensen_farm
+  kind: road
+  minutes: 20
+- id: main_street__hart_house
+  a: main_street
+  b: hart_house
+  kind: road
+  minutes: 15
+- id: hart_house__greenhouse
+  a: hart_house
+  b: greenhouse
+  kind: door
+  minutes: 0
+- id: ferguson_house__ferguson_kitchen
+  a: ferguson_house
+  b: ferguson_kitchen
+  kind: opening
+  minutes: 0
+  perception: 敞开的门洞，客厅和厨房说话互相听得见，烤蛋糕的香味飘满屋。
+- id: ferguson_house__ferguson_basement
+  a: ferguson_house
+  b: ferguson_basement
+  kind: stairs
+  minutes: 0
+  perception: 地下室门关着时，凑近门才听得见下面含混的呻吟；屋外和街上几乎听不见。
+- id: steakhouse__steakhouse_kitchen
+  a: steakhouse
+  b: steakhouse_kitchen
+  kind: door
+  minutes: 0
+  perception: 后厨的弹簧门常被推开，餐厅里能听见锅铲声；压低嗓门的话隔门听不清。
+- id: steakhouse_kitchen__steakhouse_alley
+  a: steakhouse_kitchen
+  b: steakhouse_alley
+  kind: door
+  minutes: 0
+  perception: 后门虚掩，巷子里的人能听见后厨的动静，后厨里的人看不见巷子。
+- id: police_station__police_cell_corridor
+  a: police_station
+  b: police_cell_corridor
+  kind: door
+  minutes: 0
+  perception: 过道门开着时，值班室能听见牢房里的喊叫和撞门声。
+- id: police_cell_corridor__police_cell_1
+  a: police_cell_corridor
+  b: police_cell_1
+  kind: door
+  minutes: 0
+  gate:
+    locked: true
+  perception: 铁栅栏门，过道和各间牢房互相看得见、听得见。
+- id: police_cell_corridor__police_cell_2
+  a: police_cell_corridor
+  b: police_cell_2
+  kind: door
+  minutes: 0
+  gate:
+    locked: true
+  perception: 铁栅栏门，过道和各间牢房互相看得见、听得见。
+- id: police_cell_corridor__police_cell_3
+  a: police_cell_corridor
+  b: police_cell_3
+  kind: door
+  minutes: 0
+  gate:
+    locked: true
+  perception: 铁栅栏门，过道和各间牢房互相看得见、听得见。
+- id: police_cell_corridor__police_cell_4
+  a: police_cell_corridor
+  b: police_cell_4
+  kind: door
+  minutes: 0
+  gate:
+    locked: true
+  perception: 铁栅栏门，过道和各间牢房互相看得见、听得见。
+- id: hart_house__hart_workshop
+  a: hart_house
+  b: hart_workshop
+  kind: door
+  minutes: 0
+  perception: 关着门也能听见工作室里敲打的声音。
+- id: hart_house__hart_kitchen
+  a: hart_house
+  b: hart_kitchen
+  kind: door
+  minutes: 0
+  perception: 普通木门，门厅里说话厨房听得见。
+- id: hart_house__hart_bedrooms
+  a: hart_house
+  b: hart_bedrooms
+  kind: stairs
+  minutes: 0
+  perception: 楼梯口能喊话，楼上能听见门厅的动静。
+plans:
+- building: ferguson_house
+  floors:
+  - name: 一层
+    rooms:
+    - place: ferguson_house
+      label: 客厅
+      x: 0
+      y: 4
+      w: 22
+      h: 6
+    - place: ferguson_kitchen
+      x: 0
+      y: 0
+      w: 16
+      h: 5
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: ferguson_basement
+      x: 0
+      y: 0
+      w: 18
+      h: 5
+  basis: 原文写明厨房（格兰达烤蛋糕）和地下室（关着唐纳德、双胞胎做解剖）；客厅作进门处。地下室门开在客厅一侧、厨房与客厅相通为 AutoKeeper 补充：原文未写门的位置。
+- building: steakhouse
+  floors:
+  - name: 一层
+    rooms:
+    - place: steakhouse
+      label: 餐厅
+      x: 0
+      y: 4
+      w: 22
+      h: 6
+    - place: steakhouse_kitchen
+      x: 0
+      y: 0
+      w: 16
+      h: 5
+    - place: steakhouse_alley
+      x: 15
+      y: 0
+      w: 14
+      h: 5
+  basis: 原文写明店里的厨师、洗碗工（后厨）和后门（阿诺德运垃圾）；餐厅作进门处。
+- building: police_station
+  floors:
+  - name: 一层
+    rooms:
+    - place: police_station
+      label: 值班室
+      x: 11
+      y: 0
+      w: 16
+      h: 5
+    - place: police_cell_corridor
+      x: 11
+      y: 4
+      w: 22
+      h: 6
+    - place: police_cell_1
+      x: 26
+      y: 0
+      w: 12
+      h: 5
+    - place: police_cell_2
+      x: 32
+      y: 4
+      w: 12
+      h: 5
+    - place: police_cell_3
+      x: 0
+      y: 4
+      w: 12
+      h: 5
+    - place: police_cell_4
+      x: 11
+      y: 9
+      w: 12
+      h: 5
+  basis: 原文写明警察局只有四间牢房，可监禁被俘调查员；值班室作进门处，牢房过道为 AutoKeeper 补充。
+- building: hart_house
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: hart_bedrooms
+      x: 0
+      y: 0
+      w: 16
+      h: 5
+  - name: 一层
+    rooms:
+    - place: hart_house
+      label: 门厅
+      x: 0
+      y: 5
+      w: 22
+      h: 6
+    - place: hart_workshop
+      x: 0
+      y: 1
+      w: 16
+      h: 5
+    - place: hart_kitchen
+      x: 0
+      y: 10
+      w: 16
+      h: 5
+    - place: greenhouse
+      x: 15
+      y: 0
+      w: 22
+      h: 6
+  basis: 原文写明老宅里有教授的工作室（备件与设备），望远镜在房后的温室里；教授与有福者助手同住，崩溃者奴隶伺候起居。厨房和二楼卧室为 AutoKeeper 补充。

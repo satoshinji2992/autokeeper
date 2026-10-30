@@ -1,0 +1,257 @@
+conclusions:
+- id: k_broken
+  text: 镇上有一批人“崩溃”了：痴呆、驯顺或狂暴，被人当奴隶使唤
+- id: k_blessed
+  text: 另一批人“有福”了：本领突飞猛进、一心钻研，并在暗中掌控小镇
+- id: k_cover_up
+  text: 警察和詹森匪帮在替有福者掩盖真相、处理麻烦
+- id: k_church
+  text: 菲茨杰拉德牧师在会众中挑人，半夜送走
+- id: k_jensen
+  text: 詹森农场关着崩溃者，格拉迪斯也在那里
+- id: k_hart_house
+  text: 一切怪事都指向镇西的哈特教授家
+- id: k_telescope
+  text: 变化来自哈特教授的望远镜：看过的人或受福或崩溃
+- id: k_sky
+  text: 望远镜那头，昴星团附近有个叫“大智慧”的存在
+- id: k_cut
+  text: 毁掉望远镜（教授没有备件就修不好）就能切断与大智慧的联系
+events:
+- id: e_mccurdy_attack
+  title: 麦克迪突袭
+  when: D1 19:30
+  move_to: meeting_house
+  read_aloud: 厨房那边的窗户“咔”地响了一声。一个衣衫褴褛、浑身污秽的人影翻了进来，两眼空洞，喉咙里发出野兽一样的低吼。
+  text: 逃脱的崩溃者麦克迪绕屋找到没关的门窗突入，先扑向落单的调查员（煮咖啡、上厕所的人）。事先聆听成功的调查员不会措手不及。属性同典型崩溃成人，疯狂抓咬，想抓走一人。守秘人应避免开幕死人。
+  sanity: 0/1D3
+  fight:
+  - mccurdy
+  surprise: party
+  stakes:
+  - when: dead:mccurdy
+    flags:
+    - mccurdy_dead
+    note: 调查员自己打死了麦克迪：斯坦利赶到时只剩收尸
+  present:
+  - mccurdy
+- id: e_stanley_shoots
+  title: 三声枪响
+  after_rounds:
+    event: e_mccurdy_attack
+    completed: 3
+  where: meeting_house
+  effects:
+  - kind: die
+    target: mccurdy
+    why: 原文明定副警长从背后连开三枪，当场击毙（必杀，无需掷骰）
+  performer: stanley
+  performance: 不示警，从背后连开三枪打死麦克迪；然后皱着眉头想很久，再安抚调查员说“没事了，疯了的流浪汉，很快就有人来收尸”，劝大家别声张。
+  read_aloud: 门口炸开三声枪响。袭击者向前扑倒，再也没起来。副警长斯坦利·亚历山大站在门口，枪口还冒着烟。
+  sets:
+  - mccurdy_dead
+  text: 恶斗约两三轮后斯坦利赶到，背后三枪击毙麦克迪（必杀，不掷骰）。他受命维持治安良好的假象，会全力安慰害怕或起疑的调查员，承诺很快有人收尸。
+  sanity: 0/1D3
+  present:
+  - stanley
+  - mccurdy
+- id: e_jensen_arrives
+  title: 收尸的皮卡
+  when: D1 20:30
+  move_to: meeting_house
+  performer: jensen
+  performance: 跳下皮卡，打量调查员的车和东西，把尸体卷进床单扔上车斗；被质问就粗声说自己是来收尸的。
+  read_aloud: 一辆破皮卡颠簸着停在门口。下车的是镇东头养猪的弗雷迪·詹森，他看都不看你们，拎起一张床单就往尸体走去。
+  text: 不到一小时詹森到场，车显然不属于法医中心或医院，他也不像验尸官。无人干预就把尸体带回农场，玩够后喂猪。此后调查员自由行动：可尾随詹森、去警局跟进、或调查各自背景线索。
+  present:
+  - jensen
+- id: e_special_mass
+  title: 半夜的特别弥撒
+  when: D2 00:00
+  text: 每晚半夜，被牧师选中的会众到美以美会堂参加特别弥撒，随后被送去教授家看望远镜。只要每晚至少有一人看，联系就不会断。
+- id: e_telescope_down
+  title: 联系将断
+  when: flag:telescope_destroyed
+  text: 望远镜被毁或教授一夜无法操作。调查员并不知道后果；知情的有福者先陷入混乱或狂怒，再试图修复（需工作室备件）。若调查员打算黎明前离镇，守秘人应全力阻止；仍逃走则不强拦，让玩家改用转用角色。一整夜无人看望远镜、也未以其他方式恢复联系时，黎明设置
+    chaos_dawn。
+- id: e_chaos_dawn
+  title: 混沌黎明
+  when: flag:chaos_dawn
+  read_aloud: 太阳升起的那一刻，镇上同时响起了惨叫。街上有人一头栽倒，像睡着了一样；另一些人发出不像人声的嚎叫，抄起手边的东西冲向邻居的家门。电话里只剩下忙音。
+  text: 有福者发疯，失去克苏鲁神话技能和人性，凡无福者皆杀；一开始就切断电话线。崩溃者倒地昏睡，大量在睡梦中遇害，没被杀的几小时后头痛醒来、恢复正常。先确定各调查员位置；分散且无约定集结点的，用纸条分别汇报行动。之后
+    24 小时为生存恐怖：躲藏、逃走或杀出重围（规则见插件）。熬过一天后，有福者在第二天早晨作最后的疯狂挣扎，然后爆裂成一团团冒热气的血、骨、肉。
+  sanity: 1/1D6
+- id: e_donald_forages
+  title: 夜里的响动
+  when: flag:donald_loose
+  read_aloud: 夜深了，外面传来翻动垃圾桶的声响。一个只穿着破睡衣的男人蹲在路边，抓起什么就往嘴里塞。他转过身来，胸口和胳膊上胡乱缠着渗血的绷带，有几处根本没有包——那样的伤，不该长在活人身上。他还在嚼。
+  text: 【催促卫斯理·弗罗斯特】唐纳德·弗格森挣脱了地下室，在街上觅食，摸到了调查员所在之处附近；调查员在屋里时，这是窗外的声响。从伤情看他不可能还活着，但他就是活着。他是被打了镇静剂的武疯子，饿、伤重、说不出整话，动不动手由守秘人临场裁定。与格兰达有牵连的调查员（tie_glenda_kin）认得这是姐夫。双胞胎随后会上街找他（twins_chase_donald）。理智检定是 AutoKeeper 补充。
+  sanity: 0/1D3
+  present:
+  - donald
+- id: e_armed_eviction
+  title: 远处的枪声
+  when: flag:armed_eviction
+  read_aloud: 几条街外接连响起枪声，夹着女人的尖叫和玻璃碎裂的声音。过了一会儿，有人从那边跑过来，边跑边喊：银行的人带着枪来收房子了。
+  text: 【催促弗雷德·申克】银行封条贴出 12 小时后，武装的执行员强行驱逐住户；双方都可能有枪，枪战可能波及路人。与银行有牵连的调查员（tie_bank_deposit；预设调查员申克是第一批被赶出家门的）若在家，被收的就是他的房子。银行职员不愿和欠钱的人接触，逼问时可能吓瘫、逃跑或大叫逼债不怪他们。
+- id: e_flyer_girl
+  title: 路口的传单
+  when: flag:flyers_out
+  read_aloud: 一个年轻姑娘快步迎上来，把一张油墨未干的传单塞进你们手里，笑得十分热切：“来听菲茨杰拉德牧师布道吧！听道的人有福，日子会更好的。”
+  text: 【催促埃洛娃·伯奇】牧师派会众里的姑娘在大街路口散发传单。传单即线索 c_flyer（手稿 h_flyer），调查员细看时照线索给出。她竭力劝调查员参加，除了听道的人有福，别的说不出来。
+- id: e_glenda_call
+  title: 一通电话
+  when: flag:glenda_alone
+  read_aloud: 附近的电话响了，有人叫你们去接。听筒里是格兰达·弗格森的声音，又轻又急，像是用手捂着话筒：“……是你吗？救救我们……孩子们她们……”话没说完，线路就断了。
+  text: 【催促卫斯理·弗罗斯特】双胞胎傍晚去了牛排馆（twins_dinner_out），格兰达独自在家，暂时清醒，打电话向与她有牵连的调查员（tie_glenda_kin；预设调查员卫斯理）求救。调查员赶去时她已又糊涂起来，只会请人吃蛋糕；她不会说出教授或望远镜的事（人家不让她说），弗格森家的线索照常按检定取得。
+- id: e_wandering_congregant
+  title: 又一个早晨
+  when: flag:town_stage_2
+  read_aloud: 天亮以后，街上多了几个走路发飘的人。其中一个你们认得，是美以美会堂的老会众；他站在路中间慢慢转着圈，右眼通红，瞳孔散得看不见边。警车比往常多跑了两趟，开得很慢。
+  text: 【小镇的时钟·第二步（AutoKeeper 补充）】第二夜又一批人看了望远镜（hart_second_night）。【催促埃洛娃·伯奇】伯奇知道这位会众几天前和牧师单独谈过话，如今他成了痴呆，在镇上游荡，右眼血红、瞳孔完全散大，说不出整话。此后警察加紧巡逻，詹森匪帮入夜在镇上抓人（jensen_roundup），牛排馆被辞退的店员商量示威（伏笔 steakhouse_back_door）。
+- id: e_gladys_flees
+  title: 光脚的女人
+  when: flag:gladys_fled
+  read_aloud: 一个女人跌跌撞撞地扑到你们跟前，光着脚，裙子扯破了，头发里粘着草屑。她抓住离她最近的人的胳膊，眼神发直：“阿诺德……你们看见阿诺德了吗？我得找到他……”远处传来汽车喇叭声，她一下子缩起了身子。
+  text: 【催促贝蒂·康西丁】格拉迪斯·麦克德莫特逃出詹森农场，惊魂未定，东躲西藏，到处找丈夫阿诺德（他在牛排馆当厨子）。她崩溃后痴傻，只断断续续地问阿诺德在哪儿。詹森正带喽啰开车满镇找她（jensen_hunt_gladys）。守秘人把她登记到调查员所在之处；收留、藏起、带她去找阿诺德或交给警察，都由调查员决定。
+  present:
+  - gladys
+- id: e_organ_concert
+  title: 满城的乐声
+  when: flag:organ_concert
+  read_aloud: 入夜，镇上的收音机里只剩下一种声音：一支说不出调子的曲子，像管风琴，又夹着叮叮当当的铁器声。拿起电话听筒，里面也是它。美以美会堂那边灯火通明，琴声隔着几条街都听得见。
+  text: 【催促伯特·劳里】教堂音乐会，雷蒙德·劳里弹管风琴。听上几分钟，有福者全身通泰，崩溃者眼前全是奇形异色，好像吸食了迷幻剂；正常人只觉嘈杂刺耳。有福者控制了电话交换台，在电话里全天播放这支音乐，有福者要打电话时才暂停；全镇的收音机都只收得到它。从这一晚起一直如此，直到联系断开（起点是 AutoKeeper 补充）。
+- id: e_inspectors_gone
+  title: 不再敲门的人
+  when: flag:town_stage_3
+  read_aloud: 镇上那两位穿深色套装、自称卫生部门的外地人，这几天挨家挨户采血、量血压；今天他们没有再来敲门。有人说昨夜看见他们跟着几个会众走了。他们的车还停在原处，车窗上落了一层霜。
+  text: 【小镇的时钟·第三步（AutoKeeper 补充）】第三夜看望远镜的人更多，政府巡视员和教授谈过以后也看了（hart_third_night）；受福还是崩溃各一半，由守秘人定。镇外来的人也被吞了进去。巡视员若已被调查员带离或保护，这一夜只是更多的会众，这件事改为街上走路发飘的人又多了一些。此后斯坦利不再找借口抓人（stanley_sweep），有福者入夜在牛排馆聚餐（bingham_steak_dinner）。
+- id: e_police_sweep
+  title: 警车停在街边
+  when: flag:police_sweep
+  read_aloud: 一辆警车在街边停下，两个警察把一个还穿着拖鞋的男人从家里架出来，塞进后座。他妻子追出来哭喊，说他什么也没做。菲茨杰拉德牧师站在车旁，温和地劝她回屋：“主自有安排，用不着审判。”
+  text: 【有福者出击】【催促埃洛娃·伯奇】斯坦利不再找借口，带着卡瓦诺和手下挨家盘查，把不满有福者统治的镇民直接抓进警局后面的四间牢房；牧师帮警察制造冤案，赞成不审判就枪毙囚徒（fitz_defend_frame）。被俘者关在警局、交给双胞胎做实验、送给詹森帮或送去看望远镜。一直在打听、公开不满的调查员也可能被盘查到，按规则清单“搜捕与俘虏处置”裁定；不强制战斗。
+  present:
+  - stanley
+  - cavanaugh
+  - fitzgerald
+- id: e_ferguson_fire
+  title: 镇上起火了
+  when: flag:ferguson_fire
+  read_aloud: 镇子一角腾起浓烟，消防钟敲个不停。有人跑过时喊：弗格森家烧起来了，整座房子都塌了。过了一阵，一个满脸烟灰的小女孩找到了你们，怀里抱着一只小皮箱，平静地说：“房子烧没了，我的姐妹也没了。我可以跟你们住吗？”
+  text: 【催促卫斯理·弗罗斯特】弗格森家地下室起火，整座房子夷为平地。双胞胎一个被烧死，另一个找到与格兰达有牵连的调查员（tie_glenda_kin），要求抚养；她很快就会再开始用解剖刀和骨锯愉快地玩耍。格兰达和唐纳德的下落原文没有写，由守秘人定；弗格森家只剩废墟，原来在那里的东西还剩什么由守秘人裁定。守秘人把幸存的双胞胎登记到调查员所在之处。
+  present:
+  - twins
+- id: e_leonard_cleaver
+  title: 牛排馆的尖叫
+  when: flag:blessed_dinner
+  read_aloud: 天黑后，大街那头一阵大乱。几个衣着体面的食客嚎叫着从埃尔默牛排馆里蹿出来，餐巾还掖在领口；后面紧追着的是洗碗工伦纳德·埃尔默，一手提着斩肉刀，一手拎着领班菲利克斯·塔拉马伊的人头。
+  text: 【催促安娜贝尔·希恩】有福者晚上在牛排馆聚餐（bingham_steak_dinner），伦纳德终于报了仇：菲利克斯死了（守秘人在世界记录里登记），伦纳德提着斩肉刀追赶有福者食客。调查员不在大街附近时，这是传到他们耳中的消息；要不要看个究竟、躲开、拦他或帮他，都由调查员决定。看见人头的理智检定由守秘人按规则书临场要求（0/1D4）。
+- id: e_last_night
+  title: 第五天的早晨
+  when: flag:town_lost
+  ending: e_town_lost
+  text: 【小镇的时钟·结局（AutoKeeper 补充）】调查员没有切断联系，第四夜照旧有人看了望远镜（hart_fourth_night），小镇落入有福者手中，进入结局 e_town_lost。
+endings:
+- id: e_cut_off
+  title: 黎明之后
+  condition: flag:survived_day
+  text: 第二天早晨，有福者们作了最后一次疯狂的挣扎，随后一个接一个爆裂成冒着热气的血、骨、肉。昏睡的崩溃者在头痛中醒来，又变回了自己。斯托威尔满目疮痍，但与大智慧的联系断了。
+  reward: 切断与大智慧的联系：理智 +1D6
+- id: e_abandoned
+  title: 抛下小镇
+  condition: flag:abandoned_town
+  text: 你们开出镇界，后视镜里的斯托威尔依旧灯火如常。那架望远镜还在镇西的温室里，每晚都有新人被领去看它。
+  reward: 抛弃镇民逃离：理智 -1D6
+- id: e_viewed
+  title: 看见大智慧
+  condition: flag:viewed_telescope
+  text: 你把眼睛贴上接目镜。起初只是错觉般的光斑，一分钟后，信号接上了——一个庞大、冰冷、非人的意识碾过你的心智。你抓着镜筒不放，直到再也分不清今夕何年。
+  reward: 看望远镜的调查员自动崩溃，损失 1D8 理智，退出本次调查（守秘人可选内讧规则见 keeper_notes）
+- id: e_town_lost
+  title: 一切如常
+  condition: flag:town_lost
+  text: 第五天早上，斯托威尔照常醒来。面包店的烟囱冒着烟，银行准时开门，加油站的伙计站在油泵边朝路过的汽车挥手；从镇外看，这里还是那个和谐的小镇。街坊们照旧互相问候，脸上挂着一模一样的微笑；扫街、搬货、端盘子的人两眼发直，一声不吭。你们认得的面孔，一个接一个站进了这两种人里。副警长斯坦利·亚历山大的警车停在门口，他皱着眉想了很久，才客客气气地开口：教授请你们今晚去看星星。
+# 大场景：整屏展示一张大图，每局每个最多一次（engine/showcase.py）。图在本机生成，放在 saves/showcases/，不进仓库。
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 斯托威尔的傍晚
+    prompt: 1920 年代美国小镇的傍晚，一间带门廊的木板小屋，客厅里亮着暖黄的灯，几个老同学围着茶几坐着，咖啡壶冒着热气，窗外的街灯一盏盏亮起，安静得过了头
+    base: meeting_house
+  - id: sc_attack
+    kind: 突发
+    when: event:e_mccurdy_attack
+    title: 窗户被撞开了
+    prompt: 厨房的窗户被撞开，一个衣衫褴褛、浑身污秽的人影翻进屋里，两眼空洞，张着嘴像野兽一样低吼，玻璃碎片四处飞溅
+    base: meeting_house
+  - id: sc_shots
+    kind: 危机
+    when: event:e_stanley_shoots
+    title: 三声枪响
+    prompt: 木屋门口站着一个戴警徽的副警长，枪口还冒着烟，地板上扑倒着一个衣衫褴褛的人影，门外是夜色和路灯
+    base: meeting_house
+  - id: sc_pickup
+    kind: 突发
+    when: event:e_jensen_arrives
+    title: 收尸的皮卡
+    prompt: 夜里一辆破旧的皮卡颠簸着停在木屋门口，车灯刺眼，一个粗壮的养猪人拎着一张床单走向地上的尸体，看都不看旁人
+    base: meeting_house
+  - id: sc_church
+    kind: 重要场景
+    when: visit:church
+    title: 美以美会堂
+    prompt: 白色尖顶的木结构小教堂里，长椅排得整整齐齐，管风琴立在讲坛一侧，信众们坐得笔直、脸上挂着一模一样的微笑，光线亮得有些刺眼
+    base: church
+  - id: sc_mine
+    kind: 重要场景
+    when: visit:park_mine
+    title: 公园和金矿
+    prompt: 小镇公园的秋千和旋转木马旁边，裸石山脚下新搭了一排棚子，一群面无表情的人在灯下日夜挖掘，锤凿声不停
+    base: park_mine
+  - id: sc_telescope
+    kind: 最终boss
+    when: visit:greenhouse
+    title: 温室天文台
+    prompt: 夜里的玻璃温室，一架铜管望远镜斜斜指向夜空中昴星团的方向，头顶那片天出奇地晴，星光冷得发蓝，四周的植物在暗处一动不动
+    base: hart_house
+  - id: sc_dawn
+    kind: 危机
+    when: event:e_chaos_dawn
+    title: 混沌黎明
+    prompt: 日出时分的小镇大街，有人一头栽倒在地，像睡着了一样；另一些人发出不像人声的嚎叫，抄起手边的东西冲向邻居的家门
+    base: main_street
+  - id: sc_end_cut
+    kind: 结局
+    when: ending:e_cut_off
+    title: 黎明之后
+    prompt: 满目疮痍的小镇清晨，街上一片狼藉，窗户破碎，汽车翻倒，晨雾里有人扶着头慢慢站起来
+    base: main_street
+  - id: sc_end_left
+    kind: 结局
+    when: ending:e_abandoned
+    title: 抛下小镇
+    prompt: 夜里一辆老式汽车的后视镜，镜子里是灯火如常的小镇渐渐远去，镇西一栋房子后面的玻璃温室还亮着灯
+  - id: sc_end_viewed
+    kind: 结局
+    when: ending:e_viewed
+    title: 看见大智慧
+    prompt: 望远镜的接目镜里，昴星团附近的星空裂开一道深渊，一个庞大、冰冷、非人的意识的轮廓压过整片星空
+  - id: sc_end_lost
+    kind: 结局
+    when: ending:e_town_lost
+    title: 一切如常
+    prompt: 清晨的美国小镇大街，面包店烟囱冒着烟，行人彼此点头微笑，笑容一模一样；路边扫街和搬货的人两眼发直；一辆老式警车停在木板小屋门口
+    base: main_street
+prelude:
+- art: main_street
+  text: 一九二〇年代，美国小镇斯托威尔。大街两旁是面包店、杂货店和药店，高高的电话线杆一路排开。
+- art: gregson_store
+  text: 格雷格森商店的货架堆得满满的，柜台边有汽水机，孩子们常在这儿买汽水。
+- art: steakhouse
+  text: 埃尔默牛排馆是镇上最好的饭店。今天菜不如从前，服务员们低着头，不敢多说一句。
+- art: church
+  text: 美以美会堂门口写着：每日两次布道，欢迎所有人。这几天，熟人之间却越来越沉默。
+- art: meeting_house
+  text: 今晚，几个从小一起长大的同窗聚在木板小屋里，想弄清楚镇上到底出了什么事。

@@ -1,0 +1,936 @@
+locations:
+- id: huochezhan
+  public: true
+  name: 阿诺兹堡火车站
+  art: huochezhan
+  read_aloud: |
+    小站的木站台被行李车磨出了两道白痕，蒸汽从车厢底下散开。站务员把牛奶罐往檐下挪，
+    站外街口的小食铺刚开张，窗上蒙着热气。出站的路通往阿诺兹堡镇中心。
+  keeper: |
+    AutoKeeper 补充的开局地点，调查员刚抵达，尚未拜访托马斯。站务员知道镇上的路，不知道偷书案和失踪事件。
+    问路无需检定：穿过镇中心，沿艾尔斯伯里大街一直走，218 号在小镇尽头的公墓旁；步行约四十分钟。
+    玩家愿意买早饭、寄存行李、找车或聊天就自然接住；小食铺是站外的日常营生，没有案情线索。
+  features:
+  - 站务员
+  - 时刻表
+  - 行李寄存处
+  - 站外小食铺
+  - 通往镇中心的路
+  scene_root: true
+  outdoors: true
+  ground: street
+  looks:
+  - when: hour:7-9
+    change: 站台边停着一列刚到的早班车，车头还冒着白汽，行李车横在站台中间。
+- id: jinboer_jia
+  name: 金博尔家
+  aliases:
+  - 托马斯家
+  - 218 号
+  art: jinboer_jia
+  read_aloud: |
+    艾尔斯伯里大街走到头，218 号是一栋 L 形的旧木屋，红褐色的屋顶，门廊的油漆起了皮。
+    屋后隔着一道矮墙就是公墓，老树和灌木把墓碑遮得影影绰绰。透过门上的玻璃，看得见一条收拾得很干净的走廊，
+    尽头有扇门关着。
+  keeper: |
+    托马斯已经搬进了除书房之外的所有房间，东西摆满了客厅和卧室，唯独走廊尽头的书房关着。
+    他替调查员留的空卧室窗户正对着屋后的公墓。调查员的落脚处就在这里。
+    第一次到访时从敲门和认人演起：托马斯先让客人歇脚、问旅途，玩家愿意再安顿行李、谈委托。
+    日常寒暄没有检定门槛，不急着把全部调查方向一次说完；跟着玩家问的事展开。
+    若调查员找到隧道却没下去、当晚又在熟睡（没有设岗），道格拉斯会来到调查员的房间唤醒他，想和他交谈。
+  features:
+  - 托马斯·金博尔
+  - 客厅
+  - 调查员的空卧室
+  - 屋后通往公墓的小路
+  chase:
+  - id: backyard_path
+    name: 屋后的小路
+    look: 小路从屋后通向公墓，老树的影子压在上面
+    place: jinboer_jia
+    links:
+    - back_door
+  - id: low_wall
+    name: 隔开公墓的矮墙
+    look: 一道矮墙隔开后院和墓地
+    place: jinboer_jia
+    obstacle:
+      kind: hazard
+      what: 矮墙
+      skill: 攀爬
+      harm: 1D3
+      methods:
+      - id: climb
+        label: 翻过去
+        skill: 攀爬
+      - id: vault
+        label: 撑着跳过去
+        skill: 跳跃
+  - id: shrubs
+    name: 灌木和老树之间
+    look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+    place: mudi
+    obstacle:
+      kind: hazard
+      what: 伸到路上的灌木
+      skill: 敏捷
+      methods:
+      - id: push
+        label: 拨开冲过去
+        skill: 敏捷
+      - id: duck
+        label: 矮身钻过去
+        skill: 闪避
+  - id: dirt_road
+    name: 穿过墓碑的土路
+    look: 一条土路弯弯曲曲穿过墓碑
+    place: mudi
+    links:
+    - street
+  - id: graves
+    name: 墓穴与墓碑之间
+    look: 墓穴和墓碑挨得很近，脚下高低不平
+    place: mudi
+    obstacle:
+      kind: hazard
+      what: 挨在一起的墓穴和墓碑
+      skill: 跳跃
+      harm: 1D3
+      methods:
+      - id: leap
+        label: 跳过去
+        skill: 跳跃
+      - id: weave
+        label: 绕着墓碑跑
+        skill: 敏捷
+  - id: old_trees
+    name: 古老的树下
+    look: 古老的树木把路遮得半明半暗
+    place: mudi
+  - id: deep_graves
+    name: 墓地深处
+    look: 墓碑越往里越老，灌木越来越密
+    place: mudi
+  - id: tomb_mud
+    name: 陵墓门前的泥地
+    look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+    place: lingmu
+    obstacle:
+      kind: hazard
+      what: 踩烂的泥地
+      skill: 敏捷
+      harm: 1D3
+      methods:
+      - id: run
+        label: 冲过去
+        skill: 敏捷
+      - id: wade
+        label: 硬蹚过去
+        skill: 力量
+  - id: tomb_door
+    name: 半埋的陵墓石门
+    look: 石门紧闭，门缝里塞满了泥
+    place: lingmu
+    obstacle:
+      kind: barrier
+      what: 紧闭的石门
+      skill: 力量
+      hp: 25
+      methods:
+      - id: push
+        label: 推开石门
+        skill: 力量
+        opens: true
+  - id: tunnel_mouth
+    name: 陵墓里的隧道口
+    look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+    place: lingmu
+    obstacle:
+      kind: hazard
+      what: 徒手挖出的窄洞
+      skill: 攀爬
+      harm: 1D3
+      methods:
+      - id: climb
+        label: 攀着土壁下去
+        skill: 攀爬
+      - id: drop
+        label: 跳下去
+        skill: 跳跃
+  - id: low_tunnel
+    name: 又低又窄的通道
+    look: 泥土通道又低又窄，手电只照得出前面几步
+    place: suidao
+    obstacle:
+      kind: hazard
+      what: 低矮的土顶
+      skill: 敏捷
+      methods:
+      - id: stoop
+        label: 弯腰快跑
+        skill: 敏捷
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: shufang
+  name: 道格拉斯的书房
+  within: jinboer_jia
+  art: shufang
+  read_aloud: |
+    书房里四壁都是书，从地板一直顶到天花板，大小不一、形制各异，从园艺手册到异国游记，什么都有。
+    每一本都包着书皮，书脊擦得干干净净——主人显然花了很多心思保养它们。
+    一面书架上空出了好几格，像缺了牙。窗下是一张旧书桌，窗外就是公墓的树影。
+  keeper: |
+    这里是了解失踪叔叔的关键。托马斯很乐意让调查员检查书房和叔叔的所有物。
+    书架上少了大约六本书。没有痕迹显示窃贼如何进来；检查窗户的调查员可能发现窗锁年久松动，从外侧用力就能打开。
+    搜索整个书房至少要一天，侦查成功找到日记。
+    孤注一掷成功：花了更久终于找到，或者托马斯进来问“找到叔叔的日记了吗？我知道它就在这间屋子里”，帮忙指出位置。
+    孤注一掷失败：仍然找到日记，但碰倒一摞书、摔碎了一只花瓶之类的精致物件，托马斯很不悦，警告要小心，并说会从报酬里扣 5 美元。
+  features:
+  - 书架上的空档
+  - 书房窗户
+  - 旧书桌
+  - 藏书
+  - 花瓶
+  looks:
+  - when: flag:sign_f_mud_on_sill_1
+    change: 窗台原有的浅色干土上多了几粒深色湿泥。
+  - when: knows:players:clue:c_window
+    change: 窗框上的锁扣松脱，合不严，木锁舌周围的漆面被磨得发亮。
+    'on': shufang_window
+  outdoors: false
+  ground: building
+  views:
+  - key: shufang_window
+    label: 书房里朝公墓的旧窗
+    features:
+    - 书房窗户
+    prompt: 一扇旧式木框窗，油漆起皮，窗台内侧积着一线浅色细干土；玻璃上映出屋后公墓的树影，窗下露出一角旧书桌。
+- id: jiefang
+  public: true
+  name: 艾尔斯伯里大街
+  art: jiefang
+  read_aloud: |
+    街道冷清，梧桐叶子在人行道上打着旋。离墓地最近的只有金博尔家，步行五分钟内另有几所房子，
+    窗帘都拉得严严实实。一位穿戴整齐的老妇人挎着篮子，正沿着人行道慢慢走过来。
+  keeper: |
+    邻居们所知甚少，也没见过任何可疑行迹；提起道格拉斯，有一位邻居记得他是个和蔼的人。
+    走动时会遇见老妇人莉拉·奥黛尔。她很看重外表：让调查员在外貌或信用评级中任选其一（取较高者）检定一次，
+    只有一次机会；失败的话，她不喜欢调查员的样貌，快步走开。去镇中心从这里走。
+  features:
+  - 莉拉·奥黛尔
+  - 邻居们
+  - 通往镇中心的路
+  scene_root: true
+  outdoors: true
+  ground: street
+  weather:
+  - leaves
+- id: mudi
+  name: 公墓
+  art: mudi
+  read_aloud: |
+    墓地周围植被茂盛，但打理得还不错，墓穴与墓碑之间点缀着许多高大的灌木和古老的树木，
+    这片墓地显然已经存在好多年了。一条土路弯弯曲曲穿过墓碑。公墓另一头，一个园艺工正弯腰清理杂草，
+    听见你走近，他转过身来挥了挥手。
+  keeper: |
+    守墓人梅洛迪亚斯·杰弗逊在这里干活。先要过魅惑或说服检定他才肯聊；失败可孤注一掷（换做法：
+    恭维用魅惑、讲道理用说服、咄咄逼人用恐吓、欺骗用话术），再失败则他发火、赶人、扬土或喊“警察！警察！”跑开，
+    之后与他沟通须困难成功。墓地深处是道格拉斯最喜欢的那块墓碑，再往里有几座陵墓。
+    夜里若调查员被熏昏，会在晚上醒来，道格拉斯就坐在一旁的墓碑上。
+  features:
+  - 梅洛迪亚斯·杰弗逊
+  - 杰弗逊的外套口袋
+  - 道格拉斯最喜欢的墓碑
+  - 墓碑周围的地面
+  - 陵墓群
+  chase:
+  - id: dirt_road
+    name: 穿过墓碑的土路
+    look: 一条土路弯弯曲曲穿过墓碑
+    place: mudi
+    links:
+    - graves
+    - shrubs
+  - id: street
+    name: 墓园外的大街
+    look: 艾尔斯伯里大街冷清，窗帘都拉得严严实实
+    place: jiefang
+    exit: true
+  - id: shrubs
+    name: 灌木和老树之间
+    look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+    place: mudi
+    obstacle:
+      kind: hazard
+      what: 伸到路上的灌木
+      skill: 敏捷
+      methods:
+      - id: push
+        label: 拨开冲过去
+        skill: 敏捷
+      - id: duck
+        label: 矮身钻过去
+        skill: 闪避
+  - id: low_wall
+    name: 隔开公墓的矮墙
+    look: 一道矮墙隔开后院和墓地
+    place: jinboer_jia
+    obstacle:
+      kind: hazard
+      what: 矮墙
+      skill: 攀爬
+      harm: 1D3
+      methods:
+      - id: climb
+        label: 翻过去
+        skill: 攀爬
+      - id: vault
+        label: 撑着跳过去
+        skill: 跳跃
+  - id: backyard_path
+    name: 屋后的小路
+    look: 小路从屋后通向公墓，老树的影子压在上面
+    place: jinboer_jia
+  - id: back_door
+    name: 金博尔家的后门
+    look: 小路通到金博尔家的后门，门里就是走廊
+    place: jinboer_jia
+    exit: true
+  - id: graves
+    name: 墓穴与墓碑之间
+    look: 墓穴和墓碑挨得很近，脚下高低不平
+    place: mudi
+    obstacle:
+      kind: hazard
+      what: 挨在一起的墓穴和墓碑
+      skill: 跳跃
+      harm: 1D3
+      methods:
+      - id: leap
+        label: 跳过去
+        skill: 跳跃
+      - id: weave
+        label: 绕着墓碑跑
+        skill: 敏捷
+  - id: old_trees
+    name: 古老的树下
+    look: 古老的树木把路遮得半明半暗
+    place: mudi
+  - id: deep_graves
+    name: 墓地深处
+    look: 墓碑越往里越老，灌木越来越密
+    place: mudi
+  - id: tomb_mud
+    name: 陵墓门前的泥地
+    look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+    place: lingmu
+    obstacle:
+      kind: hazard
+      what: 踩烂的泥地
+      skill: 敏捷
+      harm: 1D3
+      methods:
+      - id: run
+        label: 冲过去
+        skill: 敏捷
+      - id: wade
+        label: 硬蹚过去
+        skill: 力量
+  - id: tomb_door
+    name: 半埋的陵墓石门
+    look: 石门紧闭，门缝里塞满了泥
+    place: lingmu
+    obstacle:
+      kind: barrier
+      what: 紧闭的石门
+      skill: 力量
+      hp: 25
+      methods:
+      - id: push
+        label: 推开石门
+        skill: 力量
+        opens: true
+  - id: tunnel_mouth
+    name: 陵墓里的隧道口
+    look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+    place: lingmu
+    obstacle:
+      kind: hazard
+      what: 徒手挖出的窄洞
+      skill: 攀爬
+      harm: 1D3
+      methods:
+      - id: climb
+        label: 攀着土壁下去
+        skill: 攀爬
+      - id: drop
+        label: 跳下去
+        skill: 跳跃
+  scene_root: true
+  outdoors: true
+  ground: graveyard
+  looks:
+  - when: hour:20-5
+    change: 月光把墓碑照得发白，陵墓那一带的灌木黑成一片，土路上凝着夜露。
+  - when: knows:players:clue:c_footprints
+    change: 碑旁的软土上留着一圈蹄状赤脚印，一路穿过墓地，通向陵墓那边。
+    'on': mudi_grave
+  views:
+  - key: mudi_grave
+    label: 低矮的旧墓碑
+    features:
+    - 道格拉斯最喜欢的墓碑
+    prompt: 一块低矮的旧墓碑，石面被风雨磨得光滑，高度正好当凳子坐，四周是高大的灌木和杂草。
+- id: lingmu
+  name: 墓地深处的陵墓
+  within: mudi
+  art: lingmu
+  read_aloud: |
+    一座半埋在土坡里的石砌陵墓，门楣上的字早已被苔藓吃掉。石门紧闭，门缝里塞满了泥，
+    门前的泥地上踩得乱七八糟。
+  keeper: |
+    墓碑旁的蹄状足迹一路通到这里。开门要过力量检定；失败可取铲子或其他工具撬门再试（孤注一掷）。
+    门一开就涌出一股积蓄已久的可怕腐臭：调查员若没有特别说明要屏住呼吸，就会被熏昏（转“调查员陷入昏迷”，晚上醒来时道格拉斯坐在一旁）。
+    否则他会在里面找到一条徒“手”挖掘、通向地底的隧道。下去转“探索隧道网”；不下去则当晚道格拉斯会出来进入金博尔家。
+  features:
+  - 石门
+  - 门前的足迹
+  - 陵墓内部
+  - 隧道口
+  looks:
+  - when: flag:tomb_opened
+    change: 陵墓的石门被推开了，门缝里的泥掉了一地，门后是一片漆黑
+  - when: knows:players:clue:c_tunnel
+    change: 地中央露出一条徒手挖出的隧道口，边缘全是一道道爪痕，往底下黑得看不见底。
+    'on': lingmu_interior
+  chase:
+  - id: tomb_mud
+    name: 陵墓门前的泥地
+    look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+    place: lingmu
+    links:
+    - tomb_door
+    obstacle:
+      kind: hazard
+      what: 踩烂的泥地
+      skill: 敏捷
+      harm: 1D3
+      methods:
+      - id: run
+        label: 冲过去
+        skill: 敏捷
+      - id: wade
+        label: 硬蹚过去
+        skill: 力量
+  - id: deep_graves
+    name: 墓地深处
+    look: 墓碑越往里越老，灌木越来越密
+    place: mudi
+  - id: old_trees
+    name: 古老的树下
+    look: 古老的树木把路遮得半明半暗
+    place: mudi
+  - id: graves
+    name: 墓穴与墓碑之间
+    look: 墓穴和墓碑挨得很近，脚下高低不平
+    place: mudi
+    obstacle:
+      kind: hazard
+      what: 挨在一起的墓穴和墓碑
+      skill: 跳跃
+      harm: 1D3
+      methods:
+      - id: leap
+        label: 跳过去
+        skill: 跳跃
+      - id: weave
+        label: 绕着墓碑跑
+        skill: 敏捷
+  - id: dirt_road
+    name: 穿过墓碑的土路
+    look: 一条土路弯弯曲曲穿过墓碑
+    place: mudi
+    links:
+    - street
+  - id: shrubs
+    name: 灌木和老树之间
+    look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+    place: mudi
+    obstacle:
+      kind: hazard
+      what: 伸到路上的灌木
+      skill: 敏捷
+      methods:
+      - id: push
+        label: 拨开冲过去
+        skill: 敏捷
+      - id: duck
+        label: 矮身钻过去
+        skill: 闪避
+  - id: low_wall
+    name: 隔开公墓的矮墙
+    look: 一道矮墙隔开后院和墓地
+    place: jinboer_jia
+    obstacle:
+      kind: hazard
+      what: 矮墙
+      skill: 攀爬
+      harm: 1D3
+      methods:
+      - id: climb
+        label: 翻过去
+        skill: 攀爬
+      - id: vault
+        label: 撑着跳过去
+        skill: 跳跃
+  - id: backyard_path
+    name: 屋后的小路
+    look: 小路从屋后通向公墓，老树的影子压在上面
+    place: jinboer_jia
+  - id: back_door
+    name: 金博尔家的后门
+    look: 小路通到金博尔家的后门，门里就是走廊
+    place: jinboer_jia
+    exit: true
+  - id: tomb_door
+    name: 半埋的陵墓石门
+    look: 石门紧闭，门缝里塞满了泥
+    place: lingmu
+    obstacle:
+      kind: barrier
+      what: 紧闭的石门
+      skill: 力量
+      hp: 25
+      methods:
+      - id: push
+        label: 推开石门
+        skill: 力量
+        opens: true
+  - id: tunnel_mouth
+    name: 陵墓里的隧道口
+    look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+    place: lingmu
+    obstacle:
+      kind: hazard
+      what: 徒手挖出的窄洞
+      skill: 攀爬
+      harm: 1D3
+      methods:
+      - id: climb
+        label: 攀着土壁下去
+        skill: 攀爬
+      - id: drop
+        label: 跳下去
+        skill: 跳跃
+  - id: low_tunnel
+    name: 又低又窄的通道
+    look: 泥土通道又低又窄，手电只照得出前面几步
+    place: suidao
+    obstacle:
+      kind: hazard
+      what: 低矮的土顶
+      skill: 敏捷
+      methods:
+      - id: stoop
+        label: 弯腰快跑
+        skill: 敏捷
+  outdoors: false
+  ground: graveyard
+  views:
+  - key: lingmu_interior
+    label: 陵墓里的黑暗小室
+    features:
+    - 陵墓内部
+    prompt: 一间石砌的小室，四壁挂着深色水痕，地上散着碎石和层层干土，手电光只照出面前几步。
+- id: suidao
+  name: 地底隧道网
+  within: mudi
+  art: suidao
+  read_aloud: |
+    泥土通道又低又窄，四壁留着一道道爪痕，空气又湿又冷，带着一股甜腻的腐味。
+    岔路一条接一条，似乎铺满了整个公墓的地下。手电的光只能照出前面几步。
+  keeper: |
+    让调查员做一次导航检定，看他是否迷失方向；失败则兜兜转转直到精疲力竭，必须停下休息。
+    无论哪种情况，时间都已流逝，夜晚正要降临。在找路返回地面的途中，他会与道格拉斯·金博尔不期而遇
+    （照“如果调查员试图和人影交谈”处理，信息不变，只是前提换成在隧道里相遇）。
+  features:
+  - 爪痕累累的土壁
+  - 岔路
+  - 通往地面的出口
+  chase:
+  - id: low_tunnel
+    name: 又低又窄的通道
+    look: 泥土通道又低又窄，手电只照得出前面几步
+    place: suidao
+    links:
+    - tunnel_mouth
+    obstacle:
+      kind: hazard
+      what: 低矮的土顶
+      skill: 敏捷
+      methods:
+      - id: stoop
+        label: 弯腰快跑
+        skill: 敏捷
+  - id: claw_walls
+    name: 爪痕累累的土壁
+    look: 四壁留着一道道爪痕，空气又湿又冷
+    place: suidao
+    links:
+    - surface_exit
+  - id: forks
+    name: 一条接一条的岔路
+    look: 岔路一条接一条，似乎铺满了整个公墓的地下
+    place: suidao
+    exit: true
+    obstacle:
+      kind: hazard
+      what: 认不清的岔路
+      skill: 导航
+      methods:
+      - id: navigate
+        label: 认路
+        skill: 导航
+      - id: track
+        label: 跟着爪痕走
+        skill: 追踪
+  - id: surface_exit
+    name: 通往地面的出口
+    look: 前面的土里透出一点冷风
+    place: suidao
+    exit: true
+  - id: tunnel_mouth
+    name: 陵墓里的隧道口
+    look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+    place: lingmu
+    obstacle:
+      kind: hazard
+      what: 徒手挖出的窄洞
+      skill: 攀爬
+      harm: 1D3
+      methods:
+      - id: climb
+        label: 攀着土壁下去
+        skill: 攀爬
+      - id: drop
+        label: 跳下去
+        skill: 跳跃
+  - id: tomb_door
+    name: 半埋的陵墓石门
+    look: 石门紧闭，门缝里塞满了泥
+    place: lingmu
+    obstacle:
+      kind: barrier
+      what: 紧闭的石门
+      skill: 力量
+      hp: 25
+      methods:
+      - id: push
+        label: 推开石门
+        skill: 力量
+        opens: true
+  - id: tomb_mud
+    name: 陵墓门前的泥地
+    look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+    place: lingmu
+    obstacle:
+      kind: hazard
+      what: 踩烂的泥地
+      skill: 敏捷
+      harm: 1D3
+      methods:
+      - id: run
+        label: 冲过去
+        skill: 敏捷
+      - id: wade
+        label: 硬蹚过去
+        skill: 力量
+  - id: deep_graves
+    name: 墓地深处
+    look: 墓碑越往里越老，灌木越来越密
+    place: mudi
+  outdoors: false
+  ground: building
+  views:
+  - key: suidao_fork
+    label: 隧道里的岔道口
+    features:
+    - 岔路
+    prompt: 两条低矮的泥土通道在这里分开，四壁留下一道道爪痕，空气又湿又冷，手电光只照到前面几步。
+  looks:
+  - when: knows:players:clue:c_tunnel_sealed
+    change: 一条岔道被新填的湿土和碎石堵死，土色比四壁新得多，爪痕到那里就断了。
+    'on': suidao_fork
+- id: zhenzhongxin
+  public: true
+  name: 阿诺兹堡镇中心
+  art: zhenzhongxin
+  read_aloud: |
+    主街两旁是砖砌的店面，汽车和马车挤在一起。街角有图书馆的石阶，对面是警察局，
+    再过去一点，《阿诺兹堡广告报》的招牌挂在二楼窗外。
+  keeper: |
+    想弄酒的话在这里找：知识检定（= 教育）成功，2 美元买到一品脱烈酒；失败则过幸运检定避免被捕，96–00 必被捕，
+    在牢里关一夜，第二天早上无罪释放。
+  features:
+  - 图书馆
+  - 警察局
+  - 广告报报社
+  - 私酒门路
+  scene_root: true
+  outdoors: true
+  ground: street
+- id: tushuguan
+  public: true
+  name: 阿诺兹堡公共图书馆
+  within: zhenzhongxin
+  art: tushuguan
+  read_aloud: '图书馆不大，长桌上方吊着绿罩台灯，旧报纸夹在木杆上挂成一排。图书管理员从眼镜上方瞥了你一眼，示意小声。
+
+    '
+  keeper: |
+    图书馆使用成功会把调查员引向《阿诺兹堡广告报》的一篇旧报道。
+    失败可孤注一掷（花更长时间，或请管理员帮忙）；孤注一掷再失败，依然找到信息，但错过闭馆时间被锁在馆里，
+    要等到第二天早上八点管理员来开门。他可以用机械维修或锁匠开正门的锁、用力量撞破门窗，
+    或视情况给一次幸运检定，看巡逻警察是否听见呼救来帮他脱困。
+  features:
+  - 旧报合订本
+  - 图书管理员
+  - 阅览长桌
+  outdoors: false
+  ground: building
+  views:
+  - key: tushuguan_newspaper
+    label: 摊开的旧报合订本
+    features:
+    - 旧报合订本
+    prompt: 木杆上夹着一大本发黄的旧报合订本，纸页卷了边，绿罩台灯的光落在翻开的两页上。
+  looks:
+  - when: knows:players:clue:c_library_article
+    change: 摊开的一页上登着一则窄栏短讯，说他人在墓地看见怪人、警察搜遍公墓也没找到。
+    'on': tushuguan_newspaper
+- id: jingju
+  public: true
+  name: 阿诺兹堡警察局
+  within: zhenzhongxin
+  art: jingju
+  read_aloud: '值班室里电话铃响个不停，墙上贴满了通缉令和寻人启事。值班警官一手按着话筒，一手冲你比划：“有事快说。”
+
+    '
+  keeper: |
+    私家侦探、记者，或之前与警方有“专业”往来的调查员，可直接获得信息；其他人须过法律、魅惑或说服检定，
+    失败的话警官太忙，打发他们明天再来。根据问话内容告诉他们对应的信息。
+  features:
+  - 值班警官
+  - 寻人启事墙
+  outdoors: false
+  ground: building
+- id: baoshe
+  public: true
+  name: 《阿诺兹堡广告报》报社
+  within: zhenzhongxin
+  art: baoshe
+  read_aloud: '楼下印刷机轰隆作响，楼上的编辑部里烟雾缭绕。走廊尽头一扇门上写着“资料室”，里面堆满了一捆捆旧刊。
+
+    '
+  keeper: |
+    记者或作家可以直接查看旧刊；其他职业须过魅惑、说服或话术检定说服编辑放行。进了资料室再做图书馆使用：
+    普通成功花三小时、困难成功一小时、极难成功只要几分钟；失败可孤注一掷（后果同图书馆，也可自行设计）。
+    若调查员在图书馆没找到那篇旧报道，也可以让他在这里找到——剪报就夹在沃德女士的那份笔记上。
+  features:
+  - 编辑
+  - 资料室
+  - 旧刊
+  - 记者的笔记
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: kongwoshi
+  name: 调查员的空卧室
+  read_aloud: 一间收拾出来的空卧室，一张铺好的床、一把椅子、一只空衣柜，行李可以放在床脚。窗外就是屋后的公墓，老树的影子压在窗玻璃上。
+  within: jinboer_jia
+  keeper: 托马斯请调查员住进的空卧室，调查期间的落脚处。若调查员找到隧道却没下去、当晚又在熟睡（没有设岗），道格拉斯会来到这间屋里唤醒他，想和他交谈（转“如果调查员试图和人影交谈”）。人影撞破书房窗户的响动可能惊醒在这里熟睡的调查员。
+  features:
+  - 床
+  - 衣柜
+  - 窗户
+  art: kongwoshi
+  outdoors: false
+  ground: building
+- id: tuomasi_woshi
+  name: 托马斯的卧室
+  read_aloud: 托马斯住的卧室，床头堆着几只还没拆完的箱子，衣服搭在椅背上，看得出主人搬进来不久。
+  within: jinboer_jia
+  keeper: 托马斯已经搬进了除书房以外的所有房间。夜里他通常在这里睡觉；屋里或屋后传来尖叫，他会被惊醒赶去查看。
+  features:
+  - 床
+  - 没拆完的箱子
+  art: tuomasi_woshi
+  outdoors: false
+  ground: building
+- id: bianjibu
+  name: 编辑部
+  read_aloud: 楼上的编辑部烟雾缭绕，几张桌子上堆满校样和稿纸，打字机噼啪作响。走廊尽头有一扇门，门上写着“资料室”。
+  within: baoshe
+  keeper: 去资料室要经过这里。记者或作家可以直接查看旧刊；其他职业须过魅惑、说服或话术检定说服编辑放行。
+  features:
+  - 校样和稿纸
+  - 通往资料室的走廊
+  art: bianjibu
+  outdoors: false
+  ground: building
+- id: ziliaoshi
+  name: 资料室
+  read_aloud: 一间不大的屋子，架子上、地板上堆满一捆捆旧刊，纸张发黄，空气里都是灰尘和油墨味。
+  within: baoshe
+  keeper: 资料室平时锁着，钥匙在编辑手里；调查员说服编辑放行（原文第 12 页，说服）后由守秘人登记开锁。获准进入后做图书馆使用检定：普通成功花三小时、困难成功一小时、极难成功只要几分钟；失败可孤注一掷（后果同图书馆，也可自行设计）。找到的是记者的笔记，记着希尔达·沃德女士未发表的陈述；若调查员在图书馆没找到那篇旧报道，剪报也可以夹在这份笔记上。
+  features:
+  - 过期旧刊
+  - 记者的笔记
+  art: ziliaoshi
+  outdoors: false
+  ground: building
+  views:
+  - key: ziliaoshi_notes
+    label: 记者留下的一叠笔记
+    features:
+    - 记者的笔记
+    prompt: 一叠发黄的笔记纸摊在旧刊捆上，铅笔字写得密密麻麻，纸角卷起，旁边捆着旧报纸。
+  looks:
+  - when: knows:players:clue:c_ward_notes
+    change: 笔记中间夹着一页没发表过的采访记录，写着一个失眠多年的老太太夜里见过的东西。
+    'on': ziliaoshi_notes
+passages:
+- id: huochezhan__zhenzhongxin
+  a: huochezhan
+  b: zhenzhongxin
+  kind: road
+  minutes: 15
+- id: jinboer_jia__shufang
+  a: jinboer_jia
+  b: shufang
+  kind: door
+  minutes: 0
+- id: jinboer_jia__jiefang
+  a: jinboer_jia
+  b: jiefang
+  kind: road
+  minutes: 15
+- id: jinboer_jia__mudi
+  a: jinboer_jia
+  b: mudi
+  kind: road
+  minutes: 10
+- id: jiefang__mudi
+  a: jiefang
+  b: mudi
+  kind: road
+  minutes: 10
+- id: jiefang__zhenzhongxin
+  a: jiefang
+  b: zhenzhongxin
+  kind: road
+  minutes: 15
+- id: mudi__lingmu
+  a: mudi
+  b: lingmu
+  kind: door
+  minutes: 0
+- id: lingmu__suidao
+  a: lingmu
+  b: suidao
+  kind: door
+  minutes: 0
+- id: zhenzhongxin__tushuguan
+  a: zhenzhongxin
+  b: tushuguan
+  kind: door
+  minutes: 0
+- id: zhenzhongxin__jingju
+  a: zhenzhongxin
+  b: jingju
+  kind: door
+  minutes: 0
+- id: zhenzhongxin__baoshe
+  a: zhenzhongxin
+  b: baoshe
+  kind: door
+  minutes: 0
+- id: jinboer_jia__kongwoshi
+  a: jinboer_jia
+  b: kongwoshi
+  kind: door
+  minutes: 0
+  perception: 普通木门，屋里撞窗、碎玻璃这类大动静隔着门听得见
+- id: jinboer_jia__tuomasi_woshi
+  a: jinboer_jia
+  b: tuomasi_woshi
+  kind: door
+  minutes: 0
+  perception: 普通木门，屋里的大声响和尖叫隔着门听得见
+- id: baoshe__bianjibu
+  a: baoshe
+  b: bianjibu
+  kind: stairs
+  minutes: 0
+  perception: 印刷机轰响，楼上楼下说话要喊
+- id: bianjibu__ziliaoshi
+  a: bianjibu
+  b: ziliaoshi
+  kind: door
+  minutes: 0
+  gate:
+    locked: true
+  perception: 走廊短，编辑部里能看见谁进了资料室
+plans:
+- building: jinboer_jia
+  floors:
+  - name: 一层
+    rooms:
+    - place: jinboer_jia
+      label: 走廊与客厅
+      x: 0
+      y: 4
+      w: 22
+      h: 6
+    - place: kongwoshi
+      x: 0
+      y: 0
+      w: 18
+      h: 5
+    - place: tuomasi_woshi
+      x: 0
+      y: 9
+      w: 16
+      h: 5
+    - place: shufang
+      x: 15
+      y: 9
+      w: 18
+      h: 5
+  basis: 原文与“道格拉斯的世界”地图：艾尔斯伯里大街 218 号是一栋小屋，地图上为 L 形单栋房屋，书房（地图标 2）在 L 形一端；房间有书房、托马斯住的房间和空卧室。AutoKeeper
+    补充：原文没写楼层与房间排布，按单层小屋安排，卧室与书房都开在走廊上。
+- building: baoshe
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: bianjibu
+      x: 0
+      y: 4
+      w: 16
+      h: 5
+    - place: ziliaoshi
+      x: 0
+      y: 0
+      w: 16
+      h: 5
+  - name: 一层
+    rooms:
+    - place: baoshe
+      label: 楼下印刷间
+      x: 0
+      y: 0
+      w: 22
+      h: 6
+  basis: 原文：编辑须放行，调查员才能“进入报社资料室”查旧刊，并在里面做数小时的图书馆使用。AutoKeeper 补充：楼层（楼下印刷、楼上编辑部）沿用模组已有描述，原文没写。

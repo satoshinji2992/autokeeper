@@ -1,0 +1,487 @@
+{
+  "id": "shujia",
+  "name": "书房的旧书架",
+  "description": "找到书架上的空档以后，右栏会多一页「旧书架」。在书房输入 /理书架，照道格拉斯目录卡上的三句话把剩下的书排回去；排好了托马斯会高兴，不排也不耽误查案。",
+  "api_version": 1,
+  "version": "0.1.0",
+  "hooks": [
+    "clue",
+    "command",
+    "answer"
+  ],
+  "capabilities": [
+    "panel",
+    "prompt",
+    "show",
+    "note",
+    "attitude",
+    "hint"
+  ],
+  "actions": [],
+  "commands": [
+    {
+      "name": "理书架",
+      "description": "在书房把剩下的书按道格拉斯的老规矩排回去"
+    }
+  ],
+  "flags": {},
+  "initial": {},
+  "tests": [
+    {
+      "name": "找到空档，右栏多一页",
+      "event": {
+        "hook": "clue",
+        "clue": "c_shelf_gap",
+        "title": "书架上的空档"
+      },
+      "state": {},
+      "context": {},
+      "expected_state": {
+        "seen": true,
+        "placed": []
+      },
+      "expected_effects": [],
+      "expected_panels": [
+        {
+          "key": "shelf",
+          "title": "旧书架",
+          "rows": [
+            {
+              "kind": "art",
+              "art": "+---------------------------+\n|[    ] [    ] [    ] [    ]|\n+---------------------------+"
+            },
+            {
+              "kind": "text",
+              "text": "架上空着好几格，像缺了牙。"
+            },
+            {
+              "kind": "bar",
+              "text": "理书",
+              "value": 0,
+              "max": 4,
+              "color": "accent"
+            },
+            {
+              "kind": "text",
+              "text": "在书房输入 /理书架，把剩下的书排回去。",
+              "color": "dim"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "别的线索不理会",
+      "event": {
+        "hook": "clue",
+        "clue": "c_window",
+        "title": "松动的窗锁"
+      },
+      "state": {},
+      "context": {},
+      "expected_state": {},
+      "expected_effects": []
+    },
+    {
+      "name": "还没看出空档时理书架",
+      "event": {
+        "hook": "command",
+        "command": "理书架",
+        "text": "",
+        "who": "brennan"
+      },
+      "state": {},
+      "context": {
+        "location": "shufang"
+      },
+      "expected_state": {},
+      "expected_effects": [
+        {
+          "kind": "show",
+          "shape": "inline",
+          "title": "理书架",
+          "frames": [
+            {
+              "text": "书架上还看不出什么名堂，先四处看看吧。",
+              "ms": 1500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "不在书房不能理",
+      "event": {
+        "hook": "command",
+        "command": "理书架",
+        "text": "",
+        "who": "brennan"
+      },
+      "state": {
+        "seen": true,
+        "placed": []
+      },
+      "context": {
+        "location": "jinboer_jia"
+      },
+      "expected_state": {
+        "seen": true,
+        "placed": []
+      },
+      "expected_effects": [
+        {
+          "kind": "show",
+          "shape": "inline",
+          "title": "理书架",
+          "frames": [
+            {
+              "text": "得回到道格拉斯的书房才能理。",
+              "ms": 1500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "在书房理书架，问第一格",
+      "event": {
+        "hook": "command",
+        "command": "理书架",
+        "text": "",
+        "who": "brennan"
+      },
+      "state": {
+        "seen": true,
+        "placed": []
+      },
+      "context": {
+        "location": "shufang"
+      },
+      "expected_state": {
+        "seen": true,
+        "placed": []
+      },
+      "expected_effects": [
+        {
+          "kind": "prompt",
+          "key": "slot",
+          "title": "理书架",
+          "style": "choice",
+          "text": "目录卡上的字被水洇了，只认得出三句：红字在白鲸左边；草叶集在最右；瓦尔登湖紧挨着草叶集。\n第 1 格放哪本？",
+          "options": [
+            "红字",
+            "白鲸",
+            "瓦尔登湖",
+            "草叶集"
+          ],
+          "timeout": 300
+        }
+      ]
+    },
+    {
+      "name": "第一格放对了",
+      "event": {
+        "hook": "answer",
+        "prompt": "slot",
+        "value": "红字",
+        "by": "player",
+        "who": "brennan",
+        "step": 1
+      },
+      "state": {
+        "seen": true,
+        "placed": []
+      },
+      "context": {
+        "location": "shufang"
+      },
+      "expected_state": {
+        "seen": true,
+        "placed": [
+          "红字"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "prompt",
+          "key": "slot",
+          "title": "理书架",
+          "style": "choice",
+          "text": "目录卡上的字被水洇了，只认得出三句：红字在白鲸左边；草叶集在最右；瓦尔登湖紧挨着草叶集。\n放好了。第 2 格放哪本？",
+          "options": [
+            "白鲸",
+            "瓦尔登湖",
+            "草叶集"
+          ],
+          "timeout": 300
+        }
+      ],
+      "expected_panels": [
+        {
+          "key": "shelf",
+          "title": "旧书架",
+          "rows": [
+            {
+              "kind": "art",
+              "art": "+---------------------------+\n|[红字] [    ] [    ] [    ]|\n+---------------------------+"
+            },
+            {
+              "kind": "text",
+              "text": "架上空着好几格，像缺了牙。"
+            },
+            {
+              "kind": "bar",
+              "text": "理书",
+              "value": 1,
+              "max": 4,
+              "color": "accent"
+            },
+            {
+              "kind": "text",
+              "text": "在书房输入 /理书架，把剩下的书排回去。",
+              "color": "dim"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "放错了再想想",
+      "event": {
+        "hook": "answer",
+        "prompt": "slot",
+        "value": "草叶集",
+        "by": "player",
+        "who": "brennan",
+        "step": 2
+      },
+      "state": {
+        "seen": true,
+        "placed": [
+          "红字"
+        ]
+      },
+      "context": {
+        "location": "shufang"
+      },
+      "expected_state": {
+        "seen": true,
+        "placed": [
+          "红字"
+        ],
+        "tries": 1
+      },
+      "expected_effects": [
+        {
+          "kind": "prompt",
+          "key": "slot",
+          "title": "理书架",
+          "style": "choice",
+          "text": "目录卡上的字被水洇了，只认得出三句：红字在白鲸左边；草叶集在最右；瓦尔登湖紧挨着草叶集。\n「草叶集」放这儿不对劲，再想想。第 2 格放哪本？",
+          "options": [
+            "白鲸",
+            "瓦尔登湖",
+            "草叶集"
+          ],
+          "timeout": 300
+        }
+      ]
+    },
+    {
+      "name": "第三格放对，最后一本自动归位",
+      "event": {
+        "hook": "answer",
+        "prompt": "slot",
+        "value": "瓦尔登湖",
+        "by": "player",
+        "who": "brennan",
+        "step": 3
+      },
+      "state": {
+        "seen": true,
+        "placed": [
+          "红字",
+          "白鲸"
+        ]
+      },
+      "context": {
+        "location": "shufang"
+      },
+      "expected_state": {
+        "seen": true,
+        "placed": [
+          "红字",
+          "白鲸",
+          "瓦尔登湖",
+          "草叶集"
+        ],
+        "done": true
+      },
+      "expected_effects": [
+        {
+          "kind": "show",
+          "shape": "inline",
+          "title": "理书架",
+          "frames": [
+            {
+              "art": "+---------------------------+\n|[红字] [白鲸] [    ] [    ]|\n+---------------------------+",
+              "ms": 700
+            },
+            {
+              "art": "+---------------------------+\n|[红字] [白鲸] [瓦尔] [    ]|\n+---------------------------+",
+              "ms": 700
+            },
+            {
+              "art": "+---------------------------+\n|[红字] [白鲸] [瓦尔] [草叶]|\n+---------------------------+",
+              "text": "最后一本推进去，严丝合缝。",
+              "ms": 1500,
+              "color": "success"
+            }
+          ]
+        },
+        {
+          "kind": "note",
+          "text": "书架照道格拉斯的老规矩理好了"
+        },
+        {
+          "kind": "attitude",
+          "npc": "thomas",
+          "amount": 1,
+          "text": "调查员替叔叔把书架理好了"
+        },
+        {
+          "kind": "hint",
+          "text": "调查员照道格拉斯的老规矩理好了书架，托马斯看着书架出了一会儿神"
+        }
+      ],
+      "expected_panels": [
+        {
+          "key": "shelf",
+          "title": "旧书架",
+          "rows": [
+            {
+              "kind": "art",
+              "art": "+---------------------------+\n|[红字] [白鲸] [瓦尔] [草叶]|\n+---------------------------+"
+            },
+            {
+              "kind": "text",
+              "text": "架上空着好几格，像缺了牙。"
+            },
+            {
+              "kind": "bar",
+              "text": "理书",
+              "value": 4,
+              "max": 4,
+              "color": "accent"
+            },
+            {
+              "kind": "text",
+              "text": "照老规矩理好了。",
+              "color": "success"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "先不玩，进度留着",
+      "event": {
+        "hook": "answer",
+        "prompt": "slot",
+        "value": "红字",
+        "by": "skip",
+        "who": "brennan",
+        "step": 1
+      },
+      "state": {
+        "seen": true,
+        "placed": [
+          "红字"
+        ]
+      },
+      "context": {
+        "location": "shufang"
+      },
+      "expected_state": {
+        "seen": true,
+        "placed": [
+          "红字"
+        ]
+      },
+      "expected_effects": [],
+      "expected_panels": [
+        {
+          "key": "shelf",
+          "title": "旧书架",
+          "rows": [
+            {
+              "kind": "art",
+              "art": "+---------------------------+\n|[红字] [    ] [    ] [    ]|\n+---------------------------+"
+            },
+            {
+              "kind": "text",
+              "text": "架上空着好几格，像缺了牙。"
+            },
+            {
+              "kind": "bar",
+              "text": "理书",
+              "value": 1,
+              "max": 4,
+              "color": "accent"
+            },
+            {
+              "kind": "text",
+              "text": "在书房输入 /理书架，把剩下的书排回去。",
+              "color": "dim"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "理好以后再输入",
+      "event": {
+        "hook": "command",
+        "command": "理书架",
+        "text": "",
+        "who": "brennan"
+      },
+      "state": {
+        "seen": true,
+        "placed": [
+          "红字",
+          "白鲸",
+          "瓦尔登湖",
+          "草叶集"
+        ],
+        "done": true
+      },
+      "context": {
+        "location": "shufang"
+      },
+      "expected_state": {
+        "seen": true,
+        "placed": [
+          "红字",
+          "白鲸",
+          "瓦尔登湖",
+          "草叶集"
+        ],
+        "done": true
+      },
+      "expected_effects": [
+        {
+          "kind": "show",
+          "shape": "inline",
+          "title": "理书架",
+          "frames": [
+            {
+              "text": "书架已经照老规矩理好了。",
+              "ms": 1500
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

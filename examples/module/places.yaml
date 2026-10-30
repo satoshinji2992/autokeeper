@@ -1,0 +1,75 @@
+locations:
+  - id: square
+    name: 广场
+    art: square
+    weather: [fog]
+    read_aloud: 广场中央立着钟楼，告示栏上贴着一张泛黄的告示。
+    keeper: 枢纽地点，去哪儿都从这里走。
+    features: [告示栏, 钟楼大门]
+    scene_root: true                  # 主持区域的边界：广场和立在广场上的钟楼由同一位守秘人主持
+    outdoors: true
+    ground: street
+  - id: tower
+    name: 钟楼
+    within: square
+    read_aloud: 楼梯又窄又陡，顶上的齿轮间里传来咔哒声。守钟人坐在楼梯口打盹。
+    keeper: 齿轮间里藏着东西。守钟人不愿多说。
+    features: [齿轮间, 守钟人的柜子]
+    outdoors: false
+    ground: building
+  - id: office
+    name: 报社
+    read_aloud: 报社档案室里堆满了旧报纸。
+    features: [旧报合订本]
+    scene_root: true                  # 报社另成一处现场
+    # 追逐路线：从报社（和它里面的地方）起跑的追逐沿这条路跑。一段接着下一段；links 是岔路；
+    # exit 是能脱身的地方，也是一条岔路的尽头，列在它后面的段要由 links 连过来。
+    chase:
+      - id: archive
+        name: 档案室
+        look: 旧报纸堆到天花板
+        place: office
+      - id: office_stairs
+        name: 报社的楼梯
+        look: 楼梯上也堆着一捆捆旧报
+        place: office
+        obstacle:                     # 险阻：边跑边过，失败耽搁、可能受伤，人还是下去了
+          kind: hazard
+          what: 堆着报纸的楼梯
+          skill: 敏捷
+          harm: 1D3
+          methods:
+            - {id: run, label: 冲下去, skill: 敏捷}
+            - {id: slide, label: 顺着扶手滑下去, skill: 攀爬}
+      - id: office_door
+        name: 报社大门
+        place: office
+        obstacle:                     # 路障：过了检定才过得去
+          kind: barrier
+          what: 锁上的大门
+          skill: 锁匠
+          hp: 15                      # 规则书：坚固的外门 15
+          methods:
+            - {id: pick, label: 撬锁, skill: 锁匠, opens: true}
+            - {id: shove, label: 撞开, skill: 力量, opens: true}
+      - id: lamp_street
+        name: 去广场的街
+        look: 路灯一盏接一盏
+        links: [back_alley]
+      - id: fog_square
+        name: 雾里的广场
+        look: 告示栏在雾里只剩一个影子
+        place: square
+        exit: true
+      - id: back_alley
+        name: 报社后巷
+        look: 垃圾桶挤在墙根，雾浓得看不见三步以外
+        exit: true
+    outdoors: false
+    ground: building
+
+# 通路：地点之间唯一的连通资料。within 只说包含，不代表走得通；门、楼梯、走廊和道路都写在这里。
+# minutes 是普通经过的分钟数，室内几步路写 0；有门才写 gate（开团后的开闭只记在本局记录里）。
+passages:
+  - {id: square__tower, a: square, b: tower, kind: door, minutes: 0, gate: {open: true}}
+  - {id: square__office, a: square, b: office, kind: road, minutes: 10}
