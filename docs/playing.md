@@ -4,7 +4,41 @@
 
 ## 安装
 
-新版安装包正在准备中，暂时无法安装；发布后这里会给出 Windows、macOS 和 Linux 的安装命令。只加入朋友的房间时，用浏览器打开房间网址即可，不用安装。
+AutoKeeper 在 PyPI 上提供 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64，glibc 2.28 及以上）的安装包，需要 Python 3.12。只加入朋友的房间时，用浏览器打开房间网址即可，不用安装。
+
+一键脚本先装 [uv](https://docs.astral.sh/uv/)，再用它装好 Python 3.12 和 AutoKeeper，最后运行 `autokeeper setup`：
+
+```bash
+# Linux、macOS、WSL
+curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
+```
+
+已经装了 uv，也可以直接：
+
+```bash
+uv tool install --python 3.12 autokeeper
+```
+
+用 Claude 的话装成 `"autokeeper[claude]"`（DeepSeek、OpenAI 兼容接口和本地模型不需要）；加上模组原文检索装成 `"autokeeper[graphrag]"`（约 1 GB，首次使用还会下载嵌入模型）。脚本里对应的环境变量是 `AUTOKEEPER_EXTRAS`，`AUTOKEEPER_VERSION` 可以装指定版本（如 `0.0.7`）。
+
+装好以后在任意目录输入 `autokeeper` 开始。第一次运行会把掷骰组件装进你的用户目录，再问你用哪家模型、填 API Key。想提前做完这些，运行 `autokeeper setup`。
+
+更新时先退出游戏，再运行一次脚本，或 `uv tool upgrade autokeeper`。新版本不一定能读取旧版本的存档，联机时房主和玩家要用同一版本。
+
+掷骰需要 Node.js 22+ 和 npm。Windows 一键脚本会检查版本，缺少时通过 winget 安装 LTS 版；没有 winget 时，脚本会提示从 [Node.js 官网](https://nodejs.org/) 安装。其他系统手动安装后，重新打开终端并运行 `autokeeper setup`：
+
+| 系统 | 安装方式 |
+|---|---|
+| macOS | `brew install node` |
+| Linux | `sudo apt install nodejs npm`（其他发行版用自己的包管理器），确认 `node --version` 不低于 22 |
+| Windows | 一键脚本自动安装；手动安装用 `winget install --id OpenJS.NodeJS.LTS -e`，建议在 Windows Terminal 中运行 |
+
+图片渲染组件随包安装，初始化会检查实际可用性；不可用时仍可使用模组提供的手绘字符画。换模型、补 Key：`autokeeper login`。检查环境：`autokeeper doctor`，加 `--ping` 给每个模型发一句话试试通不通。
 
 ### 东西放在哪
 

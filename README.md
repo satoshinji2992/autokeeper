@@ -203,9 +203,21 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 ## 安装
 
-新版安装包正在准备中，暂时无法安装。发布后会在这里和[项目网页](https://satoshinji2992.github.io/autokeeper/#install)提供 Windows、macOS 和 Linux 的一键安装命令。
+当前版本 **0.0.7**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
 
-朋友加入你的房间只需要浏览器，不用安装。
+```bash
+# Linux、macOS、WSL
+curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
+```
+
+安装脚本会准备好 uv、Python 3.12 和 AutoKeeper；掷骰需要 Node.js 22+，Windows 脚本会自动安装。装好后在新终端运行 `autokeeper`，`autokeeper serve` 可以在浏览器里玩。朋友加入你的房间只需要浏览器，不用安装。
+
+更新时先退出游戏，再运行一次安装命令，存档和设置都会保留。联机时房主和玩家要用同一版本。手动安装和各系统的依赖见[游玩指南](docs/playing.md#安装)。
 
 ## 第一局
 

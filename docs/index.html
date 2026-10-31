@@ -30,7 +30,7 @@
                 <a class="button" href="#gallery">实机画面</a>
                 <a class="button" href="https://github.com/satoshinji2992/autokeeper">GitHub</a>
             </nav>
-            <p class="meta">Windows / macOS / Linux · 终端与浏览器 · 新版安装包准备中</p>
+            <p class="meta">Windows / macOS / Linux · 终端与浏览器 · 0.0.7</p>
         </div>
     </header>
 
@@ -161,13 +161,14 @@
 
         <section id="install">
             <h2>安装</h2>
-            <p class="lead">新版安装包正在准备中，暂时无法安装。发布后会在这里提供 Windows、macOS 和 Linux 的一键安装命令。</p>
+            <pre data-copy><span class="label"># Linux、macOS、WSL</span><code>curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash</code></pre>
+            <pre data-copy><span class="label"># Windows PowerShell</span><code>irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex</code></pre>
             <ol class="steps">
-                <li>运行 <code>autokeeper</code>，在首次配置里选择模型、填写密钥。支持 DeepSeek、Claude、Codex、Ollama 和 OpenAI 兼容接口。</li>
+                <li>在新终端运行 <code>autokeeper</code>，在首次配置里选择模型、填写密钥。支持 DeepSeek、Claude、Codex、Ollama 和 OpenAI 兼容接口。</li>
                 <li>选「新的调查」，挑一个模组和调查员；<code>autokeeper serve</code> 可以在浏览器里玩。</li>
                 <li>在输入框写下行动或台词。朋友加入你的房间只需要浏览器。</li>
             </ol>
-            <p>游戏和模型调用都在你自己的电脑上运行，这个网页只做介绍。完整说明见<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>。</p>
+            <p>游戏和模型调用都在你自己的电脑上运行，这个网页只做介绍。更新时退出游戏、再运行一次安装命令即可，存档和设置都会保留。完整说明见<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>。</p>
         </section>
     </main>
 
