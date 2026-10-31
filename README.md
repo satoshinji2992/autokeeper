@@ -87,7 +87,7 @@ AutoKeeper 是一款中文跑团游戏。AI 担任《克苏鲁的呼唤》第 7 
   <br><sub>《冬雪之下》：埃里在主街时，街角多了他的卡车；发现线索后，农舍的墙皮下露出烧出来的符号。</sub>
 </p>
 
-开场、危机和结局用整屏「大场景」呈现。模组缺图的地点、人物和物件，会从公共图库找照片，由读图模型挑选和裁剪；找不到合适的，装有 Codex 时由 AI 补画。
+开场、危机和结局用整屏「大场景」呈现。模组缺图的地点、人物和物件，会从公共图库找照片，由读图模型挑选和裁剪；找不到合适的，由 AI 补画（Codex、Nano Banana 或豆包 Seedream）。
 
 <p align="center">
   <a href="docs/img/showcase.png"><img src="docs/img/showcase.png" width="100%" alt="追书人开场的大场景：阿诺兹堡早班车，车站照片转成整屏彩色字符画"></a>
@@ -203,7 +203,7 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 ## 安装
 
-当前版本 **0.0.7**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
+当前版本 **0.0.7.1**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
 
 ```bash
 # Linux、macOS、WSL

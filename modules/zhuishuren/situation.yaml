@@ -84,6 +84,7 @@ foreshadow:
   hint: 天刚擦黑，公墓那边传来两声很轻的“咪噗”，像是谁在唤猫，可镇上没人养那样的猫。
   where: jinboer_jia
   pays_off: k_creatures
+  when: hour:17-20
 mechanics:
 - name: 书架空档重排
   rules: 找到 c_shelf_gap 后，右栏多一页「旧书架」。在书房输入 /理书架，照道格拉斯目录卡上的三句话把剩下的书排回去。排好后托马斯会高兴，不排也不耽误查案。

@@ -775,6 +775,12 @@
      "title": "Pays Off",
      "type": "string"
     },
+    "when": {
+     "default": "",
+     "description": "端倪只在某个时候才有：写法同 stages 的 when，比如傍晚的声音写 hour:17-20；不写就是一来就有",
+     "title": "When",
+     "type": "string"
+    },
     "stages": {
      "description": "之后再来时这点端倪的变化，按先后排，一次来露一步：旅馆的画第二次看，画里的人转过了头；没有就不写",
      "items": {
@@ -2317,7 +2323,7 @@
     },
     "when": {
      "default": "",
-     "description": "最早什么时候露出：'D2 08:00' 这样的时间，或 flag:标记；不写就是下一次来到这里",
+     "description": "最早什么时候露出：'D2 08:00' 这样的时间，或 flag:标记，或 hour:17-20（每天这个时段）；不写就是下一次来到这里",
      "title": "When",
      "type": "string"
     },
