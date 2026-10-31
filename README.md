@@ -203,7 +203,7 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 ## 安装
 
-当前版本 **0.0.7.1**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
+当前版本 **0.0.7.2**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
 
 ```bash
 # Linux、macOS、WSL
