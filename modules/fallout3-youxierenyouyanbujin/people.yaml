@@ -188,7 +188,6 @@ npcs:
   goal: 抓走一名调查员
   knows:
   - 看过教授的望远镜
-  location: meeting_house
   portrait: mccurdy
   called: 衣衫褴褛的闯入者
   attacks:
@@ -226,8 +225,8 @@ npcs:
   - c_fitz_talk
   gates:
     c_fitz_talk:
-      skill: 心理学
-      difficulty: 困难
+      skill: 说服
+      difficulty: 极难
   location: church
   portrait: fitzgerald
   called: 目光炯炯的老牧师
@@ -491,7 +490,7 @@ npcs:
   gates:
     c_pearson_rumors:
       skill: 话术
-      difficulty: 困难
+      difficulty: 极难
   location: main_street
   portrait: pearson
   called: 坐在电话线杆顶戴耳机的老头

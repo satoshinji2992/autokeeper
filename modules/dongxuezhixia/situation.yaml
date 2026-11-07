@@ -206,11 +206,18 @@ agendas:
     meet: true
     once: false
     source: c_cure_offer「卡洛琳的请求」；守秘人须知：卡洛琳的索求升级与支配
-  - id: caroline_pointout_nightmare
-    text: 调查员还没提到病人的梦时，她可以主动谈起病人的梦；梦里的细节需说服才讲全。
+  - id: caroline_ask_another_body
+    text: 尸体被盗后，调查员在达维尔家与她对峙时，她不把这当成威胁，反而竭力争取他们帮她再偷一具尸体，好了解更多（c_theft_suspect）。
+    when: flag:body_stolen
     meet: true
     once: false
-    source: c_nightmares「相似的噩梦」；原文：卡洛琳会指出病人噩梦的相似性
+    source: 答案的诱惑；c_theft_suspect「她还要一具尸体」
+  - id: caroline_point_nightmares
+    text: 调查员还没有自己发现病人噩梦的相似性时，她主动指出：病人们都梦见同一个从不出声、意愿直接刻进脑子里、却“没有脸”的男人（c_nightmares）。
+    meet: true
+    once: true
+    only_if: 调查员尚未亲自发现噩梦的相似性（nightmares_known 未设）；已经发现的就不必再指出
+    source: 卡洛琳·达维尔一节：如果调查员没有亲自发现病人噩梦的相似性，她会指出这一点
   - id: cure_on_request
     text: 调查员当面提议由她来治疗诊所里的病人时，她立刻答应，并用香炉烧粉末安排这场治疗（阴影场景）。
     meet: true
@@ -233,6 +240,12 @@ agendas:
     meet: false
     only_if: 调查员没有先尽力阻止她（caroline_fled 未设）
     source: e_hill_arrival「绸缎山上的两个人」；守秘人须知：靠近埋尸处的效应
+  - id: caroline_seance
+    text: 尸体被盗后，她在达维尔家地下室复活死去病人的魂灵并拷问它，埃里和她一起待在地下室。
+    when: flag:body_stolen
+    does: at:caroline:darvill_cellar
+    meet: false
+    source: 达维尔家：如果调查员直接从诊所前往达维尔家，当他们到达时，卡洛琳正在拷问一位死去病人的魂灵；c_seance
 - npc: erie
   goals:
   - 服从卡洛琳的命令
@@ -254,6 +267,12 @@ agendas:
     when: flag:caroline_fled
     ruling: true
     source: 守秘人须知：阻止她继续时她逃跑，并让埃里殿后（caroline_fled）
+  - id: erie_seance
+    text: 尸体被盗后，它和卡洛琳一起待在达维尔家地下室，旁观她拷问死去病人的魂灵。
+    when: flag:body_stolen
+    does: at:erie:darvill_cellar
+    meet: false
+    source: 达维尔家：埃里也和卡洛琳一起待在地下室里；c_seance
 - npc: ante
   goals:
   - 把这场病按流感治下去，不让镇子慌起来
@@ -265,7 +284,7 @@ agendas:
     once: true
     source: clinic 守秘人须知；ante 人物资料
   - id: ante_notes_guard
-    text: 被问到病程时，他只重复“这只是流感，我们会压下去的”；病历本只在被说服后才拿出来。
+    text: 被问到病程时，他只重复“这只是流感，我们会压下去的”。
     meet: true
     once: false
     source: c_notes「安特医生的病历」（说服常规）；c_ante_cure「安特医生证实的事」
@@ -304,10 +323,6 @@ agendas:
     when: at:pastor:church
     meet: true
     once: true
-  - id: insist_burial
-    text: 镇子越来越糟时，坚持雪一停就立刻下葬，不再等。
-    when: flag:disease_phase3
-    meet: false
 history:
 - when: 多年前，大战之前
   text: 埃里·赫琴斯与卡洛琳·达维尔在原卡德威尔家的废弃农舍里找到一本属于犹格-索托斯的典籍，两人一起研习其中的法术。

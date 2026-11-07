@@ -14,16 +14,26 @@ clues:
   feature: 门廊
   requires:
   - flag:mccurdy_dead
-  check:
-    skill: 侦查
   sanity: 0/1D3
   points_to:
   - k_broken
-  text: 死者是杂货店理货员肯尼思·麦克迪。衣服千疮百孔，浑身污秽和伤疤；他的眼睛结膜充血、眼眶淤青，像是盯着什么强光看了太久。
+  text: 死者衣服千疮百孔，浑身污秽和伤疤。认识他的人认得出，这是杂货店理货员肯尼思·麦克迪。
+- id: c_mccurdy_eyes
+  title: 麦克迪的眼睛
+  where: meeting_house
+  feature: 门廊
+  requires:
+  - flag:mccurdy_dead
+  check:
+    skill: 侦查
+  points_to:
+  - k_broken
+  text: 他的眼睛结膜充血、眼眶淤青，像是盯着什么强光看了太久。
 - id: c_jensen_pickup
   title: 不像验尸官的收尸人
   where: meeting_house
   feature: 门廊
+  npc: jensen
   requires:
   - flag:mccurdy_dead
   points_to:
@@ -33,8 +43,6 @@ clues:
   title: 路人的胡话
   where: main_street
   feature: 路过的镇民
-  check:
-    skill: 心理学
   core: true
   points_to:
   - k_broken
@@ -90,16 +98,23 @@ clues:
   text: 雪莉和马克辛端来一盘剖得极其精细的青蛙，用远超年龄的术语讲解器官，又一个接一个地考问你们的学问。
 - id: c_basement
   title: 地下室
-  where: ferguson_house
-  feature: 地下室门
-  check:
-    skill: 聆听
+  where: ferguson_basement
+  feature: 解剖台
   sanity: 1/1D6
   core: true
   points_to:
   - k_blessed
   - k_broken
-  text: 地下室门后传来含混的呻吟。下面是一张绑着唐纳德·弗格森的桌子，旁边摆着解剖刀和骨锯——他被打了镇静剂，伤得不可能还活着，却还活着。
+  text: 下面是一张绑着唐纳德·弗格森的桌子，旁边摆着解剖刀和骨锯——他被打了镇静剂，伤得不可能还活着，却还活着。
+- id: c_basement_moan
+  title: 地下室门后的呻吟
+  where: ferguson_house
+  feature: 地下室门
+  check:
+    skill: 聆听
+  points_to:
+  - k_blessed
+  text: 地下室门后传来含混的呻吟。
 - id: c_mcdermott_table
   title: 冷掉的晚饭
   where: mcdermott_house
@@ -120,8 +135,6 @@ clues:
   title: 雷蒙德的音乐
   where: lowry_house
   feature: 客厅乐器堆
-  check:
-    skill: 聆听
   points_to:
   - k_blessed
   text: 起初只是噪音，听了几分钟却甘之如饴，好像能听出一套精密的旋律；再听下去，你眼前隐约浮现出乐曲的颜色。

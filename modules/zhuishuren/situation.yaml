@@ -236,12 +236,6 @@ agendas:
     once: false
     only_if: 调查员用恐吓成功或困难说服要挟他，或当面把酒递给他、他收下以后
     source: 守秘人须知 墓地（要挟与贿赂）；c_jefferson_ghost；jefferson 秘密
-  - id: night_alarm
-    text: 若夜里墓地传出枪响或尖叫，他会躲在远处，或跑去喊警察，但不会主动靠近坟墓。
-    when: hour:22-6
-    only_if: 墓地里传出枪响或尖叫
-    ruling: true
-    source: 补写（守秘人须知 “警察！警察！”跑开；人物资料 怕惹麻烦）
   - id: jefferson_sight_figure
     text: 收工前绕到道格拉斯常坐的那块墓碑附近，看见人影就远远退开，回工具棚喝一口酒压惊。
     when: D1 23:00
@@ -252,16 +246,6 @@ agendas:
     meet: true
     once: false
     source: 守秘人须知 墓地：孤注一掷失败后杰弗逊厌恶调查员
-- npc: odell
-  goals:
-  - 买完东西回家，顺便看清这个陌生人体不体面
-  - 守住这一带街面上的老规矩，不让不三不四的事上门
-  steps:
-  - id: odell_night_sounds
-    text: 和调查员在门口搭上话后，她压低声音说，近来深更半夜墓地那头常传来沉闷的响动——像有人搬石头、往坑里填土，一下一下的，听得人心里发毛；她说从前可没这动静，还劝你天黑后别往那边去。
-    meet: true
-    once: true
-    source: c_odell_night_sounds
 history:
 - when: 约六年前
   text: 道格拉斯在公墓那块老墓碑上读书，满月之夜，一扇嵌在坟墓里的门嘎吱打开，一头食尸鬼探出头来轻叫一声。此后两者的奇妙友谊持续了五年。

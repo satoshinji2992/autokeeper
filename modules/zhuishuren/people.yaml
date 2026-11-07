@@ -68,7 +68,7 @@ npcs:
       - 他口袋里揣着一瓶违禁的酒
     lies:
       - 墓地里没什么怪事，我还有许多活要干，得马上走
-    clues: [c_jefferson_tomb, c_jefferson_hiding, c_jefferson_ghost]
+    clues: [c_jefferson_tomb, c_jefferson_hiding, c_jefferson_ghost, c_jefferson_ghost_bribe]
     gates:
       c_jefferson_tomb: {skill: 魅惑}
       c_jefferson_hiding: {skill: 心理学}

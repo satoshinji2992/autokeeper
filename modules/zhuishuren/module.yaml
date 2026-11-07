@@ -58,6 +58,7 @@ flags:
   window_locked: 调查员锁上或加固了书房窗户
   tomb_opened: 陵墓的门被打开了
   fainted: 调查员没屏住呼吸，被陵墓的恶臭熏昏
+  held_breath: 调查员打开陵墓门时特别说明了要屏住呼吸
   tunnel_found: 调查员在陵墓里找到了通向地底的隧道
   in_tunnels: 调查员下到了隧道网里
   tunnel_ignored: 调查员找到隧道但没有下去

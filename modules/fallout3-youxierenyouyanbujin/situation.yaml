@@ -263,10 +263,6 @@ agendas:
   - 劝人看望远镜，领略宇宙的奥妙
   - 保持与大智慧的联系不断
   steps:
-  - id: hart_checks_scope
-    text: 趁没人时检查镜片和铜管，把备件从工作室搬到温室顺手边。
-    when: D1 23:00
-    does: at:hart:greenhouse
   - id: hart_nightly_scope
     text: 每晚半夜，牧师送来的会众在温室里看望远镜；只要每晚至少一人看，联系就不会断。
     when: D2 00:00
@@ -285,11 +281,17 @@ agendas:
     meet: false
     source: 守秘人剧情（每天晚上都有正常镇民去看教授的望远镜）；开幕剧情（玩家按兵不动时，拜访哈特教授的镇民日日增多）；补写：时刻
   - id: hart_third_night
-    text: 第三夜来看望远镜的人更多，挨家谈话的政府巡视员也被领来：教授和他们谈过以后，请他们看了望远镜。
+    text: 第三夜来看望远镜的人更多。
     when: D4 05:00 & !flag:telescope_destroyed
     does: at:hart:greenhouse & flag:town_stage_3
     meet: false
-    source: 政府巡视员（如果调查员不管，他们最后会和教授谈话，并看望远镜）；守秘人剧情；补写：时刻
+    source: 守秘人剧情（每天晚上都有正常镇民去看教授的望远镜）；开幕剧情（拜访哈特教授的镇民日日增多）；补写：时刻
+  - id: hart_third_night_inspectors
+    text: 同一夜，挨家谈话的政府巡视员被领到教授家，教授和他们谈过以后，请他们看了望远镜。
+    when: D4 05:00 & !flag:telescope_destroyed
+    meet: false
+    only_if: 调查员没有把巡视员带离、保护起来或拦下，巡视员仍在镇上挨家谈话
+    source: 政府巡视员（如果调查员不管，他们最后会和教授谈话，并看望远镜）；补写：时刻
   - id: hart_fourth_night
     text: 第四夜照旧有人来看望远镜，联系没有断；镇上的公用事业和买卖已全由有福者和崩溃者奴隶把持。
     when: D5 05:00 & !flag:telescope_destroyed

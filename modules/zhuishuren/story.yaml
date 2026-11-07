@@ -46,14 +46,14 @@ events:
     sets: []
   - id: e_fainted
     title: 墓碑上的身影
-    when: flag:fainted
+    when: flag:tomb_opened & !flag:held_breath
     advance_to: '20:00'  # 原作：晚上苏醒；20:00 是 AutoKeeper 补充的具体钟点
     move_to: mudi
     text: 被恶臭熏昏的调查员在晚上苏醒，道格拉斯就坐在一旁的墓碑上。照“如果调查员试图和人影交谈”处理。
     read_aloud: 你在冰冷的草地上醒来，天已经黑透了。月光下，旁边那块矮墓碑上坐着一个人，膝上摊着一本书。
     sanity: 0/1D4
     sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
-    sets: []
+    sets: [fainted]
     present:
     - douglas
   - id: e_tunnel_maze

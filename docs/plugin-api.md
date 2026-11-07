@@ -10,14 +10,14 @@
 
 一次行动跨过多个周期时，可返回 `repeat: true`，宿主先完成这段效果，再以更新后的属性和状态重新调用，最多连续 8 段。下一段的检定会使用上一段扣减后的真实属性；不要把数天的检定在一次输出内用旧属性重复掷完。每段和整个事件分别保存执行记录，恢复时不重复结算。
 
-- `event.hook`：`start`（本插件首次启用）、`turn`（行动和耗时结算后）、`visit`（到达地点）、`action`（裁定员调用已声明动作）。`event.action`/`event.arguments` 用于 action；turn 带 `action` 的行动摘要字典。
+- `event.hook`：`start`（本插件首次启用）、`turn`（行动和耗时结算后）、`visit`（到达地点）、`action`（守秘人在定案里调用已声明动作，Settlement.plugins）。`event.action`/`event.arguments` 用于 action；turn 带 `action` 的行动摘要字典。
 - `ctx.state` 是本插件的 JSON 状态（首次为 initial）；`ctx.turn`、`ctx.minutes`、`ctx.location`、`ctx.flags`、`ctx.clues`、`ctx.investigators`、`ctx.previous_version` 可读。调查员包含 id、characteristics、hp、san、inventory、conditions；不提供密钥、配置或对话记录。
 - `api.roll("2D10") -> [3, 8]` 返回每颗骰值；支持 1–20 颗 D1–D999，由房主骰子服务实际掷骰。需要 `dice` 能力。
 - `api.check(who, "体质", "常规", bonus=0) -> {passed, value, target, text}` 使用宿主统一检定接口，需要 `dice`。who 为调查员 id，难度可为常规、困难、极难，bonus 为 -2 至 2 的奖惩骰。不能提供自定目标值、来源或受众；插件检定默认不勾技能成长。
 - `effects` 是声明效果的列表；每种效果必须在 capabilities 声明。`note`：公开叙事 `text`；`flag`：`key` 已声明剧情标记；`attribute`：`who`、`key` 中文属性名、`amount` 增减；`condition`：`who`、`key` 状态名、`amount: 1` 添加或 `-1` 移除；`damage`：`who`、`amount` 非负伤害；`sanity`：`who`、`success: "0"`、`failure: "1D6"`；`clue`：`key` 当前地点且满足前置条件的已有线索。
 - 只输出已发生的事实；私有计数器写 state，不用 note 公开。不要通过 attribute 改写 HP/SAN；用宿主的 damage/sanity 以保留重伤、疯狂等规则。
 - `status`（可选）：一行面向玩家的公开状态，例如 `"风寒：第 2 天"`，会显示在玩家的规则插件窗口（Ctrl+K），联机时也同步给所有人。默认不显示；只放可以公开的进度，不要把私有计数直接 status。effects 每次产生公开内容时，会在故事里生成一行以插件名标注的简短提示。
-- 插件 actions 用 `[{"name":"buy", "description":"何时可以调用；arguments 的键、类型和范围"}]` 声明，hooks 包含 action；宿主裁定员会按玩家实际行动调用。函数自行检查参数，不能相信愿望已经达成。
+- 插件 actions 用 `[{"name":"buy", "description":"何时可以调用；arguments 的键、类型和范围"}]` 声明，hooks 包含 action；宿主的守秘人会按玩家实际行动调用。函数自行检查参数，不能相信愿望已经达成。
 
 测试结构：`{name, event, state, context, dice, checks, expected_state, expected_effects}`。dice 是 api.roll 依次消耗的预设单骰，checks 是 api.check 依次返回的通过/失败。context 覆盖默认场景；expected_state 按子集断言，expected_effects 按补全默认字段后的完整列表断言。预设骰值必须用完。至少覆盖正常流程与边界/失败，不能写只验证空输出的假测试。完整返回类型见 `_example/plugin-output.schema.json`。
 
