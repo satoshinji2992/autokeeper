@@ -883,54 +883,244 @@ passages:
     locked: true
   perception: 走廊短，编辑部里能看见谁进了资料室
 plans:
-- building: jinboer_jia
-  floors:
-  - name: 一层
-    rooms:
-    - place: jinboer_jia
-      label: 走廊与客厅
-      x: 0
-      y: 4
-      w: 22
-      h: 6
-    - place: kongwoshi
-      x: 0
-      y: 0
-      w: 18
-      h: 5
-    - place: tuomasi_woshi
-      x: 0
-      y: 9
-      w: 16
-      h: 5
-    - place: shufang
-      x: 15
-      y: 9
-      w: 18
-      h: 5
-  basis: 原文与“道格拉斯的世界”地图：艾尔斯伯里大街 218 号是一栋小屋，地图上为 L 形单栋房屋，书房（地图标 2）在 L 形一端；房间有书房、托马斯住的房间和空卧室。AutoKeeper
-    补充：原文没写楼层与房间排布，按单层小屋安排，卧室与书房都开在走廊上。
 - building: baoshe
   floors:
   - name: 二层
     level: 1
     rooms:
     - place: bianjibu
-      x: 0
-      y: 4
-      w: 16
-      h: 5
     - place: ziliaoshi
-      x: 0
-      y: 0
-      w: 16
-      h: 5
   - name: 一层
     rooms:
     - place: baoshe
       label: 楼下印刷间
-      x: 0
-      y: 0
-      w: 22
-      h: 6
+      size: large
   basis: 原文：编辑须放行，调查员才能“进入报社资料室”查旧刊，并在里面做数小时的图书馆使用。AutoKeeper 补充：楼层（楼下印刷、楼上编辑部）沿用模组已有描述，原文没写。
+  layout:
+    rooms:
+    - {place: baoshe, x: 10, y: 10, w: 12, h: 9}
+    - {place: bianjibu, x: 10, y: 10, w: 7, h: 9}
+    - {place: ziliaoshi, x: 17, y: 10, w: 5, h: 9}
+    doors:
+    - {passage: zhenzhongxin__baoshe, at: [16, 19], width: 2, main: true}
+    - {passage: bianjibu__ziliaoshi, at: [17, 14]}
+    windows:
+    - {room: baoshe, at: [12.5, 19], width: 1.5}
+    - {room: baoshe, at: [20, 19], width: 1.5}
+    - {room: baoshe, at: [22, 14], width: 1.5}
+    - {room: bianjibu, at: [13.5, 19], width: 1.5}
+    - {room: bianjibu, at: [14, 10], width: 1.5}
+    - {room: ziliaoshi, at: [19.5, 10]}
+    stairs:
+    - {passage: baoshe__bianjibu, x: 10.5, y: 11, w: 1, h: 4}
+    fixtures:
+    - {room: baoshe, feature: 编辑, label: 编辑, sketch: person, x: 11.8, y: 15.3, w: 0.8, h: 0.8}
+    - {room: baoshe, feature: 资料室, label: 资料室(楼上), sketch: stairs, x: 11.8, y: 11, w: 1, h: 1}
+    - {room: baoshe, feature: 旧刊, label: 旧刊(楼上), sketch: stairs, x: 11.8, y: 12.4, w: 1, h: 1}
+    - {room: baoshe, feature: 记者的笔记, label: 记者笔记(楼上), sketch: stairs, x: 11.8, y: 13.8, w: 1, h: 1}
+    - {room: baoshe, sketch: machine, x: 15, y: 12, w: 5, h: 3}
+    - {room: baoshe, sketch: boxes, x: 19.5, y: 16, w: 2, h: 2}
+    - {room: bianjibu, feature: 校样和稿纸, label: 校样和稿纸, sketch: papers, x: 12.5, y: 16.5, w: 1.5, h: 1}
+    - {room: bianjibu, feature: 通往资料室的走廊, label: 去资料室的走廊, sketch: door, x: 13, y: 13.5, w: 3, h: 1}
+    - {room: bianjibu, sketch: desk, x: 14, y: 11.5, w: 1.2, h: 0.6}
+    - {room: bianjibu, sketch: desk, x: 14.5, y: 16.5, w: 1.2, h: 0.6}
+    - {room: bianjibu, sketch: chair, x: 14.3, y: 12.3, w: 0.5, h: 0.5}
+    - {room: ziliaoshi, feature: 过期旧刊, label: 过期旧刊, sketch: shelf, x: 21.6, y: 11, w: 0.4, h: 7.5}
+    - {room: ziliaoshi, feature: 记者的笔记, label: 记者的笔记, sketch: papers, x: 18.5, y: 11, w: 0.8, h: 0.6}
+    - {room: ziliaoshi, sketch: boxes, x: 18.5, y: 16.5, w: 2, h: 1.5}
+    sides:
+    - {side: s, faces: 镇中心大街, way: main_street, place: zhenzhongxin}
+    - {side: e, faces: 艾尔斯伯里大街方向, way: aylesbury_street}
+    - {side: n, faces: 后院}
+    - {side: w, faces: 邻居家}
+    basis: 没有原书平面图，原文也没有写到这栋建筑的句子。按房间说明和常理排的：楼下是印刷间，楼上编辑部在西、资料室在东，门开在两间共用的墙上；正门开在南面，对着镇中心大街。具体尺寸、楼梯位置、窗户和家具都是
+      AutoKeeper 补的。
+- building: jinboer_jia
+  floors:
+  - name: 一层
+    rooms:
+    - place: jinboer_jia
+      label: 走廊与客厅
+      size: large
+    - place: kongwoshi
+    - place: tuomasi_woshi
+    - place: shufang
+  basis: 原文与“道格拉斯的世界”地图：艾尔斯伯里大街 218 号是一栋小屋，地图上为 L 形单栋房屋，书房（地图标 2）在 L 形一端；房间有书房、托马斯住的房间和空卧室。AutoKeeper
+    补充：原文没写楼层与房间排布，按单层小屋安排，卧室与书房都开在走廊上。
+  layout:
+    rooms:
+    - {place: kongwoshi, x: 8, y: 0, w: 7, h: 4}
+    - {place: jinboer_jia, x: 8, y: 4, w: 7, h: 8}
+    - {place: tuomasi_woshi, x: 4, y: 12, w: 6, h: 4}
+    - {place: shufang, x: 10, y: 12, w: 5, h: 4}
+    doors:
+    - {passage: jinboer_jia__jiefang, at: [8, 6.5], main: true}
+    - {passage: jinboer_jia__mudi, at: [15, 8]}
+    - {passage: jinboer_jia__shufang, at: [12.5, 12]}
+    - {passage: jinboer_jia__kongwoshi, at: [11.5, 4]}
+    - {passage: jinboer_jia__tuomasi_woshi, at: [9, 12]}
+    windows:
+    - {room: kongwoshi, at: [15, 2]}
+    - {room: kongwoshi, at: [11.5, 0]}
+    - {room: jinboer_jia, at: [8, 9.5]}
+    - {room: jinboer_jia, at: [15, 5.5]}
+    - {room: tuomasi_woshi, at: [7, 16]}
+    - {room: tuomasi_woshi, at: [4, 14.5]}
+    - {room: shufang, at: [15, 14]}
+    fixtures:
+    - {room: jinboer_jia, feature: 托马斯·金博尔, label: 托马斯, sketch: person, x: 10, y: 7, w: 0.6, h: 0.6}
+    - {room: jinboer_jia, feature: 客厅, label: 客厅, sketch: lounge, x: 12.5, y: 5.5, w: 2, h: 1.5}
+    - {room: jinboer_jia, feature: 调查员的空卧室, label: 空卧室, sketch: door, x: 12.7, y: 4.2, w: 0.8, h: 0.6}
+    - {room: jinboer_jia, feature: 屋后通往公墓的小路, label: 去公墓的小路, sketch: path, outside: true, x: 15.5, y: 7.5,
+      w: 2.5, h: 1}
+    - {room: kongwoshi, feature: 床, label: 床, sketch: bed, x: 8.2, y: 0.6, w: 1, h: 2}
+    - {room: kongwoshi, feature: 衣柜, label: 衣柜, sketch: wardrobe, x: 9.5, y: 0, w: 1.2, h: 0.6}
+    - {room: kongwoshi, feature: 窗户, label: 窗户, sketch: window, x: 14.6, y: 1.5, w: 0.4, h: 1}
+    - {room: kongwoshi, sketch: chair, x: 13.5, y: 3, w: 0.5, h: 0.5}
+    - {room: tuomasi_woshi, feature: 床, label: 床, sketch: bed, x: 4.2, y: 13.5, w: 2, h: 1}
+    - {room: tuomasi_woshi, feature: 没拆完的箱子, label: 箱子, sketch: boxes, x: 4.2, y: 12.4, w: 1, h: 0.8}
+    - {room: tuomasi_woshi, sketch: chair, x: 8.8, y: 15, w: 0.5, h: 0.5}
+    - {room: shufang, feature: 书架上的空档, label: 书架空档, sketch: shelf, x: 11, y: 15.6, w: 3, h: 0.4}
+    - {room: shufang, feature: 藏书, label: 藏书, sketch: shelf, x: 10, y: 12.7, w: 0.4, h: 3.3}
+    - {room: shufang, feature: 书房窗户, label: 书房窗户, sketch: window, x: 14.6, y: 13.5, w: 0.4, h: 1}
+    - {room: shufang, feature: 旧书桌, label: 旧书桌, sketch: desk, x: 13.8, y: 13.4, w: 0.6, h: 1.2}
+    - {room: shufang, feature: 花瓶, label: 花瓶, sketch: vessel, x: 14.4, y: 12.2, w: 0.4, h: 0.4}
+    sides:
+    - {side: n, faces: 树林空地}
+    - {side: w, faces: 去艾尔斯伯里大街的小路, way: aylesbury_to_house, place: jiefang}
+    - {side: e, faces: 公墓, way: cemetery_dirt_road, place: mudi}
+    - {side: s, faces: 树林}
+    basis: 照原书“道格拉斯的世界”地图：L 形单栋，竖臂在东、短臂在南向西伸，书房（标 2）在东南端，公墓在东；楼层与房间排布原文没写，由 AutoKeeper 按单层小屋补全，正门开在朝大街的西墙
+
+geography:
+  title: 阿诺兹堡
+  subtitle: 美国密歇根州 · 一九二二年
+  minutes_across: 68
+  places:
+  - place: huochezhan
+    at: [0.1, 0.62]
+    glyph: public
+  - place: zhenzhongxin
+    at: [0.3, 0.5]
+    glyph: street
+  - place: jiefang
+    at: [0.55, 0.42]
+    glyph: street
+  - place: jinboer_jia
+    at: [0.75, 0.54]
+    glyph: house
+  - place: mudi
+    at: [0.88, 0.44]
+    glyph: graveyard
+  ways:
+  - id: main_street
+    kind: main
+    points:
+    - [0.22, 0.55]
+    - [0.3, 0.5]
+    - [0.38, 0.46]
+    street: zhenzhongxin
+  - id: station_road
+    kind: main
+    points:
+    - [0.1, 0.62]
+    - [0.16, 0.59]
+    - [0.22, 0.55]
+    passage: huochezhan__zhenzhongxin
+  - id: aylesbury_street
+    kind: main
+    points:
+    - [0.38, 0.46]
+    - [0.47, 0.43]
+    - [0.55, 0.42]
+    - [0.63, 0.44]
+    - [0.68, 0.47]
+    street: jiefang
+  - id: center_to_aylesbury
+    kind: main
+    points:
+    - [0.32, 0.49]
+    - [0.38, 0.46]
+    - [0.45, 0.44]
+    passage: jiefang__zhenzhongxin
+  - id: aylesbury_to_house
+    kind: lane
+    points:
+    - [0.63, 0.44]
+    - [0.68, 0.47]
+    - [0.72, 0.51]
+    - [0.75, 0.54]
+    passage: jinboer_jia__jiefang
+  - id: cemetery_dirt_road
+    kind: lane
+    points:
+    - [0.76, 0.54]
+    - [0.79, 0.5]
+    - [0.82, 0.52]
+    - [0.85, 0.49]
+    - [0.88, 0.44]
+    passage: jinboer_jia__mudi
+  - id: street_to_cemetery
+    kind: lane
+    points:
+    - [0.57, 0.41]
+    - [0.66, 0.37]
+    - [0.77, 0.36]
+    - [0.86, 0.41]
+    passage: jiefang__mudi
+  - id: north_road
+    kind: main
+    points:
+    - [0.3, 0.5]
+    - [0.29, 0.3]
+    - [0.31, 0.1]
+    - [0.3, -0.05]
+  - id: west_road
+    kind: main
+    points:
+    - [0.1, 0.62]
+    - [0.04, 0.65]
+    - [-0.05, 0.66]
+  regions:
+  - kind: woods
+    shape:
+    - [0.91, 0.3]
+    - [1.0, 0.28]
+    - [1.0, 0.72]
+    - [0.93, 0.7]
+    - [0.92, 0.55]
+    near: mudi
+  - kind: woods
+    shape:
+    - [0.74, 0.6]
+    - [0.86, 0.57]
+    - [0.9, 0.7]
+    - [0.78, 0.74]
+    near: jinboer_jia
+  - kind: woods
+    shape:
+    - [0.7, 0.2]
+    - [0.86, 0.18]
+    - [0.88, 0.3]
+    - [0.72, 0.31]
+    near: mudi
+  - kind: fields
+    shape:
+    - [0.05, 0.75]
+    - [0.3, 0.68]
+    - [0.45, 0.8]
+    - [0.4, 0.95]
+    - [0.08, 0.95]
+  - kind: fields
+    shape:
+    - [0.05, 0.2]
+    - [0.22, 0.18]
+    - [0.24, 0.42]
+    - [0.06, 0.45]
+  houses:
+  - along: main_street
+    span: [0.1, 0.9]
+    density: dense
+  - along: aylesbury_street
+    span: [0.0, 0.9]
+  basis: 金博尔家与公墓的相对位置照原书第13页地图（L形木屋在西，土路向东蜿蜒，越过石墙进入公墓，墓碑和隧道在东北深处）；火车站、镇中心、艾尔斯伯里大街原书地图上没画，按原文“大街尽头、公墓旁的218号”和通路分钟数推算，放在西边。

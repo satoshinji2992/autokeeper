@@ -456,6 +456,49 @@
    "title": "Die",
    "type": "object"
   },
+  "Door": {
+   "properties": {
+    "passage": {
+     "default": "",
+     "description": "这扇门走的通路 id（房间之间的门、通往外面的门）；原文写到却没有通路的外门（后门）留空并写 room",
+     "title": "Passage",
+     "type": "string"
+    },
+    "room": {
+     "default": "",
+     "description": "只给没有通路的外门写：开在哪个房间的外墙上",
+     "title": "Room",
+     "type": "string"
+    },
+    "at": {
+     "description": "门的中点 [x, y]，在墙线上：两间之间的门在它们共用的那段墙上，外门在房间的外墙上",
+     "items": {
+      "type": "number"
+     },
+     "maxItems": 2,
+     "minItems": 2,
+     "title": "At",
+     "type": "array"
+    },
+    "width": {
+     "default": 1.0,
+     "description": "门宽（米），普通门 1，双开门 2",
+     "title": "Width",
+     "type": "number"
+    },
+    "main": {
+     "default": false,
+     "description": "正门：进这栋建筑的那扇门，整栋只有一扇",
+     "title": "Main",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "at"
+   ],
+   "title": "Door",
+   "type": "object"
+  },
   "Ending": {
    "properties": {
     "id": {
@@ -727,6 +770,135 @@
    "title": "Event",
    "type": "object"
   },
+  "Facing": {
+   "properties": {
+    "side": {
+     "description": "n 北面、e 东面、s 南面、w 西面",
+     "enum": [
+      "n",
+      "e",
+      "s",
+      "w"
+     ],
+     "title": "Side",
+     "type": "string"
+    },
+    "faces": {
+     "description": "这一面外面是什么，十个字以内：艾尔斯伯里大街、后院、公墓、邻居家、空地",
+     "title": "Faces",
+     "type": "string"
+    },
+    "way": {
+     "default": "",
+     "description": "这一面对着全镇地图上的哪条路（ways 里的 id）；不是路留空",
+     "title": "Way",
+     "type": "string"
+    },
+    "place": {
+     "default": "",
+     "description": "这一面对着哪个地点（地点 id，不是这栋建筑里的）；不是哪个地点留空",
+     "title": "Place",
+     "type": "string"
+    }
+   },
+   "required": [
+    "side",
+    "faces"
+   ],
+   "title": "Facing",
+   "type": "object"
+  },
+  "Fixture": {
+   "properties": {
+    "room": {
+     "description": "在哪个房间",
+     "title": "Room",
+     "type": "string"
+    },
+    "feature": {
+     "default": "",
+     "description": "这个房间可调查的哪一项（逐字照抄 features 里的一项）；原文写到、不在 features 里的家具留空",
+     "title": "Feature",
+     "type": "string"
+    },
+    "label": {
+     "default": "",
+     "description": "图上写的字，八个字以内（书架上的空档 → 书架空档）；不写字的家具留空",
+     "title": "Label",
+     "type": "string"
+    },
+    "sketch": {
+     "default": "thing",
+     "description": "画成什么",
+     "enum": [
+      "bed",
+      "wardrobe",
+      "shelf",
+      "desk",
+      "table",
+      "longtable",
+      "chair",
+      "lounge",
+      "fireplace",
+      "stove",
+      "sink",
+      "coffin",
+      "altar",
+      "boxes",
+      "papers",
+      "vessel",
+      "piano",
+      "rug",
+      "clutter",
+      "machine",
+      "plant",
+      "mark",
+      "door",
+      "window",
+      "stairs",
+      "path",
+      "person",
+      "animal",
+      "area",
+      "thing"
+     ],
+     "title": "Sketch",
+     "type": "string"
+    },
+    "outside": {
+     "default": false,
+     "description": "在这个房间的外墙外面（门口的狗窝、屋后的小路）；在房间里的不写",
+     "title": "Outside",
+     "type": "boolean"
+    },
+    "x": {
+     "title": "X",
+     "type": "number"
+    },
+    "y": {
+     "title": "Y",
+     "type": "number"
+    },
+    "w": {
+     "title": "W",
+     "type": "number"
+    },
+    "h": {
+     "description": "占的长方形（米）：在房间里，不挡门、不压楼梯；outside 的整个在房间外墙外三米以内",
+     "title": "H",
+     "type": "number"
+    }
+   },
+   "required": [
+    "room",
+    "x",
+    "y",
+    "w",
+    "h"
+   ],
+   "title": "Fixture",
+   "type": "object"
+  },
   "Floor": {
    "properties": {
     "name": {
@@ -742,7 +914,7 @@
     },
     "rooms": {
      "items": {
-      "$ref": "#/$defs/RoomBox"
+      "$ref": "#/$defs/PlanRoom"
      },
      "title": "Rooms",
      "type": "array"
@@ -821,6 +993,80 @@
    "title": "Gate",
    "type": "object"
   },
+  "Geography": {
+   "properties": {
+    "title": {
+     "description": "地图上的大字标题：故事所在的镇、村或地方的名字，照模组原文",
+     "title": "Title",
+     "type": "string"
+    },
+    "subtitle": {
+     "default": "",
+     "description": "标题下的小字：所在地区和年代，写成“地区 · 年份”，照模组原文；原文没有的不写",
+     "title": "Subtitle",
+     "type": "string"
+    },
+    "minutes_across": {
+     "default": 0,
+     "description": "从地图西边走到东边要几分钟（比例尺用）；编译时按通路分钟数和地点坐标算出，不用填",
+     "minimum": 0,
+     "title": "Minutes Across",
+     "type": "integer"
+    },
+    "places": {
+     "description": "每个地图地点一条",
+     "items": {
+      "$ref": "#/$defs/MapPlace"
+     },
+     "title": "Places",
+     "type": "array"
+    },
+    "ways": {
+     "description": "路：每条地图通路至少一条，街道地点本身也是一条",
+     "items": {
+      "$ref": "#/$defs/Way"
+     },
+     "title": "Ways",
+     "type": "array"
+    },
+    "regions": {
+     "description": "树林、农田、山丘、水面",
+     "items": {
+      "$ref": "#/$defs/Region"
+     },
+     "title": "Regions",
+     "type": "array"
+    },
+    "houses": {
+     "description": "没有名字的房子沿哪些路分布",
+     "items": {
+      "$ref": "#/$defs/Houses"
+     },
+     "title": "Houses",
+     "type": "array"
+    },
+    "landmarks": {
+     "description": "原书地图上有、模组地点里没有的建筑；没有原书地图不写",
+     "items": {
+      "$ref": "#/$defs/Landmark"
+     },
+     "title": "Landmarks",
+     "type": "array"
+    },
+    "basis": {
+     "default": "",
+     "description": "依据：原书地图、原文方位与通路分钟数，或程序推算",
+     "title": "Basis",
+     "type": "string"
+    }
+   },
+   "required": [
+    "title",
+    "places"
+   ],
+   "title": "Geography",
+   "type": "object"
+  },
   "Handout": {
    "properties": {
     "id": {
@@ -884,6 +1130,44 @@
     "text"
    ],
    "title": "Handout",
+   "type": "object"
+  },
+  "Houses": {
+   "properties": {
+    "along": {
+     "description": "沿哪条路（way id）",
+     "title": "Along",
+     "type": "string"
+    },
+    "span": {
+     "default": [
+      0.0,
+      1.0
+     ],
+     "description": "从这条路的哪里到哪里，按路长的比例 [起, 止]，0..1",
+     "items": {
+      "type": "number"
+     },
+     "maxItems": 2,
+     "minItems": 2,
+     "title": "Span",
+     "type": "array"
+    },
+    "density": {
+     "default": "sparse",
+     "description": "dense 镇中心街两旁成排的房子和店铺，sparse 沿路零星的农舍",
+     "enum": [
+      "dense",
+      "sparse"
+     ],
+     "title": "Density",
+     "type": "string"
+    }
+   },
+   "required": [
+    "along"
+   ],
+   "title": "Houses",
    "type": "object"
   },
   "InteriorReview": {
@@ -1146,6 +1430,113 @@
     "where"
    ],
    "title": "Item",
+   "type": "object"
+  },
+  "Landmark": {
+   "properties": {
+    "name": {
+     "description": "原书地图上标着、模组地点里没有的建筑或地标的名字：学校、火车站",
+     "title": "Name",
+     "type": "string"
+    },
+    "at": {
+     "description": "[x, y]，x 由西向东、y 由北向南，0..1",
+     "items": {
+      "type": "number"
+     },
+     "maxItems": 2,
+     "minItems": 2,
+     "title": "At",
+     "type": "array"
+    },
+    "glyph": {
+     "enum": [
+      "church",
+      "clinic",
+      "house",
+      "farm",
+      "ruin",
+      "shop",
+      "public",
+      "hill",
+      "woods",
+      "graveyard",
+      "street",
+      "other"
+     ],
+     "title": "Glyph",
+     "type": "string"
+    }
+   },
+   "required": [
+    "name",
+    "at",
+    "glyph"
+   ],
+   "title": "Landmark",
+   "type": "object"
+  },
+  "Layout": {
+   "properties": {
+    "rooms": {
+     "description": "每个房间一块长方形，全楼各层同一张格子",
+     "items": {
+      "$ref": "#/$defs/RoomRect"
+     },
+     "title": "Rooms",
+     "type": "array"
+    },
+    "doors": {
+     "description": "每条同层房间之间的通路一扇，每条通往外面的通路一扇，原文写到的别的外门也写",
+     "items": {
+      "$ref": "#/$defs/Door"
+     },
+     "title": "Doors",
+     "type": "array"
+    },
+    "windows": {
+     "description": "原文写到的窗，和住人、做事的房间外墙上平常该有的窗",
+     "items": {
+      "$ref": "#/$defs/Window"
+     },
+     "title": "Windows",
+     "type": "array"
+    },
+    "stairs": {
+     "description": "每条两端在不同楼层的通路一段",
+     "items": {
+      "$ref": "#/$defs/Stair"
+     },
+     "title": "Stairs",
+     "type": "array"
+    },
+    "fixtures": {
+     "description": "每个房间的每一项可调查的东西一条，再加原文写到的家具",
+     "items": {
+      "$ref": "#/$defs/Fixture"
+     },
+     "title": "Fixtures",
+     "type": "array"
+    },
+    "sides": {
+     "description": "四面各一条：外面对着什么",
+     "items": {
+      "$ref": "#/$defs/Facing"
+     },
+     "title": "Sides",
+     "type": "array"
+    },
+    "basis": {
+     "default": "",
+     "description": "依据：照原书平面图、照原文描述，或哪些是 AutoKeeper 补的",
+     "title": "Basis",
+     "type": "string"
+    }
+   },
+   "required": [
+    "rooms"
+   ],
+   "title": "Layout",
    "type": "object"
   },
   "Leg": {
@@ -1412,6 +1803,51 @@
     "change"
    ],
    "title": "Look",
+   "type": "object"
+  },
+  "MapPlace": {
+   "properties": {
+    "place": {
+     "description": "地图地点 id（geography.sites：最外层的区域，和室外走到的建筑、场所，不是建筑里的房间）",
+     "title": "Place",
+     "type": "string"
+    },
+    "at": {
+     "description": "地图上的位置 [x, y]：x 由西（0）向东（1），y 由北（0）向南（1）",
+     "items": {
+      "type": "number"
+     },
+     "maxItems": 2,
+     "minItems": 2,
+     "title": "At",
+     "type": "array"
+    },
+    "glyph": {
+     "description": "画成什么：church 教堂、clinic 诊所医院、house 普通住家、farm 谷仓农场、ruin 废屋、shop 邮局商铺饭馆、public 学校警局银行车站等公共建筑、hill 山丘、woods 树林、graveyard 墓地、street 街道广场、other 别的",
+     "enum": [
+      "church",
+      "clinic",
+      "house",
+      "farm",
+      "ruin",
+      "shop",
+      "public",
+      "hill",
+      "woods",
+      "graveyard",
+      "street",
+      "other"
+     ],
+     "title": "Glyph",
+     "type": "string"
+    }
+   },
+   "required": [
+    "place",
+    "at",
+    "glyph"
+   ],
+   "title": "MapPlace",
    "type": "object"
   },
   "Mechanic": {
@@ -1939,12 +2375,55 @@
      "description": "依据：原文写明的布局，或注明是 AutoKeeper 补全",
      "title": "Basis",
      "type": "string"
+    },
+    "layout": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Layout"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "房间、门窗、楼梯、陈设的位置和四面朝向；编译期的「平面布局」一步写"
     }
    },
    "required": [
     "building"
    ],
    "title": "Plan",
+   "type": "object"
+  },
+  "PlanRoom": {
+   "properties": {
+    "place": {
+     "description": "房间的实际地点 id；建筑本身也可以是一间（它的主厅）",
+     "title": "Place",
+     "type": "string"
+    },
+    "label": {
+     "default": "",
+     "description": "平面图上的叫法，只给建筑本身那一间用（礼拜堂、大堂）；其余房间用地点名",
+     "title": "Label",
+     "type": "string"
+    },
+    "size": {
+     "default": "medium",
+     "description": "大小：small 储藏间、卫生间；medium 普通房间；large 大厅、礼拜堂",
+     "enum": [
+      "small",
+      "medium",
+      "large"
+     ],
+     "title": "Size",
+     "type": "string"
+    }
+   },
+   "required": [
+    "place"
+   ],
+   "title": "PlanRoom",
    "type": "object"
   },
   "Plugin": {
@@ -2120,40 +2599,74 @@
    "title": "PreparationReview",
    "type": "object"
   },
-  "RoomBox": {
+  "Region": {
+   "properties": {
+    "kind": {
+     "description": "woods 树林、fields 农田牧场、hills 山丘、water 湖河水面",
+     "enum": [
+      "woods",
+      "fields",
+      "hills",
+      "water"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "shape": {
+     "description": "大致范围：围成它的多边形顶点，三到八个",
+     "items": {
+      "description": "[x, y]，x 由西向东、y 由北向南，0..1",
+      "items": {
+       "type": "number"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+     },
+     "minItems": 3,
+     "title": "Shape",
+     "type": "array"
+    },
+    "near": {
+     "default": "",
+     "description": "它在哪个地图地点旁边、随那个地点一起出现在地图上（地点 id）；不挨着哪个地点留空",
+     "title": "Near",
+     "type": "string"
+    }
+   },
+   "required": [
+    "kind",
+    "shape"
+   ],
+   "title": "Region",
+   "type": "object"
+  },
+  "RoomRect": {
    "properties": {
     "place": {
-     "description": "房间的实际地点 id；建筑本身也可以是一间（它的主厅）",
+     "description": "房间的地点 id（楼层里的每个房间一条）",
      "title": "Place",
      "type": "string"
     },
-    "label": {
-     "default": "",
-     "description": "平面图上的叫法，只给建筑本身那一间用（礼拜堂、大堂）；其余房间用地点名",
-     "title": "Label",
-     "type": "string"
-    },
     "x": {
-     "minimum": 0,
+     "description": "西墙的 x（米）",
      "title": "X",
-     "type": "integer"
+     "type": "number"
     },
     "y": {
-     "minimum": 0,
+     "description": "北墙的 y（米）",
      "title": "Y",
-     "type": "integer"
+     "type": "number"
     },
     "w": {
-     "description": "含两侧墙的宽度（字符格）",
-     "minimum": 3,
+     "description": "东西宽（米）",
      "title": "W",
-     "type": "integer"
+     "type": "number"
     },
     "h": {
-     "description": "含上下墙的高度（字符格）",
-     "minimum": 3,
+     "description": "南北长（米）",
      "title": "H",
-     "type": "integer"
+     "type": "number"
     }
    },
    "required": [
@@ -2163,7 +2676,7 @@
     "w",
     "h"
    ],
-   "title": "RoomBox",
+   "title": "RoomRect",
    "type": "object"
   },
   "RoundGate": {
@@ -2346,6 +2859,52 @@
    "title": "Stage",
    "type": "object"
   },
+  "Stair": {
+   "properties": {
+    "passage": {
+     "description": "楼梯走的通路 id（两端在不同楼层的通路）",
+     "title": "Passage",
+     "type": "string"
+    },
+    "form": {
+     "default": "stairs",
+     "description": "stairs 楼梯、ladder 梯子、trapdoor 地上的活板门",
+     "enum": [
+      "stairs",
+      "ladder",
+      "trapdoor"
+     ],
+     "title": "Form",
+     "type": "string"
+    },
+    "x": {
+     "title": "X",
+     "type": "number"
+    },
+    "y": {
+     "title": "Y",
+     "type": "number"
+    },
+    "w": {
+     "title": "W",
+     "type": "number"
+    },
+    "h": {
+     "description": "楼梯占的长方形（米），同时在上下两层的两个房间里，上下对齐；长的一边是走的方向",
+     "title": "H",
+     "type": "number"
+    }
+   },
+   "required": [
+    "passage",
+    "x",
+    "y",
+    "w",
+    "h"
+   ],
+   "title": "Stair",
+   "type": "object"
+  },
   "Stake": {
    "properties": {
     "when": {
@@ -2457,6 +3016,90 @@
     "label"
    ],
    "title": "View",
+   "type": "object"
+  },
+  "Way": {
+   "properties": {
+    "id": {
+     "description": "这条路的 id，英文小写加下划线",
+     "title": "Id",
+     "type": "string"
+    },
+    "kind": {
+     "description": "main 主路（镇上的大街、出镇的公路）、lane 小路（土路、马车道）、path 步道（山径、田埂、墓园小道）",
+     "enum": [
+      "main",
+      "lane",
+      "path"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "points": {
+     "description": "走向：沿路的折线点，两三个到十来个；出镇的路可以伸出图边（-0.05 或 1.05）",
+     "items": {
+      "description": "[x, y]，x 由西向东、y 由北向南，0..1",
+      "items": {
+       "type": "number"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+     },
+     "minItems": 2,
+     "title": "Points",
+     "type": "array"
+    },
+    "passage": {
+     "default": "",
+     "description": "这条路走的是哪条地图通路（通路 id）；不是哪条通路的（穿镇而过的公路）留空",
+     "title": "Passage",
+     "type": "string"
+    },
+    "street": {
+     "default": "",
+     "description": "这条路本身就是哪个街道地点（地点 id），比如主街；不是留空",
+     "title": "Street",
+     "type": "string"
+    }
+   },
+   "required": [
+    "id",
+    "kind",
+    "points"
+   ],
+   "title": "Way",
+   "type": "object"
+  },
+  "Window": {
+   "properties": {
+    "room": {
+     "description": "哪个房间的窗",
+     "title": "Room",
+     "type": "string"
+    },
+    "at": {
+     "description": "窗的中点 [x, y]，在这个房间的外墙上",
+     "items": {
+      "type": "number"
+     },
+     "maxItems": 2,
+     "minItems": 2,
+     "title": "At",
+     "type": "array"
+    },
+    "width": {
+     "default": 1.0,
+     "description": "窗宽（米）",
+     "title": "Width",
+     "type": "number"
+    }
+   },
+   "required": [
+    "room",
+    "at"
+   ],
+   "title": "Window",
    "type": "object"
   }
  },
@@ -2638,6 +3281,18 @@
    },
    "title": "Plans",
    "type": "array"
+  },
+  "geography": {
+   "anyOf": [
+    {
+     "$ref": "#/$defs/Geography"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "description": "全镇地图：地图地点的位置和样子、路、地形、无名房屋；编译期按原书地图或原文方位定，导入模型不填写"
   },
   "npcs": {
    "items": {

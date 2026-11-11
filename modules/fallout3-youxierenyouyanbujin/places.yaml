@@ -818,118 +818,500 @@ passages:
   minutes: 0
   perception: 楼梯口能喊话，楼上能听见门厅的动静。
 plans:
-- building: ferguson_house
-  floors:
-  - name: 一层
-    rooms:
-    - place: ferguson_house
-      label: 客厅
-      x: 0
-      y: 4
-      w: 22
-      h: 6
-    - place: ferguson_kitchen
-      x: 0
-      y: 0
-      w: 16
-      h: 5
-  - name: 地下室
-    level: -1
-    rooms:
-    - place: ferguson_basement
-      x: 0
-      y: 0
-      w: 18
-      h: 5
-  basis: 原文写明厨房（格兰达烤蛋糕）和地下室（关着唐纳德、双胞胎做解剖）；客厅作进门处。地下室门开在客厅一侧、厨房与客厅相通为 AutoKeeper 补充：原文未写门的位置。
 - building: steakhouse
   floors:
   - name: 一层
     rooms:
     - place: steakhouse
       label: 餐厅
-      x: 0
-      y: 4
-      w: 22
-      h: 6
+      size: large
     - place: steakhouse_kitchen
-      x: 0
-      y: 0
-      w: 16
-      h: 5
     - place: steakhouse_alley
-      x: 15
-      y: 0
-      w: 14
-      h: 5
+      size: small
   basis: 原文写明店里的厨师、洗碗工（后厨）和后门（阿诺德运垃圾）；餐厅作进门处。
+  layout:
+    rooms:
+    - {place: steakhouse, x: 10, y: 14, w: 7, h: 7}
+    - {place: steakhouse_kitchen, x: 10, y: 10, w: 7, h: 4}
+    - {place: steakhouse_alley, x: 10, y: 8, w: 7, h: 2}
+    doors:
+    - {passage: main_street__steakhouse, at: [13.5, 21], width: 2, main: true}
+    - {passage: steakhouse__steakhouse_kitchen, at: [15, 14]}
+    - {passage: steakhouse_kitchen__steakhouse_alley, at: [12, 10]}
+    windows:
+    - {room: steakhouse, at: [11.2, 21]}
+    - {room: steakhouse, at: [15.8, 21]}
+    - {room: steakhouse, at: [17, 17.5]}
+    fixtures:
+    - {room: steakhouse, feature: 厨房, label: 厨房, sketch: door, x: 16.1, y: 14.2, w: 0.8, h: 0.5}
+    - {room: steakhouse, feature: 洗碗池, label: 洗碗池, sketch: door, x: 13, y: 14.2, w: 0.8, h: 0.5}
+    - {room: steakhouse, feature: 后门小巷, label: 后门小巷, sketch: door, x: 11.8, y: 14.2, w: 0.8, h: 0.5}
+    - {room: steakhouse, feature: 餐厅, label: 餐厅, sketch: area, x: 11, y: 15.5, w: 5, h: 4}
+    - {room: steakhouse, sketch: mark, x: 10, y: 17, w: 0.2, h: 1}
+    - {room: steakhouse, sketch: longtable, x: 11.5, y: 16, w: 1.5, h: 1}
+    - {room: steakhouse, sketch: longtable, x: 14, y: 17.5, w: 1.5, h: 1}
+    - {room: steakhouse_kitchen, feature: 灶台, label: 灶台, sketch: stove, x: 16.2, y: 10.5, w: 0.8, h: 2.5}
+    - {room: steakhouse_kitchen, feature: 水槽, label: 水槽, sketch: sink, x: 10, y: 11.5, w: 0.6, h: 1.5}
+    - {room: steakhouse_kitchen, feature: 肉案, label: 肉案, sketch: table, x: 12.5, y: 11.6, w: 1.5, h: 0.8}
+    - {room: steakhouse_alley, feature: 垃圾桶, label: 垃圾桶, x: 14.2, y: 8.3, w: 1.5, h: 0.8}
+    - {room: steakhouse_alley, feature: 后门, label: 后门, sketch: door, x: 13.2, y: 9.3, w: 0.6, h: 0.5}
+    sides:
+    - {side: s, faces: 通往大街的小路, way: w_steakhouse}
+    - {side: n, faces: 后巷，北边是会堂, place: church}
+    - {side: e, faces: 艾尔斯伯里路方向, way: road_aylesbury}
+    - {side: w, faces: 邻近的街面}
+    basis: 原书没有平面图，照原文定：前面是餐厅，后面是后厨，后门通到小巷，前店后厨；朝南的正门、窗户、餐桌、牛头装饰以及各物件的具体位置都是 AutoKeeper 补的。
 - building: police_station
   floors:
   - name: 一层
     rooms:
     - place: police_station
       label: 值班室
-      x: 11
-      y: 0
-      w: 16
-      h: 5
     - place: police_cell_corridor
-      x: 11
-      y: 4
-      w: 22
-      h: 6
+      size: large
     - place: police_cell_1
-      x: 26
-      y: 0
-      w: 12
-      h: 5
+      size: small
     - place: police_cell_2
-      x: 32
-      y: 4
-      w: 12
-      h: 5
+      size: small
     - place: police_cell_3
-      x: 0
-      y: 4
-      w: 12
-      h: 5
+      size: small
     - place: police_cell_4
-      x: 11
-      y: 9
-      w: 12
-      h: 5
+      size: small
   basis: 原文写明警察局只有四间牢房，可监禁被俘调查员；值班室作进门处，牢房过道为 AutoKeeper 补充。
+  layout:
+    rooms:
+    - {place: police_station, x: 10, y: 13, w: 8, h: 6}
+    - {place: police_cell_corridor, x: 10, y: 11, w: 8, h: 2}
+    - {place: police_cell_1, x: 10, y: 8, w: 2, h: 3}
+    - {place: police_cell_2, x: 12, y: 8, w: 2, h: 3}
+    - {place: police_cell_3, x: 14, y: 8, w: 2, h: 3}
+    - {place: police_cell_4, x: 16, y: 8, w: 2, h: 3}
+    doors:
+    - {passage: main_street__police_station, at: [14, 19], width: 2, main: true}
+    - {passage: police_station__police_cell_corridor, at: [17, 13]}
+    - {passage: police_cell_corridor__police_cell_1, at: [11, 11]}
+    - {passage: police_cell_corridor__police_cell_2, at: [13, 11]}
+    - {passage: police_cell_corridor__police_cell_3, at: [15, 11]}
+    - {passage: police_cell_corridor__police_cell_4, at: [17, 11]}
+    windows:
+    - {room: police_station, at: [11.5, 19]}
+    - {room: police_station, at: [16.5, 19]}
+    - {room: police_station, at: [10, 16]}
+    fixtures:
+    - {room: police_station, feature: 值班台, label: 值班台, sketch: desk, x: 11, y: 15, w: 2.4, h: 0.6}
+    - {room: police_station, sketch: chair, x: 11.9, y: 14.2, w: 0.6, h: 0.6}
+    - {room: police_station, feature: 牢房, label: 牢房, sketch: door, x: 14.8, y: 13.1, w: 1, h: 0.4}
+    - {room: police_station, feature: 局长办公室, label: 局长办公室, sketch: door, x: 17.5, y: 15.5, w: 0.4, h: 1}
+    - {room: police_cell_corridor, feature: 铁栅栏门, label: 铁栅栏门, sketch: door, x: 12, y: 12.5, w: 2, h: 0.4}
+    - {room: police_cell_corridor, feature: 钥匙挂钩, label: 钥匙挂钩, sketch: mark, x: 17.6, y: 11.6, w: 0.4,
+      h: 0.6}
+    - {room: police_cell_1, feature: 铁床, label: 铁床, sketch: bed, x: 10.1, y: 8.1, w: 0.8, h: 1.9}
+    - {room: police_cell_1, feature: 便桶, label: 便桶, sketch: sink, x: 11.3, y: 8.2, w: 0.5, h: 0.5}
+    - {room: police_cell_2, feature: 铁床, label: 铁床, sketch: bed, x: 12.1, y: 8.1, w: 0.8, h: 1.9}
+    - {room: police_cell_2, feature: 便桶, label: 便桶, sketch: sink, x: 13.3, y: 8.2, w: 0.5, h: 0.5}
+    - {room: police_cell_3, feature: 铁床, label: 铁床, sketch: bed, x: 14.1, y: 8.1, w: 0.8, h: 1.9}
+    - {room: police_cell_3, feature: 便桶, label: 便桶, sketch: sink, x: 15.3, y: 8.2, w: 0.5, h: 0.5}
+    - {room: police_cell_4, feature: 铁床, label: 铁床, sketch: bed, x: 16.1, y: 8.1, w: 0.8, h: 1.9}
+    - {room: police_cell_4, feature: 便桶, label: 便桶, sketch: sink, x: 17.3, y: 8.2, w: 0.5, h: 0.5}
+    sides:
+    - {side: s, faces: 去大街的小路, way: w_police}
+    - {side: e, faces: 银行方向, place: bank}
+    - {side: w, faces: 美以美会堂方向, place: church}
+    - {side: n, faces: 屋后空地}
+    basis: 无原书平面图、原文也无具体描述；按原文“砖砌小楼、后面只有四间牢房”定：值班室在南临街，北侧补一条东西向牢房过道，四间牢房并排在最北；局长办公室只画成值班室东墙的一扇门，不另设房间。
+- building: ferguson_house
+  floors:
+  - name: 一层
+    rooms:
+    - place: ferguson_house
+      label: 客厅
+      size: large
+    - place: ferguson_kitchen
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: ferguson_basement
+  basis: 原文写明厨房（格兰达烤蛋糕）和地下室（关着唐纳德、双胞胎做解剖）；客厅作进门处。地下室门开在客厅一侧、厨房与客厅相通为 AutoKeeper 补充：原文未写门的位置。
+  layout:
+    rooms:
+    - {place: ferguson_house, x: 10, y: 10, w: 7, h: 6}
+    - {place: ferguson_kitchen, x: 17, y: 10, w: 4, h: 4}
+    - {place: ferguson_basement, x: 10, y: 11, w: 5, h: 5}
+    doors:
+    - {passage: ferguson_house__ferguson_kitchen, at: [17, 12], width: 1.5}
+    - {passage: main_street__ferguson_house, at: [13.5, 10], main: true}
+    windows:
+    - {room: ferguson_house, at: [11.5, 10]}
+    - {room: ferguson_house, at: [15.8, 10]}
+    - {room: ferguson_house, at: [10, 15.5]}
+    - {room: ferguson_kitchen, at: [19, 10]}
+    - {room: ferguson_kitchen, at: [21, 13]}
+    stairs:
+    - {passage: ferguson_house__ferguson_basement, x: 10.5, y: 12, w: 1, h: 3.5}
+    fixtures:
+    - {room: ferguson_house, feature: 厨房, label: 厨房, sketch: door, x: 16.2, y: 13.2, w: 0.8, h: 0.8}
+    - {room: ferguson_house, feature: 空狗窝, label: 空狗窝, sketch: animal, outside: true, x: 15, y: 8, w: 1,
+      h: 1}
+    - {room: ferguson_house, feature: 地下室门, label: 地下室门, sketch: door, x: 10.2, y: 11, w: 1, h: 0.8}
+    - {room: ferguson_house, feature: 青蛙标本盘, label: 青蛙标本盘, sketch: clutter, x: 13, y: 13, w: 1.2, h: 0.8}
+    - {room: ferguson_house, sketch: lounge, x: 12.5, y: 15, w: 3, h: 0.8}
+    - {room: ferguson_kitchen, feature: 烤箱, label: 烤箱, sketch: stove, x: 20.3, y: 10.4, w: 0.6, h: 1}
+    - {room: ferguson_kitchen, feature: 蛋糕, label: 蛋糕, sketch: vessel, x: 18.4, y: 12.4, w: 1.2, h: 0.8}
+    - {room: ferguson_kitchen, feature: 咖啡壶, label: 咖啡壶, sketch: vessel, x: 20.3, y: 11.6, w: 0.6, h: 0.6}
+    - {room: ferguson_basement, feature: 解剖台, label: 解剖台, sketch: longtable, x: 12.3, y: 13, w: 2, h: 1}
+    - {room: ferguson_basement, feature: 解剖刀和骨锯, label: 解剖刀和骨锯, sketch: clutter, x: 14.4, y: 14.4, w: 0.5,
+      h: 1.2}
+    sides:
+    - {side: n, faces: 门前小路，通大街, way: w_ferguson}
+    - {side: e, faces: 邻居家}
+    - {side: s, faces: 后院}
+    - {side: w, faces: 空地}
+    basis: 原书没有平面图，照原文写：客厅是进门处，厨房和地下室原文写明。房间大小、厨房在客厅东边相通、地下室楼梯在客厅西侧、门窗和家具位置都是 AutoKeeper 按常理补的。
 - building: hart_house
   floors:
   - name: 二层
     level: 1
     rooms:
     - place: hart_bedrooms
-      x: 0
-      y: 0
-      w: 16
-      h: 5
   - name: 一层
     rooms:
     - place: hart_house
       label: 门厅
-      x: 0
-      y: 5
-      w: 22
-      h: 6
+      size: large
     - place: hart_workshop
-      x: 0
-      y: 1
-      w: 16
-      h: 5
     - place: hart_kitchen
-      x: 0
-      y: 10
-      w: 16
-      h: 5
     - place: greenhouse
-      x: 15
-      y: 0
-      w: 22
-      h: 6
+      size: large
   basis: 原文写明老宅里有教授的工作室（备件与设备），望远镜在房后的温室里；教授与有福者助手同住，崩溃者奴隶伺候起居。厨房和二楼卧室为 AutoKeeper 补充。
+  layout:
+    rooms:
+    - {place: hart_house, x: 14, y: 10, w: 8, h: 8}
+    - {place: hart_workshop, x: 14, y: 5, w: 8, h: 5}
+    - {place: hart_kitchen, x: 14, y: 18, w: 8, h: 5}
+    - {place: greenhouse, x: 7, y: 10, w: 7, h: 8}
+    - {place: hart_bedrooms, x: 14, y: 5, w: 8, h: 13}
+    doors:
+    - {passage: main_street__hart_house, at: [22, 15], width: 2, main: true}
+    - {passage: hart_house__hart_workshop, at: [17, 10]}
+    - {passage: hart_house__hart_kitchen, at: [17, 18]}
+    - {passage: hart_house__greenhouse, at: [14, 14], width: 2}
+    windows:
+    - {room: hart_house, at: [22, 17]}
+    - {room: hart_workshop, at: [18, 5]}
+    - {room: hart_workshop, at: [22, 7.5]}
+    - {room: hart_kitchen, at: [18, 23]}
+    - {room: hart_kitchen, at: [22, 20.5]}
+    - {room: greenhouse, at: [7, 14], width: 3}
+    - {room: greenhouse, at: [10.5, 10], width: 3}
+    - {room: greenhouse, at: [10.5, 18], width: 3}
+    - {room: hart_bedrooms, at: [18, 5]}
+    - {room: hart_bedrooms, at: [22, 8]}
+    - {room: hart_bedrooms, at: [22, 16]}
+    - {room: hart_bedrooms, at: [14, 7]}
+    stairs:
+    - {passage: hart_house__hart_bedrooms, x: 20.5, y: 10.5, w: 1, h: 3.5}
+    fixtures:
+    - {room: hart_house, feature: 门廊的猫, label: 门廊的猫, sketch: animal, outside: true, x: 22.5, y: 16.5,
+      w: 1.5, h: 1.5}
+    - {room: hart_house, feature: 工作室, label: 工作室, sketch: door, x: 18.3, y: 10.2, w: 1, h: 0.5}
+    - {room: hart_house, feature: 守卫, label: 守卫, sketch: person, x: 21, y: 16.3, w: 0.6, h: 0.6}
+    - {room: hart_house, feature: 温室入口, label: 温室入口, sketch: door, x: 14.2, y: 11.5, w: 0.6, h: 1}
+    - {room: hart_workshop, feature: 工作台, label: 工作台, sketch: longtable, x: 16, y: 7, w: 3, h: 1}
+    - {room: hart_workshop, feature: 备件架, label: 备件架, sketch: shelf, x: 15, y: 5.2, w: 4, h: 0.4}
+    - {room: hart_workshop, feature: 工具, label: 工具, sketch: clutter, x: 20, y: 7.5, w: 1.5, h: 1.5}
+    - {room: hart_kitchen, feature: 灶台, label: 灶台, sketch: stove, x: 20, y: 22, w: 1.5, h: 0.8}
+    - {room: hart_kitchen, feature: 猫食碗, label: 猫食碗, sketch: animal, x: 15, y: 21.5, w: 0.6, h: 0.6}
+    - {room: hart_kitchen, sketch: sink, x: 16.5, y: 22.3, w: 1.2, h: 0.6}
+    - {room: hart_kitchen, sketch: table, x: 18.5, y: 19.8, w: 1.5, h: 1}
+    - {room: greenhouse, feature: 望远镜, label: 望远镜, sketch: machine, x: 9.5, y: 13, w: 2, h: 2}
+    - {room: greenhouse, feature: 接目镜, label: 接目镜, sketch: machine, x: 11.5, y: 14.5, w: 0.6, h: 0.6}
+    - {room: greenhouse, feature: 校准装置, label: 校准装置, sketch: machine, x: 8, y: 16, w: 1.2, h: 0.8}
+    - {room: hart_bedrooms, feature: 床铺, label: 床铺, sketch: bed, x: 14.3, y: 6, w: 1, h: 2}
+    - {room: hart_bedrooms, feature: 书桌, label: 书桌, sketch: desk, x: 17.5, y: 5.3, w: 1.2, h: 0.6}
+    - {room: hart_bedrooms, sketch: bed, x: 14.3, y: 15, w: 1, h: 2}
+    - {room: hart_bedrooms, sketch: bed, x: 20.7, y: 15.5, w: 1, h: 2}
+    sides:
+    - {side: e, faces: 门廊和通大街的小路, way: w_hart}
+    - {side: w, faces: 后院}
+    - {side: n, faces: 院子}
+    - {side: s, faces: 院子}
+    basis: 没有原书平面图，按原文定：正门朝东、对着来路，温室在房后（西边），工作室在宅内；厨房和二楼卧室是 AutoKeeper 补的，按常理贴着门厅布置
+
+geography:
+  title: 斯托维尔镇
+  subtitle: 美国小镇斯托威尔 · 一九二〇年代
+  minutes_across: 58
+  places:
+  - place: main_street
+    at: [0.6, 0.55]
+    glyph: street
+  - place: church
+    at: [0.634, 0.409]
+    glyph: church
+  - place: steakhouse
+    at: [0.645, 0.492]
+    glyph: shop
+  - place: mother_bakers
+    at: [0.645, 0.325]
+    glyph: shop
+  - place: police_station
+    at: [0.755, 0.375]
+    glyph: public
+  - place: bank
+    at: [0.79, 0.45]
+    glyph: public
+  - place: park_mine
+    at: [0.589, 0.218]
+    glyph: hill
+  - place: hospital
+    at: [0.456, 0.389]
+    glyph: clinic
+  - place: gregson_store
+    at: [0.52, 0.5]
+    glyph: shop
+  - place: meeting_house
+    at: [0.5, 0.64]
+    glyph: house
+  - place: ferguson_house
+    at: [0.4, 0.58]
+    glyph: house
+  - place: mcdermott_house
+    at: [0.62, 0.72]
+    glyph: house
+  - place: lowry_house
+    at: [0.86, 0.3]
+    glyph: house
+  - place: jensen_farm
+    at: [0.92, 0.66]
+    glyph: farm
+  - place: hart_house
+    at: [0.2, 0.47]
+    glyph: house
+  ways:
+  - id: main_street
+    kind: main
+    points:
+    - [0.3, 0.47]
+    - [0.45, 0.5]
+    - [0.6, 0.535]
+    - [0.7, 0.545]
+    - [0.8, 0.5]
+    - [0.92, 0.45]
+    - [1.05, 0.42]
+    street: main_street
+  - id: mill_street
+    kind: main
+    points:
+    - [-0.05, 0.5]
+    - [0.1, 0.48]
+    - [0.25, 0.46]
+    - [0.38, 0.48]
+    - [0.55, 0.53]
+    - [0.72, 0.585]
+  - id: road_greenberg
+    kind: main
+    points:
+    - [-0.05, 0.18]
+    - [0.1, 0.3]
+    - [0.25, 0.42]
+    - [0.3, 0.47]
+  - id: road_aylesbury
+    kind: main
+    points:
+    - [0.83, -0.05]
+    - [0.8, 0.15]
+    - [0.76, 0.3]
+    - [0.73, 0.45]
+    - [0.72, 0.56]
+  - id: road_buttonwood
+    kind: main
+    points:
+    - [0.72, 0.585]
+    - [0.85, 0.62]
+    - [1.05, 0.71]
+  - id: button_street
+    kind: main
+    points:
+    - [0.72, 0.6]
+    - [0.8, 0.75]
+    - [0.96, 0.97]
+    - [1.0, 1.03]
+  - id: road_dutton
+    kind: main
+    points:
+    - [0.72, 0.6]
+    - [0.66, 0.78]
+    - [0.6, 0.97]
+    - [0.58, 1.05]
+  - id: w_hospital
+    kind: lane
+    points:
+    - [0.456, 0.389]
+    - [0.46, 0.5]
+    passage: main_street__hospital
+  - id: w_park
+    kind: lane
+    points:
+    - [0.589, 0.218]
+    - [0.6, 0.35]
+    - [0.615, 0.538]
+    passage: main_street__park_mine
+  - id: w_church
+    kind: lane
+    points:
+    - [0.634, 0.409]
+    - [0.64, 0.54]
+    passage: main_street__church
+  - id: w_steakhouse
+    kind: lane
+    points:
+    - [0.645, 0.492]
+    - [0.65, 0.541]
+    passage: main_street__steakhouse
+  - id: w_bakers
+    kind: lane
+    points:
+    - [0.645, 0.325]
+    - [0.66, 0.45]
+    - [0.66, 0.541]
+    passage: main_street__mother_bakers
+  - id: w_police
+    kind: lane
+    points:
+    - [0.755, 0.375]
+    - [0.77, 0.515]
+    passage: main_street__police_station
+  - id: w_bank
+    kind: lane
+    points:
+    - [0.79, 0.45]
+    - [0.8, 0.5]
+    passage: main_street__bank
+  - id: w_lowry
+    kind: lane
+    points:
+    - [0.86, 0.3]
+    - [0.86, 0.475]
+    passage: main_street__lowry_house
+  - id: w_gregson
+    kind: lane
+    points:
+    - [0.52, 0.5]
+    - [0.52, 0.516]
+    passage: main_street__gregson_store
+  - id: w_meeting
+    kind: lane
+    points:
+    - [0.5, 0.64]
+    - [0.5, 0.512]
+    passage: meeting_house__main_street
+  - id: w_ferguson
+    kind: lane
+    points:
+    - [0.4, 0.58]
+    - [0.4, 0.49]
+    passage: main_street__ferguson_house
+  - id: w_mcdermott
+    kind: lane
+    points:
+    - [0.62, 0.72]
+    - [0.62, 0.538]
+    passage: main_street__mcdermott_house
+  - id: w_jensen
+    kind: lane
+    points:
+    - [0.88, 0.465]
+    - [0.9, 0.56]
+    - [0.92, 0.66]
+    passage: main_street__jensen_farm
+  - id: w_hart
+    kind: lane
+    points:
+    - [0.3, 0.47]
+    - [0.25, 0.465]
+    - [0.2, 0.47]
+    passage: main_street__hart_house
+  regions:
+  - kind: fields
+    shape:
+    - [0.53, 0.17]
+    - [0.6, 0.14]
+    - [0.65, 0.18]
+    - [0.64, 0.3]
+    - [0.58, 0.32]
+    - [0.54, 0.26]
+    near: park_mine
+  - kind: hills
+    shape:
+    - [0.5, 0.12]
+    - [0.55, 0.1]
+    - [0.57, 0.16]
+    - [0.52, 0.18]
+    near: park_mine
+  - kind: water
+    shape:
+    - [0.14, 0.12]
+    - [0.17, 0.12]
+    - [0.24, 0.22]
+    - [0.23, 0.25]
+    - [0.18, 0.2]
+  - kind: fields
+    shape:
+    - [0.88, 0.6]
+    - [0.98, 0.58]
+    - [0.99, 0.72]
+    - [0.88, 0.74]
+    near: jensen_farm
+  - kind: woods
+    shape:
+    - [0.02, 0.6]
+    - [0.15, 0.62]
+    - [0.18, 0.75]
+    - [0.05, 0.78]
+  - kind: fields
+    shape:
+    - [0.3, 0.85]
+    - [0.45, 0.85]
+    - [0.48, 0.97]
+    - [0.3, 0.97]
+  houses:
+  - along: main_street
+    span: [0.15, 0.75]
+    density: dense
+  - along: mill_street
+    span: [0.45, 1.0]
+    density: dense
+  - along: road_aylesbury
+    span: [0.3, 0.9]
+    density: dense
+  - along: w_jensen
+    span: [0.0, 0.8]
+  - along: w_hart
+  - along: button_street
+    span: [0.0, 0.5]
+  landmarks:
+  - name: 阿尔的顶级车行
+    at: [0.746, 0.285]
+    glyph: shop
+  - name: 杰克发廊
+    at: [0.715, 0.355]
+    glyph: shop
+  - name: 劳瑞小甜甜的店
+    at: [0.69, 0.4]
+    glyph: shop
+  - name: 法庭
+    at: [0.735, 0.47]
+    glyph: public
+  - name: 火车站
+    at: [0.716, 0.6]
+    glyph: public
+  - name: 墓地
+    at: [0.836, 0.394]
+    glyph: graveyard
+  - name: 锯木厂
+    at: [0.052, 0.394]
+    glyph: other
+  - name: 罐头厂
+    at: [0.397, 0.782]
+    glyph: other
+  basis: 位置主要依据原书《斯托维尔镇地图》：美以美会堂、埃尔默牛排馆、贝克妈妈菜、警察局、银行、公园和医院都照图上的编号和标注定位；为保证地点间距至少 0.08，几处稍作挪动。詹森农场在镇东、哈特宅在镇西，依据原文方位。弗格森家、麦克德莫特家、劳里家、聚会的小屋、格雷格森商店在图上没有标出，按各条通路的分钟数放在大街附近的住宅区。

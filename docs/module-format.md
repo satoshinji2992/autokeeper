@@ -41,7 +41,8 @@ modules/<id>/
 | `start` / `start_time` | 起始地点 id 和时间（如 `D1 14:00`） |
 | `locations` | 地点：`read_aloud`（读给玩家）、`keeper`（幕后资料）、`features`、`art`；`public: true` 表示可问路找到的公共地标；`within` 填外层地点 id，表示确实在它里面（书房在宅子里、陵墓在公墓里），地图上画在外层地点里，可留空，包含不代表连通；`scene_root: true` 是独立主持区域的边界（同一建筑的房间共用一位守秘人）；`entry` 只给没人站得进去的容器（楼层、整栋楼）填，指向进门落脚的房间；`looks` 是剧情变样后的场景图；`views` 是同一个地点的另外几张图（见下文）；`weather` 是画面上的天气与光（最多两种，不写就没有）；`outdoors`（是否露天、雨雪落不落得到）和 `ground`（地图上周围的地面：`graveyard`、`water`、`woods`、`fields`、`street`、`building`）由编译期的「场景呈现」一步按原文判断填上，游戏里不再按名字猜；`chase` 是从这里起跑的追逐沿着跑的路（见[战斗与追逐](#战斗与追逐)） |
 | `passages` | 地点之间唯一的连通资料：`a` / `b` 两端（实际地点，不填容器）、`kind`（`road` 道路、`door` 门、`stairs` 楼梯、`corridor` 走廊、`opening` 门洞）、`minutes` 普通经过的分钟数（室内几步写 0）、`one_way`、`gate`（有门才写初始的 `open` / `locked` / `blocked`，开团后的状态只记在本局记录里）、`perception`（隔门能否听见看见的依据）；`secret: true` 是须发现才知道的暗门密道，`found` 写发现条件 `clue:线索id` 或 `flag:标记id`，没写就由守秘人登记或从另一端到过才算发现。见下文[建筑内部与平面图](#建筑内部与平面图) |
-| `plans` | 建筑平面图：`building`、`floors`（每层 `name`、`level`、`rooms` 的格子 `place` / `x` / `y` / `w` / `h`，建筑本身那一间可写 `label`）、`basis` 依据。由编译期的“建筑内部”步骤生成和排布，不必手写坐标 |
+| `geography` | 全镇地图：地图地点的位置和图样、路、地形、无名房屋、标题和比例尺（见[全镇地图](#全镇地图geography)）。由编译期的“全镇地图”步骤生成，不必手写 |
+| `plans` | 建筑平面图：`building`、`floors`（每层 `name`、`level`、`rooms` 的 `place`，大小 `size`，建筑本身那一间可写 `label`）、`basis` 依据，`layout` 是房间、门窗、楼梯、陈设的位置和四面朝向（见[平面布局](#平面布局layout)）。楼层和房间由编译期的“建筑内部”步骤整理，`layout` 由“平面布局”步骤定，都不必手写 |
 | `npcs` | NPC：人设、`knows` / `secrets` / `lies`、能说出或交出的 `clues`（他说的、交出的，和他亲身知道、能转述的）和对应的社交门槛 `gates`、`portrait`、变样头像 `looks`；`important: true` 标出重要 NPC（最多 6 个），他们有自己的目标和打算，调查员不在时也会行动；会动手的人在 `stats` 写战斗数值、`attacks` 写攻击；`called` 是调查员还不知道他是谁时的叫法 |
 | `creatures` | 怪物：`called`（调查员还不知道它是什么时的叫法，只写看得见的样子）、外观 `description`、照面时的理智检定 `sanity`、战斗数值 `stats`、攻击 `attacks`、规则用得着的特性 `notes`、逃跑时追不追 `pursues`；是某个 NPC 打起来的样子就写 `npc`，写法见[战斗与追逐](#战斗与追逐) |
 | `items` | 重要物品：`id`、`name`、外观 `description`、所在地点 `where`、初始人物持有者 `owner`（可空）、配图 `art`；支持后台携带状态 `equipment`、数量 `quantity`、状况 `status` 和隐藏标记 `hidden`，不替代线索或授予隐藏效果 |
@@ -84,13 +85,85 @@ plans:
   - building: church
     basis: 原文写明圣器室和地下室；楼梯位置为 AutoKeeper 补充
     floors:
-      - {name: 一层, level: 0, rooms: [{place: church, label: 礼拜堂, x: 0, y: 0, w: 22, h: 6}, …]}
-      - {name: 地下室, level: -1, rooms: [{place: church_cellar, x: 0, y: 0, w: 16, h: 5}]}
+      - {name: 一层, level: 0, rooms: [{place: church, label: 礼拜堂, size: large}, {place: church_vestry, size: small}]}
+      - {name: 地下室, level: -1, rooms: [{place: church_cellar}]}
+    layout: …                             # 见下文「平面布局」
 ```
 
-`autokeeper upgrade --only interiors` 让模型对照原文给出房间、楼层、大小、门和楼梯，以及原文写明在哪一间的人物、物件和线索；坐标按门的连接自动排布，有门相连的房间共用一面墙。原文没写的结构可以为通行和分头行动补上，在 `basis` 和房间的守秘人资料里注明“AutoKeeper 补充”，不添新的案情。`check` 会拒绝不在楼里的房间、重叠的格子、同一层级的两层和引用不存在的发现条件。
+`autokeeper upgrade --only interiors` 让模型对照原文给出房间、楼层、大小（`size`：`small` 储藏间、`medium` 普通房间、`large` 大厅）、门和楼梯，以及原文写明在哪一间的人物、物件和线索。原文没写的结构可以为通行和分头行动补上，在 `basis` 和房间的守秘人资料里注明“AutoKeeper 补充”，不添新的案情。`check` 会拒绝不在楼里的房间、同一层级的两层和引用不存在的发现条件。房间有增减时这栋的 `layout` 作废，由下一步重定。
 
-游戏中地图（F3）在有平面图的建筑里直接显示平面图，按 P 切换全局地图，`[` `]` 换楼层。每位玩家只看到自己到过的房间和从门口看得见的房间，未发现的暗室既不画出也不留空位；房间里标出本人看到的人。
+游戏中地图（F3）在有平面图的建筑里直接显示平面图，按 P 切换全局地图，`[` `]` 换楼层。每位玩家只看到自己到过的房间和从门口看得见的房间，未发现的暗室既不画出也不留空位；房间里标出本人看到的人。只从门口看见、或只听人说起的房间画出轮廓和连着已知房间的门，里面的陈设、窗、楼梯和别的门进去才看得见。
+
+## 平面布局（layout）
+
+`plans` 每栋的 `layout` 是这栋建筑画成平面图要用的位置：每个房间多大、在哪，门、窗、楼梯在哪，每样可调查的东西放在哪、画成什么，四面外面对着什么。由编译期的「平面布局」一步决定，不必手写：原文里有这栋建筑的平面图（标题写着地图、平面图的手稿，或原文某页的图注写着“某某家……地图”，本机有原书页面图时）就由读图角色照图定，没有就按原文描述和常理定。
+
+```yaml
+    layout:
+      rooms:                              # 每个房间一块长方形
+        - {place: office, x: 0, y: 0, w: 8, h: 6}
+      doors:
+        - {passage: square__office, at: [0, 3], main: true}   # 正门
+        - {room: office, at: [8, 4.5]}                         # 原文写到、没有通路的外门
+      windows:
+        - {room: office, at: [2, 6], width: 1.5}
+      stairs:
+        - {passage: hall__attic, form: stairs, x: 6, y: 1, w: 1, h: 3}
+      fixtures:
+        - {room: office, feature: 旧报合订本, label: 旧报合订本, sketch: shelf, x: 1, y: 0, w: 6, h: 0.5}
+        - {room: office, label: 编辑桌, sketch: desk, x: 3, y: 2.5, w: 1.5, h: 0.8}
+      sides:
+        - {side: w, faces: 广场, place: square}
+        - {side: e, faces: 后巷}
+      basis: 照原文描述；窗和家具位置为 AutoKeeper 补充
+```
+
+- 坐标单位是米，全楼各层同一张格子：x 由西向东、y 由北向南，和全镇地图一样上北下南，所以楼上的房间叠在楼下的房间上面，平面图能摆正了放在全镇地图旁边。墙是线：两间并排时一间的东墙 `x + w` 就是另一间的西墙 `x`。
+- `rooms`：楼层里每个房间一块 `x` / `y` / `w` / `h`。
+- `doors`：每条同层房间之间的通路一扇，开在两间共用的那段墙上；每条通往外面的通路一扇，开在它那个房间的外墙（不和同层别的房间贴着的墙）上；原文写到却没有通路的外门写 `room`。`at` 是门在墙线上的中点，`width` 门宽（默认 1 米），`main: true` 是正门，整栋一扇，开在进门的房间。
+- `windows`：`room` 和 `at`（外墙上的中点）、`width`。
+- `stairs`：每条两端在不同楼层的通路一段，长方形同时在上下两层的两个房间里；`form` 是 `stairs` 楼梯、`ladder` 梯子、`trapdoor` 活板门。
+- `fixtures`：每个房间的每一项 `features` 一条（`feature` 逐字照抄，`label` 是图上写的几个字），再加原文写到的家具（`feature` 留空）。`sketch` 是画成什么：`bed` 床、`wardrobe` 柜子、`shelf` 书架货架、`desk` 书桌柜台、`table` 桌子、`longtable` 长桌、`chair` 椅子、`lounge` 沙发一组、`fireplace` 壁炉、`stove` 灶台炉子、`sink` 水槽浴缸便桶、`coffin` 棺木、`altar` 祭坛香炉、`boxes` 箱子、`papers` 纸张信件、`vessel` 花瓶罐子、`piano` 钢琴、`rug` 地毯、`clutter` 成堆的杂物、`machine` 机器仪器、`plant` 花草、`mark` 墙上地上的痕迹、`door` / `window` / `stairs`（这一项就是门窗楼梯，或在门那边、楼上楼下）、`path` 小路、`person` 当作陈设写的人、`animal` 动物、`area` 房间里的一块区域、`thing` 别的。放在房间里，不挡门、不压楼梯；门外的东西（门口的狗窝、屋后的小路）写 `outside: true`，放在外墙外三米以内。
+- `sides`：东南西北四面各一条，`faces` 写外面是什么，对着全镇地图上的路写 `way`（`geography.ways` 的 id），对着某个地点写 `place`。
+
+编译时程序核对：每个房间一块且在 0 到 100 米内，同一层不重叠，楼上、地下室的房间大半叠在一层上面；每条通路有门或楼梯，同层两间的门在它们共用的墙上，外门在外墙上，正门一扇且开在进门的房间；楼梯在它连着的两个房间里，大小像一段楼梯；窗在外墙上、不和门重叠；每一项可调查的东西都有位置，在房间里（`outside` 的在外墙外三米内），不挡门、不压楼梯，有 `label`；四面各一条，引用的路和地点存在，方向和全镇地图上一致。不成立的逐条写明退回重问一次，仍不成立这一栋不写入。`autokeeper check` 把对不上的地方列为提醒（比如后来加了房间或可调查的东西）。
+
+没有 `layout`、或它和模组对不上（房间、通路、可调查的东西变了）时，平面图由程序排出来：每层从进门的房间起按门的连接排布，门开在共用的墙中间，外门开在朝着它通往的地方的那面，可调查的东西在房间里依次排开，没有窗；同一个模组每次排出的都一样。`autokeeper upgrade <模组> --only floorplans` 只重定这一项。
+
+## 全镇地图（geography）
+
+`places.yaml` 的 `geography` 是整个镇子的一张手绘地图要用的地理数据：地图地点在图上的位置和画成什么。地图地点是室外走到的地方：最外层的地点（整个村子、城区，画在它的中心或广场）、有 `road` 通路连着的建筑和场所（不论嵌套多深，村里的教堂、灯塔），不是建筑平面图里的房间，也不是只靠门、楼梯和外面连着的房间或仓库、路的走向、树林农田山丘水面、无名房屋的分布、标题和比例尺。建筑里的房间不在这里，它们有自己的平面图。由编译期的「全镇地图」一步决定，不必手写：模组带着原书地图（标题或种类写着“地图”的手稿，本机有原图时）就由读图角色照图定位；没有就按原文写到的方位和通路的分钟数定。
+
+```yaml
+geography:
+  title: 埃斯内尔                       # 镇或地方的名字
+  subtitle: 北达科他州沃德县 · 一九二一年
+  minutes_across: 65                    # 从图的西边走到东边几分钟，编译时按通路分钟数和坐标算出
+  places:                               # 每个地图地点一条
+    - {place: main_street, at: [0.58, 0.555], glyph: street}
+    - {place: cardwell_farm, at: [0.87, 0.29], glyph: ruin}
+  ways:
+    - {id: main_street, kind: main, street: main_street, points: [[0.44, 0.59], [0.55, 0.554], [0.70, 0.556]]}
+    - {id: ratger_road, kind: lane, passage: main_street__ratger_house, points: [[0.435, 0.592], [0.41, 0.5], [0.4, 0.42]]}
+  regions:
+    - {kind: fields, near: brucker_farm, shape: [[0.0, 0.08], [0.11, 0.08], [0.12, 0.3], [0.0, 0.32]]}
+  houses:
+    - {along: main_street, span: [0.1, 0.9], density: dense}
+  landmarks:
+    - {name: 学校, at: [0.52, 0.5], glyph: public}
+  basis: 照原书分发材料 1 换算
+```
+
+- 坐标 `[x, y]`：x 由西（0）向东（1），y 由北（0）向南（1），上北下南。图宽是高的 1.5 倍，两点距离按 √((Δx×1.5)²+Δy²) 算。
+- `glyph`：`church` 教堂、`clinic` 诊所医院、`house` 普通住家、`farm` 谷仓农场、`ruin` 废屋、`shop` 邮局商铺饭馆、`public` 学校警局银行车站等公共建筑、`hill` 山丘、`woods` 树林、`graveyard` 墓地、`street` 街道广场、`other` 别的。
+- `ways`：`kind` 是 `main` 主路、`lane` 小路、`path` 步道；`passage` 写这条路走的通路（两端在不同地图地点的通路，房间的门和楼梯不算），`street` 写这条路本身是哪个街道地点，穿镇而过的公路两样都不写，可以伸出图边。
+- `regions`：`woods`、`fields`、`hills`、`water` 的大致范围（三到八个顶点的多边形），`near` 是它挨着、随着一起显现的地点。
+- `houses`：没有名字的房子沿哪条路（`along`）的哪一段（`span`，按路长的比例）分布，`dense` 是镇中心成排的房子和店铺，`sparse` 是零星的农舍。
+- `landmarks`：原书地图上标着、模组地点里没有的建筑。
+
+编译时程序核对：每个地图地点都有坐标且在图内，两个地点相距不少于 0.08，每条地图通路都有一条从两端地点 0.1 以内经过的路（街道地点按它自己那条路的线算），引用的通路、地点和路都存在。不成立的逐条写明退回重问一次，仍不成立就不写入。`autokeeper check` 把对不上的地方列为提醒（比如后来加了地图地点）。
+
+游戏中导演新增的地点不在这份数据里：它们画在相连地点旁边，原有地点不移动；位于其他地点内部的地点（有平面图的建筑里的房间除外）画在所在地点周围。没有这份数据、或它和模组对不上时，地图由程序按通路的分钟数排出来：远近照分钟数（取平方根，远处的农场不至于把镇子挤成一点），挤在一起的推开，每条通路一条直路；同一个模组每次排出的都一样。`autokeeper upgrade <模组> --only geography` 只重定这一项。
 
 ## 事件的时机与后果
 

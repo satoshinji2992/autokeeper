@@ -515,67 +515,344 @@ plans:
     rooms:
     - place: church
       label: 礼拜堂
-      x: 0
-      y: 0
-      w: 22
-      h: 6
+      size: large
   - name: 地下室
     level: -1
     rooms:
     - place: church_cellar
-      x: 0
-      y: 0
-      w: 16
-      h: 5
   basis: 原文写明死者停放在教堂地下室，尸检与墙壁损坏都在地下室；礼拜堂与地下室之间的楼梯为 AutoKeeper 补充：原文未写入口形式。
-- building: darvill_house
-  floors:
-  - name: 二层
-    level: 1
+  layout:
     rooms:
-    - place: darvill_caroline_room
-      x: 0
-      y: 0
-      w: 16
-      h: 5
-  - name: 一层
-    rooms:
-    - place: darvill_house
-      label: 客厅
-      x: 0
-      y: 0
-      w: 22
-      h: 6
-  - name: 地下室
-    level: -1
-    rooms:
-    - place: darvill_cellar
-      x: 0
-      y: 0
-      w: 18
-      h: 5
-  basis: 原文写明地下室（屋后有通往地下室的门）和卡洛琳的床畔；屋内楼梯与卧室所在楼层为 AutoKeeper 补充。达维尔夫妇和典籍原文没写在哪一间，不动。
+    - {place: church, x: 10, y: 10, w: 10, h: 16}
+    - {place: church_cellar, x: 11, y: 17, w: 8, h: 8}
+    doors:
+    - {passage: main_street__church, at: [15, 10], width: 2, main: true}
+    windows:
+    - {room: church, at: [10, 14]}
+    - {room: church, at: [10, 18]}
+    - {room: church, at: [10, 22]}
+    - {room: church, at: [20, 14]}
+    - {room: church, at: [20, 23]}
+    stairs:
+    - {passage: church__church_cellar, x: 17.5, y: 17.5, w: 1, h: 3.5}
+    fixtures:
+    - {room: church, feature: 地下室, label: 地下室, sketch: stairs, x: 17.5, y: 21.5, w: 1, h: 1}
+    - {room: church, feature: 远端那面渗水的墙, label: 渗水的墙, sketch: stairs, x: 18.8, y: 17.5, w: 1, h: 1}
+    - {room: church, feature: 停放的棺木, label: 棺木, sketch: stairs, x: 18.8, y: 19, w: 1, h: 1}
+    - {room: church, sketch: chair, x: 11, y: 12, w: 3.5, h: 5}
+    - {room: church, sketch: chair, x: 15.5, y: 12, w: 3.5, h: 5}
+    - {room: church, sketch: altar, x: 13.5, y: 24, w: 3, h: 1}
+    - {room: church, sketch: desk, x: 11, y: 22, w: 1.2, h: 0.6}
+    - {room: church_cellar, feature: 停放的棺木, label: 棺木, sketch: coffin, x: 12, y: 19.5, w: 0.7, h: 2}
+    - {room: church_cellar, sketch: coffin, x: 13.3, y: 19.5, w: 0.7, h: 2}
+    - {room: church_cellar, sketch: coffin, x: 14.6, y: 19.5, w: 0.7, h: 2}
+    - {room: church_cellar, feature: 远端那面渗水的墙, label: 渗水的墙, sketch: mark, x: 12, y: 24.6, w: 6, h: 0.4}
+    sides:
+    - {side: n, faces: 教堂小路, way: church_lane}
+    - {side: e, faces: 去诊所方向的空地, place: clinic}
+    - {side: s, faces: 积雪的空地}
+    - {side: w, faces: 积雪的空地}
+    basis: 没有原书平面图，按原文描述定：礼拜堂和停放棺木的地下室照原文；正门朝北开向来路 church_lane；地下室的位置、大小、楼梯位置、窗和长椅、祭坛、讲台都是 AutoKeeper
+      按小教堂的常见样子补的。
 - building: ratger_house
   floors:
   - name: 二层
     level: 1
     rooms:
     - place: ratger_guest_room
-      x: 0
-      y: 0
-      w: 16
-      h: 5
   - name: 一层
     rooms:
     - place: ratger_house
       label: 客厅
-      x: 11
-      y: 0
-      w: 22
-      h: 6
+      size: large
     - place: ratger_back_porch
-      x: 0
-      y: 0
-      w: 12
-      h: 5
+      size: small
   basis: 原文写明出租屋的房间与后门廊；客厅（饭桌）沿用模组原有布置，楼梯与客房所在楼层为 AutoKeeper 补充。
+  layout:
+    rooms:
+    - {place: ratger_house, x: 10, y: 10, w: 8, h: 6}
+    - {place: ratger_back_porch, x: 12, y: 7.5, w: 4, h: 2.5}
+    - {place: ratger_guest_room, x: 14, y: 10, w: 4, h: 4}
+    doors:
+    - {passage: main_street__ratger_house, at: [12.5, 16], main: true}
+    - {passage: ratger_house__clinic, at: [16.5, 16]}
+    - {passage: ratger_house__ratger_back_porch, at: [14, 10]}
+    windows:
+    - {room: ratger_house, at: [14.5, 16]}
+    - {room: ratger_house, at: [10, 14.8]}
+    - {room: ratger_house, at: [18, 15]}
+    - {room: ratger_guest_room, at: [15.5, 10]}
+    stairs:
+    - {passage: ratger_house__ratger_guest_room, x: 17, y: 10.5, w: 1, h: 3.5}
+    fixtures:
+    - {room: ratger_house, feature: 客厅的餐桌, label: 餐桌, sketch: longtable, x: 12, y: 12, w: 2, h: 1}
+    - {room: ratger_house, feature: 弗朗西斯的抽屉, label: 弗朗西斯的抽屉, sketch: wardrobe, x: 10, y: 12.8, w: 0.5,
+      h: 1.2}
+    - {room: ratger_house, feature: 后廊, label: 后廊, sketch: door, x: 15.1, y: 10.1, w: 0.8, h: 0.4}
+    - {room: ratger_house, feature: 楼上的客房, label: 楼上客房, sketch: stairs, x: 16.2, y: 12, w: 0.6, h: 1}
+    - {room: ratger_house, sketch: stove, x: 10.1, y: 10.3, w: 1, h: 1}
+    - {room: ratger_house, sketch: chair, x: 12.6, y: 13.2, w: 0.5, h: 0.5}
+    - {room: ratger_back_porch, feature: 后廊的顶棚, label: 后廊顶棚, sketch: area, x: 12.2, y: 7.7, w: 3.6, h: 1.6}
+    - {room: ratger_guest_room, feature: 床铺, label: 床铺, sketch: bed, x: 14.2, y: 11.5, w: 1, h: 2}
+    - {room: ratger_guest_room, feature: 结霜的窗户, label: 结霜的窗户, sketch: window, x: 15, y: 10, w: 1, h: 0.3}
+    sides:
+    - {side: s, faces: 通往主街的小路, way: ratger_road}
+    - {side: n, faces: 后院积雪}
+    - {side: e, faces: 邻居家}
+    - {side: w, faces: 空地}
+    basis: 没有原书平面图，按原文描述画了客厅（饭桌）、后门廊和楼上客房三间。客厅尺寸、门窗位置、楼梯位置和炉子是 AutoKeeper 按常理补的。来路在南边，所以正门开在南墙，后门廊贴着北墙。
+- building: darvill_house
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: darvill_caroline_room
+  - name: 一层
+    rooms:
+    - place: darvill_house
+      label: 客厅
+      size: large
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: darvill_cellar
+  basis: 原文写明地下室（屋后有通往地下室的门）和卡洛琳的床畔；屋内楼梯与卧室所在楼层为 AutoKeeper 补充。达维尔夫妇和典籍原文没写在哪一间，不动。
+  layout:
+    rooms:
+    - {place: darvill_house, x: 10, y: 10, w: 8, h: 7}
+    - {place: darvill_caroline_room, x: 10, y: 10, w: 4, h: 4}
+    - {place: darvill_cellar, x: 13, y: 13, w: 5, h: 4}
+    doors:
+    - {passage: main_street__darvill_house, at: [16, 10], main: true}
+    - {room: darvill_cellar, at: [15.5, 17]}
+    windows:
+    - {room: darvill_house, at: [11.5, 10]}
+    - {room: darvill_house, at: [10, 13.5]}
+    - {room: darvill_house, at: [10, 15.5]}
+    - {room: darvill_house, at: [18, 11.5]}
+    - {room: darvill_caroline_room, at: [11.5, 10]}
+    - {room: darvill_caroline_room, at: [10, 12.5]}
+    stairs:
+    - {passage: darvill_house__darvill_caroline_room, x: 13, y: 10.5, w: 1, h: 3}
+    - {passage: darvill_house__darvill_cellar, x: 17, y: 13.5, w: 1, h: 3}
+    fixtures:
+    - {room: darvill_house, feature: 客厅的笔记, label: 散落的笔记, sketch: papers, x: 11.5, y: 14, w: 2, h: 1.5}
+    - {room: darvill_house, feature: 地下室的门, label: 地下室的门, sketch: door, outside: true, x: 15, y: 17.5,
+      w: 1, h: 0.5}
+    - {room: darvill_house, feature: 卡洛琳的床畔, label: 楼上卧室, sketch: stairs, x: 12, y: 11, w: 0.8, h: 0.8}
+    - {room: darvill_house, feature: 楼上的房间, label: 楼上的房间, sketch: stairs, x: 12, y: 12.5, w: 0.8, h: 0.8}
+    - {room: darvill_house, feature: 地下室里的香炉, label: 去地下室, sketch: stairs, x: 16, y: 14, w: 0.8, h: 0.8}
+    - {room: darvill_house, sketch: clutter, x: 10.3, y: 15.5, w: 1.5, h: 1.2}
+    - {room: darvill_house, sketch: lounge, x: 13.2, y: 15.8, w: 2.5, h: 1}
+    - {room: darvill_caroline_room, feature: 卡洛琳的床畔, label: 床头的信, sketch: papers, x: 10.2, y: 11, w: 0.5,
+      h: 0.4}
+    - {room: darvill_caroline_room, sketch: bed, x: 10.2, y: 11.5, w: 1, h: 2}
+    - {room: darvill_caroline_room, sketch: wardrobe, x: 11.5, y: 10.2, w: 1.2, h: 0.5}
+    - {room: darvill_cellar, feature: 地下室里的香炉, label: 香炉, sketch: altar, x: 14.5, y: 14.3, w: 1, h: 1}
+    - {room: darvill_cellar, feature: 屋后通院子的地下室门, label: 通院子的门, sketch: door, x: 15, y: 16.4, w: 1, h: 0.5}
+    sides:
+    - {side: n, faces: 通往主街的达维尔路, way: darvill_road}
+    - {side: e, faces: 积雪的空地}
+    - {side: s, faces: 后院雪地}
+    - {side: w, faces: 积雪的空地}
+    basis: 原书没有平面图，照原文描述定：屋后有通院子的地下室门、客厅散落着笔记、卡洛琳床畔有信；客厅大小、二层卧室和地下室的位置、两段屋内楼梯、窗和补充的家具都是 AutoKeeper 按乡下住家常理补的；正门朝北，对着东北方向来的达维尔路。
+
+geography:
+  title: 埃斯内尔
+  subtitle: 北达科他州沃德县 · 一九二一年
+  minutes_across: 65
+  places:
+  - place: main_street
+    at: [0.58, 0.555]
+    glyph: street
+  - place: ratger_house
+    at: [0.408, 0.404]
+    glyph: house
+  - place: clinic
+    at: [0.565, 0.709]
+    glyph: clinic
+  - place: church
+    at: [0.442, 0.657]
+    glyph: church
+  - place: post_office
+    at: [0.63, 0.5]
+    glyph: shop
+  - place: eastman_house
+    at: [0.77, 0.27]
+    glyph: house
+  - place: cardwell_farm
+    at: [0.87, 0.29]
+    glyph: ruin
+  - place: darvill_house
+    at: [0.252, 0.756]
+    glyph: house
+  - place: brucker_farm
+    at: [0.07, 0.19]
+    glyph: farm
+  - place: satin_hill
+    at: [0.25, 0.3]
+    glyph: hill
+  ways:
+  - id: through_road
+    kind: main
+    points:
+    - [-0.03, 0.81]
+    - [0.03, 0.8]
+    - [0.197, 0.756]
+    - [0.313, 0.681]
+    - [0.435, 0.592]
+    - [0.551, 0.554]
+    - [0.653, 0.547]
+    - [0.789, 0.587]
+    - [1.0, 0.662]
+    - [1.05, 0.68]
+  - id: main_street
+    kind: main
+    points:
+    - [0.44, 0.59]
+    - [0.551, 0.554]
+    - [0.653, 0.547]
+    - [0.7, 0.556]
+    street: main_street
+  - id: ratger_road
+    kind: lane
+    points:
+    - [0.435, 0.592]
+    - [0.41, 0.5]
+    - [0.4, 0.42]
+    passage: main_street__ratger_house
+  - id: clinic_road
+    kind: main
+    points:
+    - [0.476, 0.585]
+    - [0.53, 0.7]
+    - [0.62, 0.85]
+    - [0.73, 0.97]
+    - [0.76, 1.05]
+    passage: main_street__clinic
+  - id: ratger_clinic_road
+    kind: lane
+    points:
+    - [0.4, 0.42]
+    - [0.41, 0.5]
+    - [0.435, 0.592]
+    - [0.476, 0.585]
+    - [0.53, 0.7]
+    passage: ratger_house__clinic
+  - id: church_lane
+    kind: lane
+    points:
+    - [0.46, 0.585]
+    - [0.445, 0.645]
+    passage: main_street__church
+  - id: post_office_lane
+    kind: lane
+    points:
+    - [0.635, 0.548]
+    - [0.63, 0.51]
+    passage: main_street__post_office
+  - id: northeast_road
+    kind: main
+    points:
+    - [0.653, 0.547]
+    - [0.73, 0.43]
+    - [0.8, 0.31]
+    - [0.84, 0.24]
+    - [0.88, 0.19]
+    - [0.92, 0.12]
+    passage: post_office__eastman_house
+  - id: cardwell_crossing
+    kind: lane
+    points:
+    - [0.78, 0.275]
+    - [0.82, 0.28]
+    - [0.86, 0.29]
+    passage: eastman_house__cardwell_farm
+  - id: brucker_road
+    kind: lane
+    points:
+    - [0.551, 0.554]
+    - [0.435, 0.592]
+    - [0.313, 0.681]
+    - [0.197, 0.756]
+    - [0.13, 0.653]
+    - [0.075, 0.53]
+    - [0.058, 0.39]
+    - [0.072, 0.23]
+    passage: main_street__brucker_farm
+  - id: darvill_road
+    kind: main
+    points:
+    - [0.44, 0.59]
+    - [0.313, 0.681]
+    - [0.252, 0.725]
+    passage: main_street__darvill_house
+  - id: satin_hill_path
+    kind: path
+    points:
+    - [0.551, 0.554]
+    - [0.5, 0.45]
+    - [0.43, 0.36]
+    - [0.33, 0.31]
+    - [0.26, 0.3]
+    passage: main_street__satin_hill
+  - id: brucker_hill_path
+    kind: path
+    points:
+    - [0.08, 0.2]
+    - [0.15, 0.25]
+    - [0.24, 0.29]
+    passage: brucker_farm__satin_hill
+  - id: south_lane
+    kind: lane
+    points:
+    - [0.092, 0.948]
+    - [0.177, 0.981]
+    - [0.381, 0.953]
+    - [0.537, 0.803]
+    - [0.56, 0.76]
+  regions:
+  - kind: hills
+    shape:
+    - [0.12, 0.1]
+    - [0.25, 0.05]
+    - [0.4, 0.08]
+    - [0.42, 0.25]
+    - [0.37, 0.47]
+    - [0.2, 0.5]
+    - [0.12, 0.4]
+    near: satin_hill
+  - kind: fields
+    shape:
+    - [0.0, 0.08]
+    - [0.11, 0.08]
+    - [0.12, 0.3]
+    - [0.0, 0.32]
+    near: brucker_farm
+  - kind: fields
+    shape:
+    - [0.76, 0.7]
+    - [0.95, 0.73]
+    - [0.95, 0.95]
+    - [0.8, 0.95]
+  - kind: woods
+    shape:
+    - [0.93, 0.35]
+    - [0.99, 0.35]
+    - [0.99, 0.58]
+    - [0.93, 0.56]
+  houses:
+  - along: main_street
+    span: [0.1, 0.9]
+    density: dense
+  - along: darvill_road
+    span: [0.2, 1.0]
+  - along: clinic_road
+    span: [0.1, 0.5]
+  - along: northeast_road
+    span: [0.2, 0.7]
+  landmarks:
+  - name: 学校
+    at: [0.52, 0.5]
+    glyph: public
+  basis: 坐标照原书分发材料 1 埃斯内尔地图换算，地点位置和路的走向以图为准。主街取镇中心学校、邮局一带的东西大路。伊斯特曼家与原卡德威尔家在图上同标一处，按原文“马路对面”分放在东北公路两侧。绸缎山的范围照图上圈线。去布鲁彻农场的路从主街出发，沿穿镇大路往西南，到达维尔家附近再折向北，照图上的西侧弯路走到农场。去山上的步道图上没画，按分钟数补上。

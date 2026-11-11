@@ -30,7 +30,7 @@
                 <a class="button" href="#gallery">实机画面</a>
                 <a class="button" href="https://github.com/satoshinji2992/autokeeper">GitHub</a>
             </nav>
-            <p class="meta">Windows / macOS / Linux · 终端与浏览器 · 0.0.8</p>
+            <p class="meta">Windows / macOS / Linux · 终端与浏览器 · 0.0.9</p>
         </div>
     </header>
 
@@ -72,7 +72,7 @@
                 <img src="img/apart.png" width="3684" height="1074" alt="同一局冬雪之下里两位玩家的屏幕：左边在主街向铲雪的人打听消息，右边在布鲁彻农场跟着雷吉去牛棚；右栏各自显示队友所在的地点">
                 <figcaption>同一局《冬雪之下》里两位玩家的屏幕：一人在主街向铲雪的人打听，一人在布鲁彻农场跟着雷吉去牛棚。各自只看到自己现场的叙述，右栏显示队友在哪。</figcaption>
             </figure>
-            <p>检定结果要不要公开、要不要接受队友替你提的行动，都由你自己决定。有人断线时，AI 暂时替他行动，重连后交还。每个座位可以是真人，也可以交给 AI 调查员。</p>
+            <p>检定结果要不要公开、要不要接受队友替你提的行动，都由你自己决定。有人断线时，AI 暂时替他行动，重连后交还。每个座位可以是真人，也可以交给 AI 调查员。浏览器加入的人在设置里只能改自己的画面，看不到也改不了房主的密钥、模型和路径。</p>
         </section>
 
         <section id="art">
@@ -138,17 +138,17 @@
 
         <section id="modules">
             <h2>什么故事都能开团</h2>
-            <p class="lead">把 PDF、Word、Markdown、纯文本或 ZIP 拖进「导入模组」。AI 读完原文，整理出人物的知识与动机、线索的发现条件、事件日程、房间与平面图、战斗数值和追逐路线，保留原有的插图和手稿，再对照原文复核一遍。年代照原文，不限于 1920 年代；也可以只给一句设定，写一本原创模组：</p>
+            <p class="lead">把 PDF、Word、Markdown、纯文本或 ZIP 拖进「导入模组」。AI 读完原文，整理出人物的知识与动机、线索的发现条件、事件日程、全镇地图、建筑的平面图、战斗数值和追逐路线，保留原有的插图和手稿，再对照原文复核一遍。年代照原文，不限于 1920 年代；也可以只给一句设定，写一本原创模组：</p>
             <pre data-copy><code>autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian</code></pre>
-            <p>游戏自带《追书人》《冬雪之下》《有些人油盐不进》三本模组，第一次玩推荐单人入门的《追书人》。</p>
+            <p>游戏自带《追书人》《冬雪之下》《有些人油盐不进》三本模组，第一次玩推荐单人入门的《追书人》。按 <kbd>F3</kbd> 打开地图：全镇地图是纸色的手绘图，按模组自己的地理摆放，只画调查员知道的地点和道路；在楼里看到的是平面图，一次一层，可以切换楼层。</p>
             <div class="pair">
                 <figure>
-                    <img src="img/map.png" width="1830" height="1074" alt="冬雪之下的地图：主街、诊所、教堂、邮局与农场之间的路">
-                    <figcaption>地图只画已知的地点和道路，选中地点可以直接前往。</figcaption>
+                    <img src="img/map.png" width="1830" height="1074" alt="冬雪之下的纸色手绘地图：主街、诊所、教堂、邮局与农场按模组的方位画出">
+                    <figcaption>全镇地图：只画已知的地点和道路，选中地点可以直接前往。</figcaption>
                 </figure>
                 <figure>
                     <img src="img/plan.png" width="1830" height="1074" alt="追书人金博尔家的平面图">
-                    <figcaption>在楼里打开地图是平面图，标出每个房间里的人。</figcaption>
+                    <figcaption>楼内平面图：一次一层，标出每个房间里的人。</figcaption>
                 </figure>
             </div>
         </section>
@@ -163,6 +163,8 @@
                 <li><figure><img src="img/module.png" width="1830" height="1074" loading="lazy" alt="选模组：故事介绍、人数、时长和场景预览"><figcaption>选模组</figcaption></figure></li>
                 <li><figure><img src="img/saves.png" width="1830" height="1074" loading="lazy" alt="继续调查：存档的时间、地点与预览"><figcaption>存档</figcaption></figure></li>
                 <li><figure><img src="img/models.png" width="1830" height="1074" loading="lazy" alt="模型设置：各分工可以分别指定模型"><figcaption>模型设置</figcaption></figure></li>
+                <li><figure><img src="img/developer.png" width="1600" height="1000" loading="lazy" alt="开发者后台的实时视图：中央是知识图与世界条目，四周是各分工的面板"><figcaption>开发者后台：一回合的流向</figcaption></figure></li>
+                <li><figure><img src="img/developer-input.png" width="1600" height="1000" loading="lazy" alt="开发者后台里打开的一次模型调用：完整请求按来源分段"><figcaption>开发者后台：一次调用的完整请求</figcaption></figure></li>
                 <li><figure><img src="img/plugins.png" width="1830" height="1074" loading="lazy" alt="规则插件：本局生效的特殊规则，一句话添加家规"><figcaption>规则插件</figcaption></figure></li>
             </ul>
         </section>

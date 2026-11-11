@@ -73,3 +73,50 @@ locations:
 passages:
   - {id: square__tower, a: square, b: tower, kind: door, minutes: 0, gate: {open: true}}
   - {id: square__office, a: square, b: office, kind: road, minutes: 10}
+
+# 建筑平面图：楼层和房间由编译期的「建筑内部」一步整理，layout（每样东西在哪）由「平面布局」一步定，不必手写。
+# layout 的坐标单位是米，全楼各层同一张格子：x 由西向东、y 由北向南（和全镇地图一样上北下南）；墙是线，
+# 两间并排时一间的东墙 x+w 就是另一间的西墙 x。门、窗的 at 是它在墙线上的中点。
+plans:
+  - building: office
+    floors:
+      - name: 一层
+        rooms:
+          - {place: office, label: 档案室}
+    basis: 格式样例，手写
+    layout:
+      rooms:
+        - {place: office, x: 0, y: 0, w: 8, h: 6}
+      doors:
+        - {passage: square__office, at: [0, 3], main: true}   # 正门开在西墙正中，朝着广场
+        - {room: office, at: [8, 4.5]}                         # 原文没有通路的后门：写 room
+      windows:
+        - {room: office, at: [2, 6], width: 1.5}
+        - {room: office, at: [5.5, 6], width: 1.5}
+      fixtures:                                                # 每一项可调查的东西一条，feature 逐字照抄
+        - {room: office, feature: 旧报合订本, label: 旧报合订本, sketch: shelf, x: 1, y: 0, w: 6, h: 0.5}
+        - {room: office, label: 编辑桌, sketch: desk, x: 3, y: 2.5, w: 1.5, h: 0.8}   # 原文写到的家具，feature 留空
+      sides:                                                   # 四面外面是什么，和全镇地图一致
+        - {side: w, faces: 广场, place: square}
+        - {side: n, faces: 树林}
+        - {side: e, faces: 后巷}
+        - {side: s, faces: 邻居的店铺}
+      basis: 格式样例，手写
+
+# 全镇地图：编译期的「全镇地图」一步按原书地图或原文方位定，不必手写。坐标 [x, y] 都在 0..1，
+# x 由西向东、y 由北向南；地图宽是高的 1.5 倍。只写镇一级地点（within 为空的），房间有自己的平面图。
+geography:
+  title: 钟楼镇
+  subtitle: 一九二〇年代
+  minutes_across: 38                  # 编译时按通路分钟数和坐标算出
+  places:
+    - {place: square, at: [0.42, 0.5], glyph: street}
+    - {place: office, at: [0.68, 0.42], glyph: public}
+  ways:
+    - {id: high_street, kind: main, street: square, points: [[-0.05, 0.56], [0.2, 0.54], [0.42, 0.5], [0.62, 0.5], [1.05, 0.47]]}
+    - {id: square__office, kind: lane, passage: square__office, points: [[0.62, 0.5], [0.66, 0.46], [0.68, 0.42]]}
+  regions:
+    - {kind: woods, near: office, shape: [[0.74, 0.18], [0.9, 0.16], [0.93, 0.3], [0.78, 0.34]]}
+  houses:
+    - {along: high_street, span: [0.3, 0.7], density: dense}
+  basis: 格式样例，手写
