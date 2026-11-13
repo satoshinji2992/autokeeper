@@ -194,6 +194,8 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 开局可以选模组预设的调查员，也可以自己建卡。写一句设想（“落魄的禁酒令私家侦探”），或者给一个历史人物的名字，AI 会查资料、找肖像，结合模组年代问你三个背景问题，再按第 7 版规则算好属性和技能点。也可以手动车卡：在规则书样式的人物卡上掷骰或分配属性、按年龄调整、从《调查员手册》的职业表选职业，自己分配职业技能点和兴趣技能点，规则会随时检查。已有的卡可以直接导入：骰娘 `.st` 属性串、Excel、PDF、Word、纸质人物卡的照片，以及酒馆角色卡（PNG / JSON）。
 
+单人开局选「我的卡」后，可以直接使用原背景，也可以选「适配模组背景」。确认前可预览改编，采用的背景只随这局保存。
+
 <p align="center">
   <a href="docs/img/cards.png"><img src="docs/img/cards.png" width="100%" alt="角色库：管理自己创建与导入的人物卡"></a>
   <br><sub>角色库：自己创建和导入的人物卡，可以编辑、导出，带进新的调查。</sub>
@@ -229,9 +231,17 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 </details>
 
+### 屏幕一角
+
+你在阅览室翻到一九一九年的报纸。余光里，屏幕一角掠过一抹虹彩。
+
+<p align="center">
+  <img src="docs/img/iridescence.png" width="100%" alt="《追书人》的图书馆调查画面，右下角露出几枚虹彩泡泡">
+</p>
+
 ## 安装
 
-当前版本 **0.0.9.3**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
+当前版本 **0.0.9.4**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
 
 ```bash
 # Linux、macOS、WSL
