@@ -21,7 +21,7 @@ events:
 - id: e_mccurdy_attack
   title: 麦克迪突袭
   when: D1 19:30
-  move_to: meeting_house
+  where: meeting_house
   read_aloud: 厨房那边的窗户“咔”地响了一声。一个衣衫褴褛、浑身污秽的人影翻了进来，两眼空洞，喉咙里发出野兽一样的低吼。
   text: 逃脱的崩溃者麦克迪绕屋找到没关的门窗突入，先扑向落单的调查员（煮咖啡、上厕所的人）。事先聆听成功的调查员不会措手不及。属性同典型崩溃成人，疯狂抓咬，想抓走一人。守秘人应避免开幕死人。
   sanity: 0/1D3
@@ -58,7 +58,7 @@ events:
 - id: e_jensen_arrives
   title: 收尸的皮卡
   when: D1 20:30
-  move_to: meeting_house
+  where: meeting_house
   performer: jensen
   performance: 跳下皮卡，打量调查员的车和东西，把尸体卷进床单扔上车斗；被质问就粗声说自己是来收尸的。
   read_aloud: 一辆破皮卡颠簸着停在门口。下车的是镇东头养猪的弗雷迪·詹森，他看都不看你们，拎起一张床单就往尸体走去。

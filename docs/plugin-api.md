@@ -81,3 +81,38 @@ def handle(event, ctx, api):
 对应测试：`{"name":"开场","event":{"hook":"command","command":"降神","text":""},"expected_effects":[{"kind":"prompt","key":"ask","title":"降神会","style":"choice","text":"烛火一跳。你想问什么？","options":["你是谁","你在找什么"]}]}`，再加一项 answer 事件的测试。
 
 `roll` 的 `who` 是实际检定者，可能是队友、NPC 或怪物，不等同于 `ctx.acting`。用 `source` 和 `purpose` 过滤关心的检定；普通行动、事件、战斗、追逐及理智／伤势连带检定均可产生通知。等待幸运或孤注一掷选择时不提前投递最终结果，同一结果只处理一次；插件自身引发的检定保留记录，但不递归触发 roll 钩子。详细类型与提交约定见 `docs/check-interface.md`。
+
+## 改核心规则、记数值、给守秘人的暗账
+
+家规与别的百分骰体系要改的往往是核心判定本身，不只是结算之后追加效果。插件可以回答核心规则的判定：manifest 写 `rules: ["sanity_effect"]`（一个判定只能有一个启用的插件回答，两个同名是错误）。每次游戏要做这个判定时，宿主先算出核心规则的答案，再以 `{"hook":"rule","rule":"判定名","input":{...},"core":{...}}` 调用你的 `handle`：`input` 是判定的输入，`core` 是核心规则对这个输入的答案。返回里加 `rule`，写你要改的字段（没写的保持核心的值）；不写 `rule` 表示核心的答案照旧。同一次返回里的 `state` 照常保存。
+
+可回答的判定与字段（等级是整数：0 大失败、1 失败、2 常规、3 困难、4 极难、5 大成功）：
+- `roll_level`：入 value（算数的 d100）、target、label、who、skill；出 level。
+- `check_terms`：入 target、difficulty（常规/困难/极难）、bonus（奖惩骰数）、who、skill；出 target、bonus、needed、thresholds。
+- `can_push`：入 skill、passed、pushed、level、who；出 can_push。
+- `luck_needed`：入同上加 value、target、difficulty、luck；出 need（转成功要花的点数，不能为 null）、affordable。
+- `sanity_effect`：入 who、loss、kind（模组、守秘人或插件在写这次理智损失时说的“是哪一类事”，如 暴力、无助、非自然，没写是 `""`）、passed（理智检定过了没有：true/false，没有检定的损失是 null）、success_loss、failure_loss（检定过了、没过各损失的骰式）、san、san_start_of_day、san_lost_today、underlying、int_passed、level（理智检定的等级，没有检定时没有这个键）；出 after、permanent、indefinite、int_check、temporary、relapse、bout、duration_dice。需要先掷智力时 `int_check` 为真，带着结果会再问一次。理智检定的 `roll` 事件另带 `sanity_kind`（同上）。
+- `wound_assess`、`wound_apply`：入出为伤害与身体的字典；入里的 `weapon` 是打出这一下的武器 `{"name","damage"（伤害骰式）,"impale"（是否贯穿）,"firearm","facts"}`，`facts` 是模组里这一条攻击写的 `facts`（`{键: 数字/文字/真假}`）原样给你；不知道武器的伤害（守秘人裁定、插件自己的伤害）是 `{}`。`derive_sheet`：入 characteristics、age、skills、who；出 hp_max、mp_max、san、san_max、damage_bonus、build、move。`ending_gains`：出 improve。`improvement`：入 who、skill、before、roll、gain_roll；出 improves、gain。
+- 答案按核心字段校验：字段不存在、类型不对（`luck_needed.need` 可为 null）整份作废，核心的答案照旧，插件暂停。必须在 1 秒内回答，不能 `api.roll`/`api.check`（要骰子见下）；效果只能是 `track`、`flag`、`hint`、`note`。`derive_sheet` 随每次读人物卡被问，只能由输入决定，不带效果，不能要骰子，宿主按输入缓存。
+- 要骰子：规则答案可以不直接答，返回 `"dice": ["1D100", "1D4"]`（至多 6 项，每项是 1–20 颗 D1–D999 的普通骰式，合计至多 20 颗；这时不能同时写 `rule` 或 `effects`）。宿主用本局的骰子掷出（和引擎自己的规则骰一样记入这一步的日志、给玩家看见，中断后重来得到同样的点数），再带着结果调用你一次：`event["dice"]` 是每一项的点数合计，按顺序，`input`、`core` 与第一次相同；第二次必须给最终答案（不能再要骰子，否则整份作废、插件暂停）。只有在结算阶段里才能要骰子；阶段之外（没有日志可记）要骰子被拒绝，核心的答案照旧，插件不暂停。
+- tests 里每个 `rules` 里的判定至少一项：`event` 写上面的结构（`core` 必须就是核心规则对 `input` 的答案），`expected_rule` 写你改的字段（`{}` 表示不改）。要骰子的那一次写 `expected_dice`（你要的骰式列表），带结果的那一次在 `event` 里加 `"dice": [点数]`、再写 `expected_rule`。
+
+`rules_text`：一小段 Markdown，写这一局规则与核心规则不同的地方；会放在核心规则之后，标明以这里为准，守秘人和所有读规则的角色都看得到。只写规则本身，不写剧情。
+
+数值：manifest 的 `tracks` 声明记在每个调查员人物卡上的值 `{"key":"corruption","label":"腐化","kind":"pool|number|scores","max":9,"scores":["分项"]}`（pool 在 0 到 max，开局满；scores 要列分项名）。pool 可以写 `"stands_for": "mp"`（`hp`、`mp`、`san`、`luck` 之一）表示人物卡上这一行由它顶替、换成它的名字显示，不写就是在核心的行旁边另起一行。只有本插件的 `track` 效果能写，需要 `track` 能力：`{"kind":"track","who":"调查员 id","key":"corruption","amount":1}`（增减），或 `"value":3`（设成），scores 加 `"name":"分项"`。`ctx.investigators[].tracked` 里能读到。
+
+守秘人的暗账：返回里加 `keeper`（一行，最多 120 字；`""` 清除），只给守秘人看，写在“插件记录”里，不发给任何玩家。适合玩家不该知道的计数。`unreal` 效果（能力 `unreal`）为某位调查员打开或关上幻觉的通道：`{"kind":"unreal","who":"调查员 id","on":true,"text":"几个字的理由"}`。核心规则只在疯狂时允许守秘人给幻觉；打开后即使神志清醒也可以，守秘人会被告知理由；`"on":false` 关上。
+
+最小例子：理智损失加倍，并在人物卡上记腐化。manifest：`rules: ["sanity_effect"]`、`capabilities: ["track"]`、`tracks: [{"key":"corruption","label":"腐化","kind":"number"}]`。
+
+```python
+def handle(event, ctx, api):
+    state = ctx["state"]
+    if event["hook"] != "rule" or event["rule"] != "sanity_effect" or event["core"]["int_check"] or event["input"]["loss"] <= 0:
+        return {"state": state, "effects": []}
+    i = event["input"]
+    return {"state": state, "rule": {"after": max(0, i["san"] - 2 * i["loss"])},
+            "effects": [{"kind": "track", "who": i["who"], "key": "corruption", "amount": i["loss"]}]}
+```
+
+对应测试：`{"name":"损失加倍","event":{"hook":"rule","rule":"sanity_effect","input":{"who":"x","loss":3,"kind":"","san":60,"san_start_of_day":60,"san_lost_today":0,"underlying":false,"int_passed":null},"core":{"after":57,"permanent":false,"indefinite":false,"int_check":false,"temporary":false,"relapse":false,"bout":false,"duration_dice":""}},"expected_rule":{"after":54},"expected_effects":[{"kind":"track","who":"x","key":"corruption","amount":3}]}`。

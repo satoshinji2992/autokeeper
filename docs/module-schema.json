@@ -21,6 +21,40 @@
    "title": "Action",
    "type": "object"
   },
+  "AgeLimit": {
+   "properties": {
+    "low": {
+     "maximum": 120,
+     "minimum": 1,
+     "title": "Low",
+     "type": "integer"
+    },
+    "high": {
+     "anyOf": [
+      {
+       "maximum": 120,
+       "minimum": 1,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "High"
+    },
+    "adjust": {
+     "default": true,
+     "title": "Adjust",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "low"
+   ],
+   "title": "AgeLimit",
+   "type": "object"
+  },
   "Agenda": {
    "properties": {
     "npc": {
@@ -91,6 +125,26 @@
    "title": "Bond",
    "type": "object"
   },
+  "Caps": {
+   "properties": {
+    "each": {
+     "additionalProperties": {
+      "type": "integer"
+     },
+     "title": "Each",
+     "type": "object"
+    },
+    "rest": {
+     "default": 99,
+     "maximum": 99,
+     "minimum": 1,
+     "title": "Rest",
+     "type": "integer"
+    }
+   },
+   "title": "Caps",
+   "type": "object"
+  },
   "Case": {
    "properties": {
     "name": {
@@ -154,6 +208,34 @@
      ],
      "default": null,
      "title": "Expected Panels"
+    },
+    "expected_rule": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Expected Rule"
+    },
+    "expected_dice": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Expected Dice"
     }
    },
    "required": [
@@ -279,6 +361,7 @@
     "sanity": {
      "anyOf": [
       {
+       "pattern": "^(?: *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* */ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* *)?$",
        "type": "string"
       },
       {
@@ -288,6 +371,13 @@
      "default": null,
      "description": "发现时的理智检定，如 0/1D3",
      "title": "Sanity"
+    },
+    "sanity_kind": {
+     "default": "",
+     "description": "这次理智损失是哪一类事，给在意它的规则看（如 暴力、无助、非自然）；核心规则不看，没有就留空",
+     "maxLength": 24,
+     "title": "Sanity Kind",
+     "type": "string"
     },
     "mythos": {
      "default": 0,
@@ -353,6 +443,104 @@
    "title": "Conclusion",
    "type": "object"
   },
+  "Creation": {
+   "properties": {
+    "summary": {
+     "default": "",
+     "description": "原作对车卡的说明，短，原文意思，给玩家看",
+     "title": "Summary",
+     "type": "string"
+    },
+    "age": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/AgeLimit"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "固定年龄（只写 low）或年龄范围，以及年龄调整是否适用"
+    },
+    "caps": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Caps"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "属性上限：each 按属性名，rest 为其余各项"
+    },
+    "luck": {
+     "default": "standard",
+     "description": "幸运：规则书的，或掷两次取高",
+     "enum": [
+      "standard",
+      "best_of_two"
+     ],
+     "title": "Luck",
+     "type": "string"
+    },
+    "occupations": {
+     "description": "模组自己的职业，写法同规则书职业",
+     "items": {
+      "$ref": "#/$defs/Occupation"
+     },
+     "title": "Occupations",
+     "type": "array"
+    },
+    "only": {
+     "default": false,
+     "description": "只能选 occupations 里的职业",
+     "title": "Only",
+     "type": "boolean"
+    },
+    "skill_caps": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/SkillCaps"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "建卡时技能上限：职业技能和兴趣技能各自的"
+    },
+    "barred_skills": {
+     "description": "不能分配点数的技能；写技能类名则整类不能",
+     "items": {
+      "type": "string"
+     },
+     "title": "Barred Skills",
+     "type": "array"
+    },
+    "credit_label": {
+     "default": "",
+     "description": "人物卡上信用评级的叫法",
+     "title": "Credit Label",
+     "type": "string"
+    },
+    "connection_label": {
+     "default": "",
+     "description": "人物卡上关键连接的叫法",
+     "title": "Connection Label",
+     "type": "string"
+    },
+    "pregens_only": {
+     "default": false,
+     "description": "只用模组的预设调查员，不接受自制人物卡",
+     "title": "Pregens Only",
+     "type": "boolean"
+    }
+   },
+   "title": "Creation",
+   "type": "object"
+  },
   "Creature": {
    "properties": {
     "id": {
@@ -392,10 +580,26 @@
      "title": "Description",
      "type": "string"
     },
+    "perceived_by": {
+     "description": "只有这些人感知得到他：players 指所有调查员，或写具体的调查员、人物 id；空着表示在场的人都看得见、听得见。幻象、亡魂、只存在于某人感知里的东西才写，其他人不会看见他、对他作出反应，也不能对他动手、说话或交接东西",
+     "items": {
+      "type": "string"
+     },
+     "title": "Perceived By",
+     "type": "array"
+    },
     "sanity": {
      "default": "",
      "description": "原作或规则明确的目击理智检定，如 0/1D6；无损失时留空，不因登记为生物就默认扣理智",
+     "pattern": "^(?: *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* */ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* *)?$",
      "title": "Sanity",
+     "type": "string"
+    },
+    "sanity_kind": {
+     "default": "",
+     "description": "这次理智损失是哪一类事，给在意它的规则看（如 暴力、无助、非自然）；核心规则不看，没有就留空",
+     "maxLength": 24,
+     "title": "Sanity Kind",
      "type": "string"
     },
     "stats": {
@@ -407,12 +611,36 @@
      "type": "object"
     },
     "attacks": {
-     "description": "攻击，一条一种，写成“名字 命中率%，伤害 骰子式”：“爪击 50%，伤害 1D6+DB”“格斗（剥皮爪击）60%，伤害 1D4+2+DB”“射击（步枪）30%，射程 110，弹夹 5，伤害 2D6+4”；命中率要带 %，DB 是它的伤害加值，名字里有咬、刺、角的算贯穿。每轮不止一次攻击时另写一条“每轮 3 次”。闪避写进 stats，不写在这里",
+     "description": "攻击，一条一种，写成“名字 命中率%，伤害 骰子式”：“爪击 50%，伤害 1D6+DB”“格斗（剥皮爪击）60%，伤害 1D4+2+DB”“射击（步枪）30%，射程 110，弹夹 5，伤害 2D6+4”；命中率要带 %，DB 是它的伤害加值，名字里有咬、刺、角的算贯穿。每轮不止一次攻击时另写一条“每轮 3 次”。闪避写进 stats，不写在这里。一项也可以写成 {line: 那一行, facts: {键: 值}}，facts 原样交给规则插件",
      "items": {
       "type": "string"
      },
      "title": "Attacks",
      "type": "array"
+    },
+    "attack_facts": {
+     "additionalProperties": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "number"
+        },
+        {
+         "type": "boolean"
+        }
+       ]
+      },
+      "type": "object"
+     },
+     "description": "attacks 里某一行带的 facts，以那一行为键",
+     "title": "Attack Facts",
+     "type": "object"
     },
     "notes": {
      "default": "",
@@ -619,6 +847,7 @@
     "sanity": {
      "anyOf": [
       {
+       "pattern": "^(?: *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* */ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* *)?$",
        "type": "string"
       },
       {
@@ -627,6 +856,13 @@
      ],
      "default": null,
      "title": "Sanity"
+    },
+    "sanity_kind": {
+     "default": "",
+     "description": "这次理智损失是哪一类事，给在意它的规则看（如 暴力、无助、非自然）；核心规则不看，没有就留空",
+     "maxLength": 24,
+     "title": "Sanity Kind",
+     "type": "string"
     },
     "present": {
      "description": "朗读里出现在调查员眼前的 NPC id（推门进来的人、桥头的人影）；触发时他们来到事件发生的地方。只是听说、打来电话、远远望见的不写",
@@ -667,7 +903,14 @@
       }
      ],
      "default": null,
+     "description": "事件发生时把调查员带去的地点 id（被抓走、抬走、在别处醒来、穿过一道门）；不是事件发生的地点，发生地点写 where。没有时刻的事件，队伍在哪都被带走；定了时刻的事件要写 where（那里的人被带走），或写 anywhere: true",
      "title": "Move To"
+    },
+    "anywhere": {
+     "default": false,
+     "description": "定了时刻、带走调查员的事件（被抓走、醒来已在别处、船按时开走）写 true：无论他们此刻在哪都被带去 move_to；不写，定了时刻的事件只带走在 where 的人。要和 move_to 一起写，不和 where 一起写",
+     "title": "Anywhere",
+     "type": "boolean"
     },
     "performer": {
      "anyOf": [
@@ -1336,6 +1579,15 @@
      },
      "title": "Spells",
      "type": "array"
+    },
+    "tracked": {
+     "additionalProperties": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "description": "规则插件记在人物卡上的数值：{插件 id: {清单 tracks 里声明的键: 值}}；pool 和 number 写整数，scores 写 {分项名: 分数}。只写原文给了的，没有就整个不写",
+     "title": "Tracked",
+     "type": "object"
     }
    },
    "required": [
@@ -2099,6 +2351,14 @@
      "default": null,
      "title": "Location"
     },
+    "perceived_by": {
+     "description": "只有这些人感知得到他：players 指所有调查员，或写具体的调查员、人物 id；空着表示在场的人都看得见、听得见。幻象、亡魂、只存在于某人感知里的东西才写，其他人不会看见他、对他作出反应，也不能对他动手、说话或交接东西",
+     "items": {
+      "type": "string"
+     },
+     "title": "Perceived By",
+     "type": "array"
+    },
     "portrait": {
      "anyOf": [
       {
@@ -2146,12 +2406,36 @@
      "type": "string"
     },
     "attacks": {
-     "description": "会用的攻击，写法同怪物的 attacks：“格斗(斗殴) 50%，伤害 1D3+DB”“射击(手枪) 40%，伤害 1D10”；只写原文写明会动手的人；空着就只有徒手",
+     "description": "会用的攻击，写法同怪物的 attacks：“格斗(斗殴) 50%，伤害 1D3+DB”“射击(手枪) 40%，伤害 1D10”；只写原文写明会动手的人；空着就只有徒手。一项也可以写成 {line: 那一行, facts: {键: 值}}，facts 原样交给规则插件",
      "items": {
       "type": "string"
      },
      "title": "Attacks",
      "type": "array"
+    },
+    "attack_facts": {
+     "additionalProperties": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "number"
+        },
+        {
+         "type": "boolean"
+        }
+       ]
+      },
+      "type": "object"
+     },
+     "description": "attacks 里某一行带的 facts，以那一行为键",
+     "title": "Attack Facts",
+     "type": "object"
     }
    },
    "required": [
@@ -2232,6 +2516,87 @@
    "title": "Obstacle",
    "type": "object"
   },
+  "Occupation": {
+   "properties": {
+    "name": {
+     "title": "Name",
+     "type": "string"
+    },
+    "group": {
+     "default": "",
+     "title": "Group",
+     "type": "string"
+    },
+    "tags": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Tags",
+     "type": "array"
+    },
+    "points": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Points",
+     "type": "array"
+    },
+    "credit": {
+     "maxItems": 2,
+     "minItems": 2,
+     "prefixItems": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "Credit",
+     "type": "array"
+    },
+    "credit_note": {
+     "default": "",
+     "title": "Credit Note",
+     "type": "string"
+    },
+    "skills": {
+     "items": {
+      "$ref": "#/$defs/Slot"
+     },
+     "title": "Skills",
+     "type": "array"
+    },
+    "contacts": {
+     "default": "",
+     "title": "Contacts",
+     "type": "string"
+    },
+    "note": {
+     "default": "",
+     "title": "Note",
+     "type": "string"
+    },
+    "page": {
+     "default": 0,
+     "title": "Page",
+     "type": "integer"
+    },
+    "own": {
+     "default": false,
+     "title": "Own",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "name",
+    "points",
+    "credit",
+    "skills"
+   ],
+   "title": "Occupation",
+   "type": "object"
+  },
   "Passage": {
    "properties": {
     "id": {
@@ -2264,7 +2629,6 @@
     "minutes": {
      "default": 0,
      "description": "普通经过的估计分钟数；短室内移动可为0，仍保留事件先后",
-     "maximum": 720,
      "minimum": 0,
      "title": "Minutes",
      "type": "integer"
@@ -2291,6 +2655,18 @@
      "default": "",
      "description": "声光与阻隔依据，如隔音、楼梯口、窗户；不写角色已听见的结果",
      "title": "Perception",
+     "type": "string"
+    },
+    "opens": {
+     "default": "",
+     "description": "这条路在什么条件成立时才通：和事件 when 同一套条件（flag:标记、knows:players:clue:线索、at:谁:地点、gone:谁、hour:22-6、D2 20:00，用 &、| 连接）；成立前一直关着，不写就照 gate 的初始状态。插件或规则记的数值（腐化到了几级）让插件在到点时设一个标记，这里写 flag:那个标记。条件说不清的理由，守秘人也可以按剧情用 gate 操作直接打开",
+     "title": "Opens",
+     "type": "string"
+    },
+    "closes": {
+     "default": "",
+     "description": "这条路在什么条件成立后就不通了，写法同 opens；条件一成立这条路就关上，守秘人用 gate 操作另有裁定的除外",
+     "title": "Closes",
      "type": "string"
     },
     "secret": {
@@ -2494,7 +2870,10 @@
        "timer",
        "item",
        "hint",
-       "attitude"
+       "attitude",
+       "track",
+       "unreal",
+       "regain"
       ],
       "type": "string"
      },
@@ -2529,8 +2908,33 @@
      "title": "Initial",
      "type": "object"
     },
+    "tracks": {
+     "description": "插件要记在调查员人物卡上的数值",
+     "items": {
+      "$ref": "#/$defs/Tracked"
+     },
+     "maxItems": 24,
+     "title": "Tracks",
+     "type": "array"
+    },
+    "rules": {
+     "description": "这个插件回答的核心判定（rules/decide.py 里的函数名）",
+     "items": {
+      "type": "string"
+     },
+     "maxItems": 10,
+     "title": "Rules",
+     "type": "array"
+    },
+    "rules_text": {
+     "default": "",
+     "description": "给模型看的规则：本局规则与核心规则不同的地方",
+     "maxLength": 12000,
+     "title": "Rules Text",
+     "type": "string"
+    },
     "code": {
-     "maxLength": 32000,
+     "maxLength": 200000,
      "minLength": 1,
      "title": "Code",
      "type": "string"
@@ -2539,7 +2943,7 @@
      "items": {
       "$ref": "#/$defs/Case"
      },
-     "maxItems": 32,
+     "maxItems": 200,
      "minItems": 1,
      "title": "Tests",
      "type": "array"
@@ -2782,6 +3186,7 @@
     "sanity": {
      "anyOf": [
       {
+       "pattern": "^(?: *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* */ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3})(?: *\\+ *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}))* *)?$",
        "type": "string"
       },
       {
@@ -2791,6 +3196,13 @@
      "default": null,
      "description": "画得足够像时的理智检定",
      "title": "Sanity"
+    },
+    "sanity_kind": {
+     "default": "",
+     "description": "这次理智损失是哪一类事，给在意它的规则看（如 暴力、无助、非自然）；核心规则不看，没有就留空",
+     "maxLength": 24,
+     "title": "Sanity Kind",
+     "type": "string"
     },
     "clue": {
      "anyOf": [
@@ -2825,6 +3237,52 @@
     "target"
    ],
    "title": "SketchPrompt",
+   "type": "object"
+  },
+  "SkillCaps": {
+   "properties": {
+    "occupation": {
+     "default": 99,
+     "maximum": 99,
+     "minimum": 1,
+     "title": "Occupation",
+     "type": "integer"
+    },
+    "interest": {
+     "default": 99,
+     "maximum": 99,
+     "minimum": 1,
+     "title": "Interest",
+     "type": "integer"
+    }
+   },
+   "title": "SkillCaps",
+   "type": "object"
+  },
+  "Slot": {
+   "properties": {
+    "pick": {
+     "default": 1,
+     "title": "Pick",
+     "type": "integer"
+    },
+    "of": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Of",
+     "type": "array"
+    },
+    "note": {
+     "default": "",
+     "title": "Note",
+     "type": "string"
+    }
+   },
+   "required": [
+    "of"
+   ],
+   "title": "Slot",
    "type": "object"
   },
   "Stage": {
@@ -2971,6 +3429,79 @@
     "hook"
    ],
    "title": "Tie",
+   "type": "object"
+  },
+  "Tracked": {
+   "additionalProperties": false,
+   "properties": {
+    "key": {
+     "pattern": "^[a-z][a-z0-9_]{0,31}$",
+     "title": "Key",
+     "type": "string"
+    },
+    "label": {
+     "description": "人物卡上的名字",
+     "maxLength": 20,
+     "minLength": 1,
+     "title": "Label",
+     "type": "string"
+    },
+    "kind": {
+     "default": "number",
+     "enum": [
+      "pool",
+      "number",
+      "scores"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "max": {
+     "default": 0,
+     "description": "pool 的上限，开局时是满的",
+     "maximum": 999,
+     "minimum": 0,
+     "title": "Max",
+     "type": "integer"
+    },
+    "scores": {
+     "description": "scores 的分项名",
+     "items": {
+      "type": "string"
+     },
+     "maxItems": 16,
+     "title": "Scores",
+     "type": "array"
+    },
+    "stands_for": {
+     "default": "",
+     "description": "pool 顶替人物卡上的哪一行（hp 生命、mp 魔法、san 理智、luck 幸运），换了名字显示；空表示在它们旁边另起一行",
+     "enum": [
+      "",
+      "hp",
+      "mp",
+      "san",
+      "luck"
+     ],
+     "title": "Stands For",
+     "type": "string"
+    },
+    "max_from": {
+     "default": "",
+     "description": "pool 的上限取这位调查员人物卡上的这个值（每人不同，开局是满的）；人物卡上没有（为 0）时用 max",
+     "enum": [
+      "",
+      "mp_max"
+     ],
+     "title": "Max From",
+     "type": "string"
+    }
+   },
+   "required": [
+    "key",
+    "label"
+   ],
+   "title": "Tracked",
    "type": "object"
   },
   "View": {
@@ -3166,7 +3697,7 @@
    "title": "Cover"
   },
   "plugins": {
-   "description": "plugins/<id>/ 下经过测试的自定义规则插件",
+   "description": "经过测试的自定义规则插件的 id：先找模组自己的 plugins/<id>/，再找共享的",
    "items": {
     "type": "string"
    },
@@ -3187,6 +3718,14 @@
    },
    "title": "Extension Errors",
    "type": "object"
+  },
+  "shared_extensions": {
+   "items": {
+    "type": "string"
+   },
+   "title": "Shared Extensions",
+   "type": "array",
+   "uniqueItems": true
   },
   "plugin_info": {
    "items": {
@@ -3380,6 +3919,18 @@
    },
    "title": "Pregens",
    "type": "array"
+  },
+  "creation": {
+   "anyOf": [
+    {
+     "$ref": "#/$defs/Creation"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "description": "模组自己的车卡规则：原作写明怎样做调查员时才写，没有就不写"
   },
   "relations": {
    "description": "冲突图：人物之间的看法，开局就在本局的世界记录里",
