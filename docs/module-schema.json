@@ -2290,9 +2290,20 @@
     },
     "voice": {
      "default": "",
-     "description": "说话方式、口头禅",
+     "description": "说话方式、语域及随场合的变化",
      "title": "Voice",
      "type": "string"
+    },
+    "voice_examples": {
+     "description": "人物语气示范，每条是一句短台词或一问一答；只供演出参考，不是已发生的事或可披露的案情",
+     "items": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     },
+     "maxItems": 3,
+     "title": "Voice Examples",
+     "type": "array"
     },
     "goal": {
      "default": "",
