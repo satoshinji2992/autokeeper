@@ -4,12 +4,12 @@
 
 ## 安装
 
-AutoKeeper 在 PyPI 上提供 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64，glibc 2.28 及以上）的安装包，需要 Python 3.12。只加入朋友的房间时，用浏览器打开房间网址即可，不用安装。
+AutoKeeper 在 PyPI 上提供 Windows（x64）和 Linux（x86_64，glibc 2.28 及以上）的安装包，需要 Python 3.12。macOS 支持与后续版本发布已暂停。只加入朋友的房间时，用浏览器打开房间网址即可，不用安装。
 
 一键脚本先装 [uv](https://docs.astral.sh/uv/)，再用它装好 Python 3.12 和 AutoKeeper，最后运行 `autokeeper setup`：
 
 ```bash
-# Linux、macOS、WSL
+# Linux、WSL
 curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash
 ```
 
@@ -34,7 +34,6 @@ uv tool install --python 3.12 autokeeper
 
 | 系统 | 安装方式 |
 |---|---|
-| macOS | `brew install node` |
 | Linux | `sudo apt install nodejs npm`（其他发行版用自己的包管理器），确认 `node --version` 不低于 22 |
 | Windows | 一键脚本自动安装；手动安装用 `winget install --id OpenJS.NodeJS.LTS -e`，建议在 Windows Terminal 中运行 |
 
@@ -127,6 +126,8 @@ autokeeper --preset deepseek --budget 5
 | Tab | 补全输入框里的技能名；战斗与追逐中切换被攻击时的应对 |
 | Esc | 菜单：继续、存档、读档、玩法说明（含按键说明）、回到标题、退出游戏、设置。换模型、叙事偏好和开发者模式在「设置」里 |
 
+开发者密钥目前没有输入框：将原有的 `developer.key` 放入用户配置目录，Windows 为 `%APPDATA%\autokeeper\developer.key`，Linux 为 `~/.config/autokeeper/developer.key`（设置了 `XDG_CONFIG_HOME` 时以该目录为准），然后重新打开后台。它不是模型 API 密钥；新生成的另一把私钥不能解密已有记录。
+
 | 输入 | 作用 |
 |---|---|
 | `.ra 侦查`、`.rab 恐吓` | 提议使用技能，守秘人仍会按情境决定是否检定与难度；失败的同一次尝试不能随意重掷 |
@@ -185,7 +186,7 @@ autokeeper --preset deepseek --budget 5
 
 配乐随剧情实时生成：守秘人在叙述氛围变化时给出一个配乐意图（日常、悬疑、不安、恐怖、紧迫、悲伤、震撼、余波，强度三档，可附惊吓、骤停或揭示），战斗和追逐、理智损失由游戏直接处理，室外与夜晚也会改变音色。每局的调性和主题各不相同；同一场景里每隔几个乐句换一次主奏乐器、节奏和变奏，弦乐、合唱、钢琴、竖琴、八音盒、管风琴、玻璃琴、长笛、单簧管、大提琴、圆号、尼龙吉他、马林巴、铜管、风声与各种鼓轮流出现，本局较少用到的乐器优先；震撼和恐怖的段落里会有男声的仪式吟唱与女声应和，悲伤时有女声无词哼唱，不安时偶有耳语。节拍借鉴数学摇滚：除 4/4 外还有 7/8、5/8、5/4、7/4 等，重音按 2+2+3、3+3+2 这样的分组落下，紧张段落里还有跨小节循环的固定音型。舒缓的段落有时带摇摆，每个音的时值和力度都有细微出入，像真人演奏。音乐在下一小节承接变化，不重新开曲；回忆、否定和人物谎言不改变配乐。私密遭遇只影响本人的配乐。这些意图随守秘人原有的叙述一起给出，不额外调用模型。
 
-终端版直接从本机声卡播放，「设置 → 配乐」可选关闭、轻、适中、较响，默认为适中，选择会保存。标题画面有自己的配乐，进入游戏后换成本局的配乐。Windows、macOS 和 64 位 Linux（含 WSL）支持终端配乐，其他系统可用网页版。WSL 中的配乐经 Windows PowerShell 直接在 Windows 上播放，不经 WSLg 转发；无法调用 PowerShell 时改由 WSLg 播放，约两分钟后可能断续。网页端（`autokeeper serve`、联机房间的网页）在页面里播放，第一次按键或点击后开始发声；音量只保存在当前浏览器，默认为适中。
+终端版直接从本机声卡播放，「设置 → 配乐」可选关闭、轻、适中、较响，默认为适中，选择会保存。标题画面有自己的配乐，进入游戏后换成本局的配乐。Windows 和 64 位 Linux（含 WSL）支持终端配乐，其他系统可用网页版。WSL 中的配乐经 Windows PowerShell 直接在 Windows 上播放，不经 WSLg 转发；无法调用 PowerShell 时改由 WSLg 播放，约两分钟后可能断续。网页端（`autokeeper serve`、联机房间的网页）在页面里播放，第一次按键或点击后开始发声；音量只保存在当前浏览器，默认为适中。
 
 「AI 画图」按参考图或描述生成，并随剧情重画明显变化的地点和人物。「画图接口」可选本机已登录的 Codex、Nano Banana（填 Gemini API Key）或豆包 Seedream（填火山方舟 API Key）；「自动选择」依次使用其中第一个可用的。Windows 上没有 `codex` 命令时，会使用 Codex 应用自带的那一个；仍然找不到时，在设置的「Codex 程序位置」里填写 codex.exe 的完整路径或所在文件夹（`autokeeper login codex` 也会询问），也可以用环境变量 `AUTOKEEPER_CODEX` 指定。上限是每个模组 300 张、每局 12 张；Nano Banana 和豆包按张计费，计入花费估计和费用上限。`doctor` 会显示是否可用，故障处理见游戏内玩法说明的「遇到问题」。
 

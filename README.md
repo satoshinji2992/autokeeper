@@ -238,10 +238,10 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 ## 安装
 
-当前版本 **0.0.9.7**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
+当前版本 **0.0.9.7**，支持 Windows（x64）和 Linux（x86_64）。macOS 支持与后续版本发布已暂停。
 
 ```bash
-# Linux、macOS、WSL
+# Linux、WSL
 curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash
 ```
 

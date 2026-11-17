@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AutoKeeper 一键安装（Linux、macOS、WSL）：
+# AutoKeeper 一键安装（Linux、WSL）：
 #   curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash
 # 没有 uv 就先装 uv，再用 uv tool 装好 autokeeper 命令；再运行一次就是更新。
 # 已经有 uv 的话，这个脚本做的就是：uv tool install autokeeper，然后 autokeeper setup。
@@ -15,6 +15,10 @@ EXTRAS="${AUTOKEEPER_EXTRAS:-}"
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
 die() { printf '\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
+
+if [ "$(uname -s)" = "Darwin" ]; then
+  die "macOS 支持与发布已暂停。目前请使用 Windows 或 Linux。"
+fi
 
 if ! command -v uv >/dev/null; then
   say "安装 uv（Python 环境管理）…"
