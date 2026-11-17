@@ -126,7 +126,7 @@ autokeeper --preset deepseek --budget 5
 | Tab | 补全输入框里的技能名；战斗与追逐中切换被攻击时的应对 |
 | Esc | 菜单：继续、存档、读档、玩法说明（含按键说明）、回到标题、退出游戏、设置。换模型、叙事偏好和开发者模式在「设置」里 |
 
-开发者密钥目前没有输入框：将原有的 `developer.key` 放入用户配置目录，Windows 为 `%APPDATA%\autokeeper\developer.key`，Linux 为 `~/.config/autokeeper/developer.key`（设置了 `XDG_CONFIG_HOME` 时以该目录为准），然后重新打开后台。它不是模型 API 密钥；新生成的另一把私钥不能解密已有记录。
+开发版新增 **设置 → 开发者密钥**，标题页和游戏内设置均可进入：粘贴已有私钥，校验通过后保存，刷新后台网页即可查看完整记录。输入默认遮蔽，已保存的密钥不回显；联机时只有本机运行引擎的房主可用。此入口将在下一版本发布，已发布的 0.0.9.7 仍需手动将原有的 `developer.key` 放入用户配置目录：Windows 为 `%APPDATA%\autokeeper\developer.key`，Linux 为 `~/.config/autokeeper/developer.key`（设置了 `XDG_CONFIG_HOME` 时以该目录为准）。它不是模型 API 密钥；新生成的另一把私钥不能解密已有记录。
 
 | 输入 | 作用 |
 |---|---|
