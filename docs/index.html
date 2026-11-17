@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="theme-color" content="#0b0806">
-    <meta name="description" content="AutoKeeper：AI 担任守秘人的中文《克苏鲁的呼唤》第 7 版跑团游戏。真彩字符画、边玩边写的配乐，一个人玩或和朋友用浏览器联机。">
+    <meta name="description" content="AutoKeeper，由 AI 担任守秘人的中文跑团游戏。用自己的话行动、交谈和探索，独自调查或与朋友联机。真彩字符画与实时配乐伴随你的故事。">
     <meta property="og:title" content="AutoKeeper · AI 守秘人">
     <meta property="og:description" content="AI 担任守秘人的中文《克苏鲁的呼唤》第 7 版跑团游戏：真彩字符画、实时配乐、单人与联机。">
     <meta property="og:image" content="https://satoshinji2992.github.io/autokeeper/img/title.png">
@@ -24,9 +24,9 @@
             <h1 class="logo-text">AutoKeeper</h1>
             <canvas id="logo" role="img" aria-label="AutoKeeper"></canvas>
             <p class="tagline">《克苏鲁的呼唤》第 7 版 · AI 守秘人</p>
-            <p class="pitch">AI 担任守秘人的中文跑团游戏。你扮演调查员，用自然语言行动、交谈和探索；可以一个人玩，带上 AI 同伴，也可以让朋友用浏览器加入同一场故事。</p>
+            <p class="pitch">由 AI 担任守秘人的中文跑团游戏。用自己的话行动、交谈和探索，追查藏在日常生活中的异常。独自调查、带上 AI 同伴，或邀朋友加入同一场故事。</p>
             <nav class="actions" aria-label="开始">
-                <a class="button primary" href="#install">安装</a>
+                <a class="button primary" href="#install">开始调查</a>
                 <a class="button" href="#gallery">实机画面</a>
                 <a class="button" href="https://github.com/satoshinji2992/autokeeper">GitHub</a>
             </nav>
@@ -36,7 +36,7 @@
 
     <nav class="toc" aria-label="目录">
         <ol>
-            <li><a href="#play">怎么玩</a></li>
+            <li><a href="#play">调查</a></li>
             <li><a href="#party">联机</a></li>
             <li><a href="#art">画面</a></li>
             <li><a href="#music">配乐</a></li>
@@ -49,137 +49,143 @@
 
     <main>
         <section id="play">
-            <h2>一局跑团怎么进行</h2>
-            <p class="lead">《追书人》从早班火车驶入阿诺兹堡开始。委托人托马斯住在小镇尽头的公墓旁，你可以先向站务员问路、在餐馆吃早饭，或者去图书馆翻旧报纸。在输入框写下想做的事，守秘人（KP，跑团的主持人）判断要不要检定、花多少时间、能发现什么，再把结果讲给你听。</p>
+            <h2>由你开始的调查</h2>
+            <p class="lead">早班火车驶入阿诺兹堡。委托人住在小镇尽头的公墓旁，你可以先问路、吃一顿早饭，或者去图书馆翻旧报纸。写下你想做的事，守秘人就会回应你的行动，并在需要时请你掷骰。</p>
             <figure>
-                <img src="img/game.png" width="1830" height="1074" alt="追书人游戏界面：在图书馆查旧报，检定的骰子落定，守秘人讲出报上的内容">
-                <figcaption>《追书人》：在阿诺兹堡图书馆翻旧报。检定的骰子落定后，守秘人讲出报上的内容；右栏是人物状态、调查经过和玩家自己的笔记。</figcaption>
+                <img src="img/game.png" width="1830" height="1074" alt="调查员在图书馆查阅旧报，掷骰后获得调查结果">
+                <figcaption>《追书人》· 图书馆调查</figcaption>
             </figure>
             <div class="features">
-                <article class="feature"><h3>模组只是起点</h3><p>走到原作没写的地方，守秘人会补出新的人物、线索和支线；想严格按原作玩，可以关掉即兴。</p></article>
-                <article class="feature"><h3>记得住的世界</h3><p>每个人在哪、手里有什么、说过和答应过什么都有记录。撞开的门、受过的伤，都会留到下一次遭遇。</p></article>
-                <article class="feature"><h3>有自己打算的人物</h3><p>NPC 会帮忙、隐瞒、撒谎、抢先一步，也会被说服或打动。不在场的人按自己的日程行动。</p></article>
-                <article class="feature"><h3>照规则书结算</h3><p>检定、孤注一掷、理智与疯狂、战斗和追逐按第 7 版规则结算，骰子由物理模拟投出。</p></article>
-                <article class="feature"><h3>看得见，也听得见</h3><p>照片转成真彩字符画，画面随时间、天气和剧情变化；配乐由程序边玩边写。</p></article>
-                <article class="feature"><h3>什么故事都能开团</h3><p>导入自己的模组，AI 整理成可以直接玩的版本；也可以只给一句设定，写一本原创模组。</p></article>
+                <article class="feature"><h3>模组只是起点</h3><p>临时起意的牌局、一次绕路、一个新的疑问，都可能把故事带向原作之外。</p></article>
+                <article class="feature"><h3>行动留下痕迹</h3><p>一次承诺、一件转交的物品、一扇被撞开的门，都可能影响后来的故事。</p></article>
+                <article class="feature"><h3>有自己打算的人物</h3><p>NPC 有各自的动机、秘密和牵挂。他们会帮忙、隐瞒或撒谎，也可能被你说服、打动。</p></article>
+                <article class="feature"><h3>照规则书结算</h3><p>亲手掷出十面骰，面对成功与失败。幸运、理智、伤势与弹药，都会影响你的选择。</p></article>
+                <article class="feature"><h3>看得见，也听得见</h3><p>真彩字符画呈现人物与场景，实时配乐随气氛变化，让日常、悬疑和恐怖各有声音。</p></article>
+                <article class="feature"><h3>带上自己的故事</h3><p>导入你想玩的模组，或从一句设定开始，让 AI 准备一场原创调查。</p></article>
             </div>
         </section>
 
         <section id="party">
-            <h2>和朋友一起：分头行动，各看各的</h2>
-            <p class="lead">房主开好房间，把网址发给朋友，对方用浏览器就能加入，不用安装，也不用配置模型。分头调查时各组同时推进，各自看到所在现场的叙述；个人观察、私信和手稿只发给实际的收件人。各组共用同一个世界：同一个 NPC 不会同时出现在两处，一组拿走的东西，另一组就找不到了。</p>
+            <h2>和朋友一起调查</h2>
+            <p class="lead">房主开好房间，把网址发给朋友，对方用浏览器就能加入，无需安装或配置模型。你们可以结伴行动，也可以分头探访不同地点，各自带回新的见闻。</p>
             <figure>
-                <img src="img/apart.png" width="3684" height="1074" alt="同一局冬雪之下里两位玩家的屏幕：左边在主街向铲雪的人打听消息，右边在布鲁彻农场跟着雷吉去牛棚；右栏各自显示队友所在的地点">
-                <figcaption>同一局《冬雪之下》里两位玩家的屏幕：一人在主街向铲雪的人打听，一人在布鲁彻农场跟着雷吉去牛棚。各自只看到自己现场的叙述，右栏显示队友在哪。</figcaption>
+                <img src="img/apart.png" width="3684" height="1074" alt="同一局中的两位调查员分别在主街和农场打听消息">
+                <figcaption>同一场调查，两个现场</figcaption>
             </figure>
-            <p>检定结果要不要公开、要不要接受队友替你提的行动，都由你自己决定。有人断线时，AI 暂时替他行动，重连后交还。每个座位可以是真人，也可以交给 AI 调查员。浏览器加入的人在设置里只能改自己的画面，看不到也改不了房主的密钥、模型和路径。</p>
+            <p>每个人看到自己的现场，收到自己的私信和手稿，再决定把哪些发现告诉队友。单人游玩时，可以邀请 AI 调查员同行；启用掉线托管后，AI 也能在朋友断线时暂代行动，重连后交还角色。</p>
         </section>
 
         <section id="art">
             <h2>画面跟着故事变</h2>
-            <p class="lead">模组里的照片和插图会转成真彩字符画。天色随游戏时间变化，雨、雪、雾叠在画面上；在场人物的小像嵌在画面一角。按 <kbd>Ctrl+A</kbd> 换画法：</p>
+            <p class="lead">照片与插图化作真彩字符画，天色、雨雪和雾气随场景变化。你可以在块字符、点阵、速写和纯 ASCII 等画风之间切换，选择自己喜欢的样子。</p>
             <figure>
-                <img src="img/styles.png" width="2652" height="960" alt="同一张雪中房屋照片的四种画法：块字符、点阵、速写、纯 ASCII">
-                <figcaption>同一张照片的四种画法：块字符、点阵、速写、纯 ASCII。另有两种带轮廓线的块字符画法。</figcaption>
+                <img src="img/styles.png" width="2652" height="960" alt="雪中房屋的块字符、点阵、速写与纯 ASCII 画风对比">
+                <figcaption>同一场景，不同画风</figcaption>
             </figure>
-            <p>同一个地点的画面会随剧情换版本：某人来了、线索找到了、天黑了，画面就换成相应的版本，构图不变，事情过去再换回来。编译时还会给值得细看的东西准备特写。这些版本由 AI 照原图绘制，需要本机装有 Codex。</p>
+            <p>人物到来、线索显现、危机发生，画面也会留下变化。开启 AI 绘图后，还能为场景生成新的画面与细节特写。</p>
             <figure>
-                <img src="img/variants.png" width="2652" height="960" alt="冬雪之下的画面版本：主街平时与埃里在时，农舍墙面在发现线索前后">
-                <figcaption>《冬雪之下》：埃里在主街时，街角多了他的卡车；发现线索后，农舍的墙皮下露出烧出来的符号。</figcaption>
+                <img src="img/variants.png" width="2652" height="960" alt="主街出现卡车，农舍墙面在调查后露出符号">
+                <figcaption>《冬雪之下》· 场景中的变化</figcaption>
             </figure>
             <div class="pair">
                 <figure>
-                    <img src="img/showcase.png" width="1830" height="1074" alt="追书人开场的大场景：早班火车停在阿诺兹堡">
-                    <figcaption>开场、危机和结局用整屏大场景呈现。</figcaption>
+                    <img src="img/showcase.png" width="1830" height="1074" alt="早班火车停在阿诺兹堡，车站占满游戏画面">
+                    <figcaption>《追书人》· 早班火车</figcaption>
                 </figure>
                 <figure>
-                    <img src="img/paper.png" width="1830" height="1074" alt="道格拉斯·金博尔的日记：米色纸张、红色页边、斜体手写正文">
-                    <figcaption>信件、日记、剪报、电报各有纸色和版式，墨迹逐字显现。</figcaption>
+                    <img src="img/paper.png" width="1830" height="1074" alt="米色纸张上的道格拉斯日记">
+                    <figcaption>道格拉斯的日记</figcaption>
                 </figure>
             </div>
         </section>
 
-        <section id="music">
-            <h2>边玩边写的配乐</h2>
-            <p class="lead">配乐不是预先录好的曲子，而是程序边玩边写。守秘人叙述的气氛变了，音乐在下一小节跟着变；战斗、追逐和理智损失由游戏直接处理，室外和夜晚的音色也不同。每局有自己的调性和主题，常用 7/8、5/8 这样的奇数拍，弦乐、钢琴、竖琴、八音盒、管风琴、玻璃琴、长笛、大提琴、圆号、马林巴轮流出现。终端和浏览器都能播放。</p>
-            <div class="tracks">
-                <div class="track"><h3>悬疑</h3><p>调查和打听时：钢琴与拨弦在奇数拍上推进。</p><audio controls preload="none" src="media/music-mystery.mp3"></audio></div>
-                <div class="track"><h3>恐怖</h3><p>不该看见的东西出现时：男声吟唱，长音压低。</p><audio controls preload="none" src="media/music-dread.mp3"></audio></div>
-                <div class="track"><h3>紧迫</h3><p>追逐和战斗时：铜管领奏，136 拍每分。</p><audio controls preload="none" src="media/music-action.mp3"></audio></div>
-            </div>
+        <section id="evidence">
+            <h2>把发现连在一起</h2>
+            <p class="lead">翻阅信件、日记和剪报，把人物、地点、手稿和自己的笔记放在线索板上。拖动、连线、批注，整理你对这场调查的理解，也可以把材料和笔记分享给队友。</p>
             <figure>
-                <img src="img/music.png" width="2652" height="1212" alt="三段配乐前十二小节的钢琴卷帘图：悬疑、恐怖、紧迫，按乐器分色，标出拍号与重音分组">
-                <figcaption>上面三段试听的前十二小节，按乐器分色；竖线是小节线，淡线是重音分组（3+2+2 即一个 7/8 小节）。试听由游戏的作曲与合成代码离线渲染。</figcaption>
+                <img src="img/board.png" width="1830" height="1074" loading="lazy" alt="人物、地点、手稿与笔记钉在线索板上，用红线连接">
+                <figcaption>你的线索板</figcaption>
             </figure>
+        </section>
+
+        <section id="music">
+            <h2>随剧情而生的配乐</h2>
+            <p class="lead">调查时的钢琴与拨弦、危险逼近时的低沉吟唱、追逐中的铜管，都随故事的气氛变化。配乐在游玩中实时生成，每局有自己的主题，在终端和浏览器中都能听见。</p>
+            <div class="tracks">
+                <div class="track"><h3>悬疑</h3><p>钢琴与拨弦伴随调查展开。</p><audio controls preload="none" src="media/music-mystery.mp3"></audio></div>
+                <div class="track"><h3>恐怖</h3><p>低沉吟唱中，不安逐渐逼近。</p><audio controls preload="none" src="media/music-dread.mp3"></audio></div>
+                <div class="track"><h3>紧迫</h3><p>铜管领奏，追逐开始。</p><audio controls preload="none" src="media/music-action.mp3"></audio></div>
+            </div>
         </section>
 
         <section id="rules">
             <h2>照规则书结算</h2>
-            <p class="lead">需要检定时，你亲手掷 3D 物理模拟的十面骰。失败后可以花幸运，也可以说明新的做法孤注一掷，由裁定员复核实际耗时和后果。理智损失、临时与不定性疯狂、重伤与濒死都按规则结算；手上有规则书的话，裁定员会按页查原文，施法的魔法值与理智消耗也照条目原文结算。</p>
+            <p class="lead">亲手掷出十面骰，面对成功与失败。你可以在规则允许时花费幸运，或换一种做法孤注一掷；战斗、追逐、理智损失与疯狂，都有各自的代价。游戏以《克苏鲁的呼唤》第 7 版为基础，也提供绿色三角洲规则包，支持为自己的团加入家规。</p>
             <div class="pair">
                 <figure>
-                    <img src="img/fight.png" width="1830" height="1074" alt="追书人书房里的战斗：对手只显示伤势描述，被攻击时按 Tab 切换应对">
-                    <figcaption>战斗逐轮结算，对手只显示伤势描述，被攻击时按 Tab 切换应对。</figcaption>
+                    <img src="img/fight.png" width="1830" height="1074" alt="调查员在书房遭遇敌人，选择战斗行动">
+                    <figcaption>书房里的战斗</figcaption>
                 </figure>
                 <figure>
-                    <img src="img/chase.png" width="1830" height="1074" alt="墓园里的追逐：右侧是通往出口的路线和障碍">
-                    <figcaption>追逐沿地图路线展开，翻墙、钻灌木、撞门各有检定。</figcaption>
+                    <img src="img/chase.png" width="1830" height="1074" alt="调查员沿墓园路线追逐，前方有灌木障碍">
+                    <figcaption>墓园里的追逐</figcaption>
                 </figure>
                 <figure>
-                    <img src="img/sanity.png" width="1830" height="1074" loading="lazy" alt="冬雪之下的牛棚里失去 3 点理智：屏幕上的叙述有一部分变成了乱码，理智从 65 降到 62">
-                    <figcaption>失去理智时，部分文字变成乱码，片刻后变回来。</figcaption>
+                    <img src="img/sanity.png" width="1830" height="1074" loading="lazy" alt="理智损失使部分叙述文字短暂变成乱码">
+                    <figcaption>失去理智</figcaption>
                 </figure>
                 <figure>
-                    <img src="img/madness.png" width="1830" height="1074" loading="lazy" alt="追书人的墓园里失去 6 点理智，进入临时疯狂：之后读到的叙述夹杂乱码，人物卡上标着临时疯狂">
-                    <figcaption>疯狂期间，读到的叙述一直夹杂乱码。</figcaption>
+                    <img src="img/madness.png" width="1830" height="1074" loading="lazy" alt="临时疯狂期间，调查员看到的文字夹杂乱码">
+                    <figcaption>临时疯狂</figcaption>
                 </figure>
             </div>
         </section>
 
         <section id="modules">
-            <h2>什么故事都能开团</h2>
-            <p class="lead">把 PDF、Word、Markdown、纯文本或 ZIP 拖进「导入模组」。AI 读完原文，整理出人物的知识与动机、线索的发现条件、事件日程、全镇地图、建筑的平面图、战斗数值和追逐路线，保留原有的插图和手稿，再对照原文复核一遍。年代照原文，不限于 1920 年代；也可以只给一句设定，写一本原创模组：</p>
-            <pre data-copy><code>autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian</code></pre>
-            <p>游戏自带《追书人》《冬雪之下》《有些人油盐不进》三本模组，第一次玩推荐单人入门的《追书人》。按 <kbd>F3</kbd> 打开地图：全镇地图是纸色的手绘图，按模组自己的地理摆放，只画调查员知道的地点和道路；在楼里看到的是平面图，一次一层，可以切换楼层。</p>
+            <h2>选择下一场故事</h2>
+            <p class="lead">从《追书人》的小镇谜案开始，或走进《冬雪之下》《有些人油盐不进》。游戏自带三本模组，你也可以去<a href="https://github.com/satoshinji2992/autokeeper/tree/mod_library">模组库</a>寻找下一场调查。</p>
+            <p>想玩自己的故事，可以导入 PDF、Word 等格式的模组，也可以用一句设定生成原创模组，例如“1931 年上海，一张没有标签的唱片”。从小镇街道到建筑内部，地图会随着调查展开。</p>
             <div class="pair">
                 <figure>
-                    <img src="img/map.png" width="1830" height="1074" alt="冬雪之下的纸色手绘地图：主街、诊所、教堂、邮局与农场按模组的方位画出">
-                    <figcaption>全镇地图：只画已知的地点和道路，选中地点可以直接前往。</figcaption>
+                    <img src="img/map.png" width="1830" height="1074" alt="冬雪之下的小镇地图，标有主街、诊所、教堂与农场">
+                    <figcaption>小镇地图</figcaption>
                 </figure>
                 <figure>
-                    <img src="img/plan.png" width="1830" height="1074" alt="追书人金博尔家的平面图">
-                    <figcaption>楼内平面图：一次一层，标出每个房间里的人。</figcaption>
+                    <img src="img/plan.png" width="1830" height="1074" alt="金博尔家的平面图，标有卧室、客厅与书房">
+                    <figcaption>楼内平面图</figcaption>
                 </figure>
             </div>
         </section>
 
         <section id="gallery">
-            <h2>更多实机画面</h2>
+            <h2>准备下一次出发</h2>
+            <p class="lead">选择预设调查员，或从自己的设想开始建卡。AI 可以协助你准备背景、肖像、属性和技能；你也可以手动分配点数，导入已有的人物卡。</p>
             <ul class="gallery">
-                <li><figure><img src="img/lobby.png" width="1830" height="1074" loading="lazy" alt="冬雪之下开房间：安排真人与 AI 座位"><figcaption>开房间：安排真人与 AI 座位</figcaption></figure></li>
-                <li><figure><img src="img/telegram.png" width="1830" height="1074" loading="lazy" alt="冬雪之下的军队电报"><figcaption>军队电报</figcaption></figure></li>
-                <li><figure><img src="img/cards.png" width="1830" height="1074" loading="lazy" alt="角色库：自己创建和导入的人物卡"><figcaption>角色库</figcaption></figure></li>
-                <li><figure><img src="img/sheet.png" width="1830" height="1074" loading="lazy" alt="人物卡：背景、属性与完整技能列表"><figcaption>人物卡</figcaption></figure></li>
-                <li><figure><img src="img/module.png" width="1830" height="1074" loading="lazy" alt="选模组：故事介绍、人数、时长和场景预览"><figcaption>选模组</figcaption></figure></li>
-                <li><figure><img src="img/saves.png" width="1830" height="1074" loading="lazy" alt="继续调查：存档的时间、地点与预览"><figcaption>存档</figcaption></figure></li>
-                <li><figure><img src="img/models.png" width="1830" height="1074" loading="lazy" alt="模型设置：各分工可以分别指定模型"><figcaption>模型设置</figcaption></figure></li>
-                <li><figure><img src="img/developer.png" width="1600" height="1000" loading="lazy" alt="开发者后台的实时视图：中央是知识图与世界条目，四周是各分工的面板"><figcaption>开发者后台：一回合的流向</figcaption></figure></li>
-                <li><figure><img src="img/developer-input.png" width="1600" height="1000" loading="lazy" alt="开发者后台里打开的一次模型调用：完整请求按来源分段"><figcaption>开发者后台：一次调用的完整请求</figcaption></figure></li>
-                <li><figure><img src="img/plugins.png" width="1830" height="1074" loading="lazy" alt="规则插件：本局生效的特殊规则，一句话添加家规"><figcaption>规则插件</figcaption></figure></li>
+                <li><figure><img src="img/lobby.png" width="1830" height="1074" loading="lazy" alt="房间中可以安排真人和 AI 调查员的座位"><figcaption>组好你的调查小队</figcaption></figure></li>
+                <li><figure><img src="img/telegram.png" width="1830" height="1074" loading="lazy" alt="黄色电报纸上的军队电报"><figcaption>军队电报</figcaption></figure></li>
+                <li><figure><img src="img/cards.png" width="1830" height="1074" loading="lazy" alt="角色库中保存着玩家创建和导入的调查员"><figcaption>角色库</figcaption></figure></li>
+                <li><figure><img src="img/sheet.png" width="1830" height="1074" loading="lazy" alt="调查员的背景、属性与技能"><figcaption>人物卡</figcaption></figure></li>
+                <li><figure><img src="img/module.png" width="1830" height="1074" loading="lazy" alt="模组列表与故事介绍"><figcaption>选择模组</figcaption></figure></li>
+                <li><figure><img src="img/saves.png" width="1830" height="1074" loading="lazy" alt="存档列表与对局预览"><figcaption>继续调查</figcaption></figure></li>
             </ul>
         </section>
 
+        <section id="replay">
+            <h2>回看你们的故事</h2>
+            <p>每回合自动存档，随时继续调查。结束后，可以重看整局经过，切换调查员视角，看看队友当时经历了什么。回放无需连接模型。</p>
+        </section>
+
         <section id="install">
-            <h2>安装</h2>
-            <p>目前支持 Windows 和 Linux；macOS 支持与后续版本发布已暂停。</p>
+            <h2>开始你的调查</h2>
+            <p>支持 Windows x64 和 Linux x86_64（不支持 mac 系统）。</p>
             <pre data-copy><span class="label"># Linux、WSL</span><code>curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash</code></pre>
             <pre data-copy><span class="label"># Windows PowerShell</span><code>irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex</code></pre>
             <ol class="steps">
-                <li>在新终端运行 <code>autokeeper</code>，在首次配置里选择模型、填写密钥。支持 DeepSeek、Claude、Codex、Ollama 和 OpenAI 兼容接口。</li>
-                <li>选「新的调查」，挑一个模组和调查员；<code>autokeeper serve</code> 可以在浏览器里玩。</li>
-                <li>在输入框写下行动或台词。朋友加入你的房间只需要浏览器。</li>
+                <li>运行 <code>autokeeper</code>，选择模型并填写密钥。</li>
+                <li>选择「新的调查」，挑选模组与调查员。</li>
+                <li>写下你的第一步行动。</li>
             </ol>
-            <p>游戏和模型调用都在你自己的电脑上运行，这个网页只做介绍。更新时退出游戏、再运行一次安装命令即可，存档和设置都会保留。完整说明见<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>。</p>
+            <p>支持 DeepSeek、Claude、Codex、Ollama 和 OpenAI 兼容接口。朋友加入房间只需浏览器，无需单独配置模型。安装与游玩帮助见<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>。</p>
         </section>
     </main>
 
@@ -187,12 +193,13 @@
         <div class="inner">
             <nav aria-label="链接">
                 <a href="https://github.com/satoshinji2992/autokeeper">GitHub</a>
-                <a href="https://github.com/satoshinji2992/autokeeper#readme">README</a>
                 <a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>
-                <a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/module-format.md">模组格式</a>
+                <a href="https://github.com/satoshinji2992/autokeeper/tree/mod_library">模组库</a>
+                <a href="https://github.com/satoshinji2992/autokeeper/issues">反馈问题</a>
+                <a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/credits.md">致谢与许可</a>
             </nav>
-            <p>AutoKeeper 程序不开源；仓库公开玩法文档、项目网页、模组格式与自带模组，授权见仓库的 LICENSE。终端界面基于 Textual，照片转字符画使用 chafa，掷骰使用 BCDice。自带模组为同人改编，原作版权归各自作者与出版方所有；模组选用的历史照片来自 Wikimedia Commons，署名见各模组的 art/credits.yaml。</p>
-            <p>标题画面取自 Dominique Signoret 的画作 <a href="https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg">Cthulhu and R'lyeh</a>（<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>），经裁剪、调色与字符化处理。标题字体为 TakWolf 的 Fusion Pixel（SIL Open Font License 1.1），随网页提供。Call of Cthulhu 是 Chaosium Inc. 的注册商标，本项目与 Chaosium 无关。</p>
+            <p>感谢模组作者与素材创作者。使用许可见 <a href="https://github.com/satoshinji2992/autokeeper/blob/main/LICENSE">LICENSE</a>。</p>
+            <p>Call of Cthulhu 是 Chaosium Inc. 的注册商标，本项目与 Chaosium 无关。</p>
         </div>
     </footer>
 
