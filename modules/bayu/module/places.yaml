@@ -1,0 +1,441 @@
+locations:
+- id: wharf
+  name: 芝罘湾渔人码头
+  art: wharf
+  aliases:
+  - 渔人码头
+  - 码头
+  public: true
+  scene_root: true
+  outdoors: true
+  ground: water
+  weather:
+  - fog
+  read_aloud: 一排排小型近海渔船并列停着，船身上大多写着“鲁-烟-渔-XXXXX”的编号，船名五花八门，“一帆风顺号”“海的女儿号”，甚至还有个“必胜客号”。入口处的铺子亮着小灯泡。
+  keeper: '集合地点。调查员互不相识的话，可在这里简单自我介绍、交流。
+
+    打电话问船长到哪儿了：老张说他大约十多分钟后过来，让调查员先找到船，去船上坐坐，并提醒他们记得吃点东西填饱肚子。
+
+    在泊位中通过<侦查>找到乘风破浪888号（c_find_boat）；或在码头等到 4:40 左右，老张到达并带他们上船（事件 e_captain）。
+
+    船离开码头后，这里只是远去的灯火。
+
+    '
+  features:
+  - 泊位上的渔船
+  - 码头入口的铺子
+  views:
+  - key: wharf_berth_boats
+    label: 泊位上并排的渔船
+    features:
+    - 泊位上的渔船
+    prompt: 拂晓前墨蓝色的天色下，昏黄路灯照着一排并排停靠的小型近海渔船，船身漆着“鲁-烟-渔”开头的编号和各式船名，“一帆风顺号”“海的女儿号”“必胜客号”，海浪拍着船身和堤岸
+  looks:
+  - when: knows:players:clue:c_find_boat
+    change: 一排船中认出一艘船身写着“乘风破浪888号”的陈旧小渔船
+    'on': wharf_berth_boats
+- id: breakfast_cart
+  name: 早餐铺子
+  within: wharf
+  art: breakfast_cart
+  public: true
+  outdoors: true
+  ground: water
+  weather:
+  - flicker
+  read_aloud: 说是早餐铺子，其实是一辆三轮小餐车，收拾得相当干净。车头用夹子夹着一串灯泡，照亮车身上手写的菜单：“鲅鱼水饺”“现烙海菜饼”“热豆浆”。围着花头巾、笑容满面的摊主大姨正从锅里捞出白白胖胖的水饺，热气驱散了周围的寒意。
+  keeper: 调查员靠近时大姨热情招呼他们吃点热乎的，免得一会出海饿肚子。问渔况、鲅鱼汛期，她爽利地回答；问到近期怪事才说海市的传闻。
+  features:
+  - 手写菜单
+  - 煮水饺的锅
+  views:
+  - key: cart_menu_pot
+    label: 三轮早餐车的菜单和锅
+    features:
+    - 手写菜单
+    - 煮水饺的锅
+    prompt: 收拾干净的三轮小餐车，车头夹着一串小灯泡，车身上手写菜单“鲅鱼水饺”“现烙海菜饼”“热豆浆”；锅里翻腾着热气，漏勺捞起白白胖胖的水饺
+- id: tackle_stall
+  name: 渔具铺子
+  within: wharf
+  art: tackle_stall
+  public: true
+  outdoors: true
+  ground: water
+  read_aloud: 渔具铺子简陋得多。一个抽旱烟的老头坐在小马扎上，面前铺着块油腻的蓝布，摊上挂着各种闪闪发亮的假饵、鱼线，还有一个用红布蒙着口的深色大陶罐。
+  keeper: '想看罐子里：老头懒洋洋掀开红布一角，腥气扑面，里面是一大团蠕动的肥硕沙蚕（可让胆小的调查员 0/1 理智检定，纯为吓唬，可选）。
+
+    老头推销专业渔具，主打“来都来了，空军回去多可惜”。调查员买了东西，他从旧木盒里捻出几炷线香，用报纸包好作为赠品递过来，并交代老规矩（c_incense）。追问海和尚是什么，他简单解释（c_monk_lore）。
+
+    '
+  features:
+  - 红布蒙口的陶罐
+  - 假饵和鱼线
+  - 旧木盒
+  views:
+  - key: stall_clay_jar
+    label: 红布蒙口的陶罐
+    features:
+    - 红布蒙口的陶罐
+    prompt: 油腻的蓝布摊上放着一个深色大陶罐，罐口用红布蒙住，掀开一角能看到里面一大团蠕动的暗红色肥硕沙蚕，湿漉漉地纠缠在一起
+  - key: stall_lures_box
+    label: 摊上的假饵与旧木盒
+    features:
+    - 假饵和鱼线
+    - 旧木盒
+    prompt: 小灯泡下，蓝布摊上挂着一排排闪闪发亮的假饵和成卷的鱼线，旁边放着一个磨旧了的小木盒，地上搁着旱烟杆
+- id: boat
+  name: 乘风破浪888号
+  entry: boat_deck
+  art: boat
+  aliases:
+  - 渔船
+  - 888号
+  - 老张的船
+  scene_root: true
+  outdoors: true
+  ground: water
+  read_aloud: 一艘十几米长的小型捕鱼船，整体有些陈旧，边角处有磕碰和修补的痕迹，但甲板冲洗得很干净。船舱分上下两层，下层休息和放杂物，上层是驾驶室；船尾是开放式甲板。
+  keeper: 船的位置见 keeper_notes【船的位置】。
+  features: []
+- id: boat_deck
+  name: 船尾甲板
+  within: boat
+  art: boat_deck
+  outdoors: true
+  ground: water
+  read_aloud: 船尾的开放式甲板上整齐地固定着几排插鱼竿的卡座，摆好了钓鱼用的小马扎；旁边有活水鱼舱和几个装满冰块的泡沫箱。船舷边细心地绑了一圈防撞的旧轮胎。角落里摞着一个卡式炉和一个不锈钢锅，旁边放着桶装矿泉水、姜片和简单的调味料。
+  keeper: '活动区域。卡式炉和锅：调查员能判断是野外做饭的工具；问老张，他得意地说钓上来的第一条鲅鱼要现场片几片煮汤。
+
+    船舷：<侦查>见旧爪形划痕（c_claw_marks）；问老张，他脸色微微一变，摆摆手搪塞。
+
+    近海时这里是看日出、钓鱼、煮鱼汤的地方；礁石滩时这里是撒网和逃生的主战场：网绳缠在两舷挂钩和船尾固定栓上。
+
+    '
+  features:
+  - 卡式炉和锅
+  - 船舷
+  - 活水鱼舱
+  - 插鱼竿的卡座
+  - 日出时的海面
+  - 船下的海水
+  - 缠成一团的旧渔网
+  - 船舷挂钩与船尾固定栓
+  views:
+  - key: deck_gunwale
+    label: 船舷内侧
+    features:
+    - 船舷
+    prompt: 渔船船舷边绑着一圈防撞的旧轮胎，内侧漆面有些凹痕和剐蹭，边角有修补痕迹
+  - key: deck_stove_pot
+    label: 角落里的卡式炉和锅
+    features:
+    - 卡式炉和锅
+    prompt: 甲板角落摞着一个小卡式炉和不锈钢锅，旁边是桶装矿泉水、一碟姜片和几瓶简单调味料
+  - key: deck_sunrise_sea
+    label: 日出时的海面
+    features:
+    - 日出时的海面
+    prompt: 海平面上金色的太阳刚刚跃出，海面由深红到亮橙再到流动的金色，一缕淡紫色的烟气在海面上弥漫开
+  - key: deck_old_net
+    label: 缠成一团的旧渔网
+    features:
+    - 缠成一团的旧渔网
+    prompt: 湿淋淋的甲板上摊着一大团缠在一起的旧渔网，网线纠结，挂着海水和泥污
+  looks:
+  - when: knows:players:clue:c_claw_marks
+    change: 不显眼的角落里露出几道很深的旧划痕，呈爪形，像被什么用力抓握过
+    'on': deck_gunwale
+  - when: knows:players:clue:c_mirage_forest
+    change: 紫雾里远方海平线上短暂浮现一片扭曲的黑色剪影，像从海底升起的森林
+    'on': deck_sunrise_sea
+  - when: knows:players:clue:c_lock
+    change: 网线中缠着一个红绳串着、严重腐蚀的黄铜长命锁，刻着模糊的“长命富贵”，一侧有几道深深的抓痕
+    'on': deck_old_net
+  - when: flag:sign_fs_zhang_far_gaze_1
+    change: 船舷边多了一个背对甲板、朝远海站着的敦实人影。
+- id: boat_cabin
+  name: 驾驶室
+  within: boat
+  art: boat_cabin
+  outdoors: false
+  ground: building
+  read_aloud: 驾驶室不大，仅容两三个人，充斥着柴油味和烟味。正面一扇视野开阔的玻璃窗，窗下是舵盘、油门推杆和一排排仪表。最引人注目的是一台老式短波电台，旁边挂着一个手持通话器。窗沿上放着一个有些发黑的木雕小像，被磨得油光发亮。
+  keeper: '短波电台：<电子学>、<知识>或<物理>成功了解通讯常识（c_radio）；判定没过，问老张也能得到解答。
+
+    木雕小像：<侦查>或<艺术/手艺(雕刻)>（c_statue）；问老张他说祖传的“海神”（c_statue_zhang）。逃生时可把小像扔下海，令海和尚迟疑一轮（仅一次）。
+
+    窗户角落：<侦查>见褪色黄纸符（c_talisman）。
+
+    逃生时在这里用<驾驶>（或相关知识技能）启动引擎，推油门即可。
+
+    '
+  features:
+  - 短波电台
+  - 木雕小像
+  - 窗户角落
+  - 舵盘和油门推杆
+  views:
+  - key: cabin_radio
+    label: 老式短波电台
+    features:
+    - 短波电台
+    prompt: 驾驶室仪表旁一台老式短波电台，旋钮和指示灯泛旧，旁边挂着一个手持通话器，空气里有柴油和烟味
+  - key: cabin_statue
+    label: 窗沿上的木雕小像
+    features:
+    - 木雕小像
+    prompt: 玻璃窗沿上放着一个有些发黑的木雕小像，被摸得油光发亮，看不清雕的是哪路神佛
+  - key: cabin_window_corner
+    label: 驾驶室窗户角落
+    features:
+    - 窗户角落
+    prompt: 驾驶室正面玻璃窗的角落，窗框接缝处积着灰和盐渍，窗外是开阔的海面
+  - key: cabin_helm
+    label: 舵盘和油门推杆
+    features:
+    - 舵盘和油门推杆
+    prompt: 玻璃窗下的舵盘、一根油门推杆和一排排仪表，把手磨得发亮
+  looks:
+  - when: knows:players:clue:c_statue
+    change: 看清小像雕的是一个盘坐在底座上、面目模糊的光头，不是龙王或妈祖
+    'on': cabin_statue
+  - when: knows:players:clue:c_talisman
+    change: 玻璃接缝处用透明胶带贴着一张小小的、已经褪色的黄纸符
+    'on': cabin_window_corner
+  - when: flag:sign_fs_radio_static_1
+    change: 电台面板上的一盏小红灯微微亮着。
+- id: boat_hold
+  name: 底舱
+  within: boat
+  art: boat_hold
+  outdoors: false
+  ground: building
+  read_aloud: 下层船舱低矮，是休息和放杂物的地方，堆着渔具、网具和备用的箱子，空气里有机油和鱼腥味。
+  keeper: 老张的虫饵快餐盒、带铅坠的拖网放在这里；大鱼上钩后老张冲下来拖出拖网。原文未细写底舱陈设，AutoKeeper 补充为杂物间。
+  features:
+  - 杂物堆
+  - 带铅坠的拖网
+  views:
+  - key: hold_gear_net
+    label: 底舱的杂物和拖网
+    features:
+    - 杂物堆
+    - 带铅坠的拖网
+    prompt: 低矮的下层船舱里堆着渔具、网具和备用箱子，一张缀着铅坠的大拖网叠在角落，空气里是机油和鱼腥味
+- id: reef_rock
+  name: 礁石滩的大礁石
+  art: reef_rock
+  scene_root: true
+  outdoors: true
+  ground: water
+  weather:
+  - fog
+  read_aloud: 远海的礁石滩上遍布犬牙交错的礁石，海水呈墨蓝色，浪头拍在礁石上发出阵阵闷响。渔船停在一块面积相对大些的礁石旁，跨一步就能登上去喘口气。
+  keeper: '船到礁石滩后（at_reef）才能登上。晕过船的调查员在这里休息片刻，下一次晕船检定额外一个奖励骰（插件 bayu_sea 的 rest 动作）。
+
+    调查脚下礁石：格外光滑，表面没有任何贝壳或藤壶附着（c_reef_smooth）；<侦查>在缝隙中找到半只手套（c_glove）；触碰海水会发觉水温极低（c_cold_water）。
+
+    '
+  features:
+  - 脚下的礁石
+  - 礁石缝隙
+  - 礁石边的海水
+  views:
+  - key: reef_smooth_rock
+    label: 脚下的礁石
+    features:
+    - 脚下的礁石
+    prompt: 犬牙交错的礁石间，墨蓝色海水拍上来；脚下的礁石格外光滑，表面没有一点贝壳或藤壶
+  - key: reef_crevice
+    label: 礁石缝隙
+    features:
+    - 礁石缝隙
+    prompt: 两块湿黑礁石之间的狭窄缝隙，积着海水和碎沫
+  looks:
+  - when: knows:players:clue:c_glove
+    change: 缝隙里卡着半只亮黄色塑胶手套，断口参差不齐，像被巨力扯开
+    'on': reef_crevice
+passages:
+- id: wharf__breakfast_cart
+  a: wharf
+  b: breakfast_cart
+  kind: opening
+  minutes: 1
+- id: wharf__tackle_stall
+  a: wharf
+  b: tackle_stall
+  kind: opening
+  minutes: 1
+- id: wharf__boat_deck
+  a: wharf
+  b: boat_deck
+  kind: opening
+  minutes: 2
+  perception: 跳板，仅船停在码头时可走
+- id: boat_deck__boat_cabin
+  a: boat_deck
+  b: boat_cabin
+  kind: stairs
+  minutes: 0
+  perception: 上层驾驶室和船尾甲板只隔一段短梯，扯着嗓子喊话能听见；老张常从驾驶室探出头吆喝。逃生时从甲板上到驾驶室推油门要经过这里（AutoKeeper 补充）
+- id: boat_deck__boat_hold
+  a: boat_deck
+  b: boat_hold
+  kind: stairs
+  minutes: 0
+  perception: 下层船舱低矮，舱口开向甲板，喊话能听见，舱里看不到甲板上的情形（AutoKeeper 补充）
+- id: boat_deck__reef_rock
+  a: boat_deck
+  b: reef_rock
+  kind: opening
+  minutes: 1
+  perception: 仅船停在礁石滩时可跨上礁石
+interior_reviews:
+  boat:
+    fingerprint: 7a614ca859f3ccc19a475274a016dc11083c7b6018bb2b6e2a09b6ea2d809de4
+    source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+    reason: 原文：“船舱分为上下两层，下层是休息和放置杂物的空间，上层则是驾驶室。船尾的开放式甲板……”。船已有入口 boat_deck（船尾甲板），以它为主厅；驾驶室在上层、底舱在下层，按原文分层。甲板与两处船舱之间的梯子或舱口为
+      AutoKeeper 补充的通行方式，沿用现有通路 id。船的位置（码头/近海/礁石滩）和跳板、登礁的通行条件仍按 keeper_notes【船的位置】，不在此改动。
+  wharf:
+    fingerprint: 193f56f9fd6d584de66d8e6387e1fdcd859795dfa709a6a1c3aded133a7fd53f
+    source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+    reason: 露天码头，不是建筑；原文只写了泊位上的一排渔船和入口处的两个铺子，两个铺子已经是单独的地点（breakfast_cart、tackle_stall），不需要再拆，也不能把户外区域改成楼。
+  breakfast_cart:
+    fingerprint: cb336c0a2dfd9a82f03d6acabda0b8eda868bab9189fadd15f8d02981efb74e0
+    source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+    reason: 这是一辆三轮小餐车，摊主大姨和菜单、锅都在同一处露天摊位上，没有内部空间可分。
+  tackle_stall:
+    fingerprint: 50dd29bc98dea0af3dc90580f896640c80ea2fd5493a7c697389866acf845b8b
+    source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+    reason: 地摊：老头、蓝布、陶罐和旧木盒都摆在同一块地方，可调查的东西作为 features 已经齐全，没有房间可分。
+  reef_rock:
+    fingerprint: 1e415b0f9d482000aa37004b45912897b42f60e1f89183427fb687acc8a081f4
+    source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+    reason: 远海礁石滩上的一块露天礁石，不是建筑；脚下的礁石、礁石缝隙和海水作为 features 已经齐全，能否从甲板登上由 at_reef 决定。
+
+geography:
+  title: 芝罘湾
+  subtitle: 山东烟台 · 2025
+  minutes_across: 7
+  places:
+  - place: wharf
+    at: [0.2, 0.58]
+    glyph: street
+  - place: boat
+    at: [0.36, 0.6]
+    glyph: other
+  - place: reef_rock
+    at: [0.84, 0.42]
+    glyph: other
+  ways:
+  - id: wharf_to_boat
+    kind: path
+    points:
+    - [0.2, 0.58]
+    - [0.28, 0.59]
+    - [0.36, 0.6]
+    passage: wharf__boat_deck
+  - id: boat_to_reef
+    kind: path
+    points:
+    - [0.36, 0.6]
+    - [0.5, 0.56]
+    - [0.66, 0.48]
+    - [0.84, 0.42]
+    passage: boat_deck__reef_rock
+  - id: shore_road
+    kind: main
+    points:
+    - [0.08, -0.05]
+    - [0.1, 0.3]
+    - [0.12, 0.58]
+    - [0.1, 0.85]
+    - [0.08, 1.05]
+  regions:
+  - kind: water
+    shape:
+    - [0.16, 0.0]
+    - [1.0, 0.0]
+    - [1.0, 1.0]
+    - [0.16, 1.0]
+    - [0.15, 0.7]
+    - [0.16, 0.45]
+  - kind: hills
+    shape:
+    - [0.78, 0.36]
+    - [0.9, 0.35]
+    - [0.93, 0.45]
+    - [0.86, 0.5]
+    - [0.77, 0.47]
+    near: reef_rock
+  - kind: fields
+    shape:
+    - [0.0, 0.15]
+    - [0.06, 0.15]
+    - [0.06, 0.4]
+    - [0.0, 0.4]
+  houses:
+  - along: shore_road
+    span: [0.45, 0.62]
+    density: dense
+  basis: 原书没有地图：按原文写的码头堤岸与泊位、船驶向远海礁石滩来推算。码头放在西边岸上，渔船停在码头外，礁石滩放在东边远海；方向是自己补的。
+plans:
+- building: boat
+  floors:
+  - name: 上层
+    level: 1
+    rooms:
+    - place: boat_cabin
+      size: small
+  - name: 甲板层
+    rooms:
+    - place: boat_deck
+  - name: 下层
+    level: -1
+    rooms:
+    - place: boat_hold
+      size: small
+  basis: 原文：“船舱分为上下两层，下层是休息和放置杂物的空间，上层则是驾驶室。船尾的开放式甲板……”。船已有入口 boat_deck（船尾甲板），以它为主厅；驾驶室在上层、底舱在下层，按原文分层。甲板与两处船舱之间的梯子或舱口为
+    AutoKeeper 补充的通行方式，沿用现有通路 id。船的位置（码头/近海/礁石滩）和跳板、登礁的通行条件仍按 keeper_notes【船的位置】，不在此改动。
+  layout:
+    rooms:
+    - {place: boat_deck, x: 10, y: 10, w: 10, h: 4.5}
+    - {place: boat_cabin, x: 16.5, y: 10.5, w: 3, h: 3.5}
+    - {place: boat_hold, x: 14, y: 10.5, w: 5, h: 3.5}
+    doors:
+    - {passage: wharf__boat_deck, at: [10, 12.2], main: true}
+    - {passage: boat_deck__reef_rock, at: [20, 12.2]}
+    windows:
+    - {room: boat_cabin, at: [19.5, 12.2], width: 2}
+    - {room: boat_cabin, at: [18, 10.5]}
+    - {room: boat_cabin, at: [18, 14]}
+    stairs:
+    - {passage: boat_deck__boat_cabin, form: ladder, x: 17, y: 12.5, w: 1, h: 1}
+    - {passage: boat_deck__boat_hold, form: trapdoor, x: 14.5, y: 12, w: 1, h: 1}
+    fixtures:
+    - {room: boat_deck, feature: 卡式炉和锅, label: 卡式炉和锅, sketch: stove, x: 10.5, y: 10.3, w: 0.8, h: 0.5}
+    - {room: boat_deck, feature: 船舷, label: 船舷, sketch: mark, x: 12, y: 14, w: 3, h: 0.4}
+    - {room: boat_deck, feature: 活水鱼舱, label: 活水鱼舱, sketch: vessel, x: 11.5, y: 12.8, w: 1.5, h: 1}
+    - {room: boat_deck, feature: 插鱼竿的卡座, label: 鱼竿卡座, sketch: shelf, x: 12, y: 10.2, w: 4, h: 0.4}
+    - {room: boat_deck, feature: 日出时的海面, label: 日出海面, sketch: area, outside: true, x: 20.5, y: 10, w: 1.5,
+      h: 1.5}
+    - {room: boat_deck, feature: 船下的海水, label: 船下海水, sketch: area, outside: true, x: 15, y: 15, w: 3,
+      h: 1.5}
+    - {room: boat_deck, feature: 缠成一团的旧渔网, label: 旧渔网, sketch: clutter, x: 15.8, y: 13.4, w: 1, h: 0.8}
+    - {room: boat_deck, feature: 船舷挂钩与船尾固定栓, label: 挂钩与固定栓, sketch: mark, x: 10.1, y: 13.5, w: 0.4, h: 0.8}
+    - {room: boat_deck, sketch: chair, x: 16, y: 10.8, w: 0.8, h: 0.5}
+    - {room: boat_deck, sketch: boxes, x: 18.5, y: 10.3, w: 1.2, h: 0.6}
+    - {room: boat_cabin, feature: 舵盘和油门推杆, label: 舵盘油门, sketch: machine, x: 18.5, y: 11.5, w: 0.7, h: 1.2}
+    - {room: boat_cabin, feature: 短波电台, label: 短波电台, sketch: machine, x: 18.6, y: 10.6, w: 0.8, h: 0.6}
+    - {room: boat_cabin, feature: 木雕小像, label: 木雕小像, x: 19, y: 12.9, w: 0.4, h: 0.4}
+    - {room: boat_cabin, feature: 窗户角落, label: 窗户角落, sketch: window, x: 19, y: 13.4, w: 0.4, h: 0.5}
+    - {room: boat_hold, feature: 杂物堆, label: 杂物堆, sketch: clutter, x: 16.5, y: 10.7, w: 2, h: 1}
+    - {room: boat_hold, feature: 带铅坠的拖网, label: 拖网, sketch: clutter, x: 16.5, y: 12.8, w: 1.5, h: 1}
+    - {room: boat_hold, sketch: boxes, x: 18.2, y: 12.8, w: 0.6, h: 1}
+    sides:
+    - {side: w, faces: 码头跳板, way: wharf_to_boat, place: wharf}
+    - {side: e, faces: 船头外的海面与礁石, way: boat_to_reef, place: reef_rock}
+    - {side: n, faces: 海面}
+    - {side: s, faces: 海面}
+    basis: 照原文描述：十几米长的小渔船，船尾开放甲板为甲板层，上层驾驶室、下层底舱叠在船体范围内的前半段；驾驶室短梯、底舱舱口按通路说明补为梯子和活板门；船尾朝西对码头，船头朝东对礁石滩，家具位置为AutoKeeper按常理补充。

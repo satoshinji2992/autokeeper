@@ -1,0 +1,174 @@
+{
+  "id": "corruption",
+  "name": "腐化值",
+  "description": "按原作《失灵》追踪特工的腐化值（对玩家不可见）：腐化值 = 个体 + 环境 + 时间。个体初始 1，调查本案每过一天 +3；其他增减（目击黄印 +4、进入剧院 +6、判断幻象成功 -2 失败 +2、药物临时 -5 等）由守秘人调用 corrupt 动作登记。环境：亚当森住所 3、皮特办公室 3、闹钟酒吧与地窖 5、格林伍德宅邸 10、吉姆卧室 15、剧院与彼岸 30。时间：夜晚（18:00–06:00）+10，剧院与彼岸不提供时间腐化。总值首次达到 10/20/25/30/35/40/60 时设置相应 corr_ 标记。",
+  "api_version": 1,
+  "version": "0.1.0",
+  "hooks": [
+    "start",
+    "turn",
+    "visit",
+    "action"
+  ],
+  "capabilities": [
+    "flag"
+  ],
+  "actions": [
+    {
+      "name": "corrupt",
+      "description": "原作规定个体腐化值变化时调用（目击黄印、进入剧院、阅读禁书、判断幻象成败等）。arguments: amount 整数 -20 至 20，reason 字符串"
+    }
+  ],
+  "commands": [],
+  "flags": {
+    "corr_10": "腐化值曾达到 10",
+    "corr_20": "腐化值曾达到 20",
+    "corr_25": "腐化值曾达到 25",
+    "corr_30": "腐化值曾达到 30",
+    "corr_35": "腐化值曾达到 35",
+    "corr_40": "腐化值曾达到 40",
+    "corr_60": "腐化值曾达到 60"
+  },
+  "initial": {
+    "individual": 1,
+    "day": 0,
+    "reached": []
+  },
+  "tests": [
+    {
+      "name": "开局午夜在家",
+      "event": {
+        "hook": "start"
+      },
+      "state": {
+        "individual": 1,
+        "day": 0,
+        "reached": []
+      },
+      "context": {
+        "location": "agent_home",
+        "minutes": 0
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "individual": 1,
+        "total": 11,
+        "reached": [
+          "corr_10"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "flag",
+          "key": "corr_10"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "白天看见黄印",
+      "event": {
+        "hook": "action",
+        "action": "corrupt",
+        "arguments": {
+          "amount": 4,
+          "reason": "第一次目击黄印"
+        }
+      },
+      "state": {
+        "individual": 1,
+        "day": 0,
+        "reached": [
+          "corr_10"
+        ]
+      },
+      "context": {
+        "location": "adamson_bedroom",
+        "minutes": 600
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "individual": 5,
+        "total": 8
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "次日进入剧院",
+      "event": {
+        "hook": "visit"
+      },
+      "state": {
+        "individual": 10,
+        "day": 0,
+        "reached": [
+          "corr_10"
+        ]
+      },
+      "context": {
+        "location": "theatre",
+        "minutes": 1500
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "individual": 13,
+        "day": 1,
+        "total": 43
+      },
+      "expected_effects": [
+        {
+          "kind": "flag",
+          "key": "corr_20"
+        },
+        {
+          "kind": "flag",
+          "key": "corr_25"
+        },
+        {
+          "kind": "flag",
+          "key": "corr_30"
+        },
+        {
+          "kind": "flag",
+          "key": "corr_35"
+        },
+        {
+          "kind": "flag",
+          "key": "corr_40"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "越界数值被忽略",
+      "event": {
+        "hook": "action",
+        "action": "corrupt",
+        "arguments": {
+          "amount": 100
+        }
+      },
+      "state": {
+        "individual": 2,
+        "day": 0,
+        "reached": []
+      },
+      "context": {
+        "location": "agent_home",
+        "minutes": 600
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "individual": 2,
+        "total": 2
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    }
+  ]
+}

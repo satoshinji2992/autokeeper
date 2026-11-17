@@ -1,0 +1,740 @@
+locations:
+  - id: campus
+    name: 大学校园
+    art: campus
+    read_aloud: 红砖楼舍围着草坪，学生夹着书本在小径上匆匆来去。图书馆的大楼立在一侧，校园东边是几栋较新的寄宿公寓。
+    keeper: 波士顿大学校园（守秘人可换成别的大学）。各教学楼、图书馆、行政楼都从这里走。
+    features: [校园小径, 公告栏]
+    public: true
+    scene_root: true
+    outdoors: true
+    ground: street
+  - id: classroom
+    name: 数学系教室
+    within: campus
+    art: classroom
+    read_aloud: 阶梯教室里坐满了考前来听最后一课的学生，黑板上写满公式。哈特曼教授站在讲台前，声音平和而不停顿。
+    keeper: 开局地点。詹姆斯平时和调查员坐在一起，座位空着。问周围同学：最近没人见过他；有人建议去图书馆找。离开教室的潜行规则见守秘人须知。
+    features: [詹姆斯常坐的座位, 周围的同学, 黑板]
+    public: true
+    outdoors: false
+    ground: building
+    views:
+    - key: classroom_empty_seat
+      label: 空着的座位
+      features:
+      - 詹姆斯常坐的座位
+      prompt: 1920年代大学阶梯教室里一排木制连排座椅，中间一个座位空着，桌板上什么也没放，左右两边的座位上摊着笔记本和钢笔，远处黑板上写满数学公式
+  - id: hartman_office
+    name: 哈特曼教授的办公室
+    within: campus
+    art: hartman_office
+    read_aloud: 狭小的办公室里书和讲义堆到窗台，墙上的黑板留着擦了一半的推导。
+    keeper: 哈特曼下课后回到这里。被点名的调查员要在 D2 早上第一件事来这里见他。他除了对詹姆斯缺席感到惊讶外提供不了别的信息。
+    features: [堆满讲义的书桌, 黑板]
+    public: true
+    outdoors: false
+    ground: building
+  - id: library
+    name: 大学图书馆
+    within: campus
+    art: library
+    read_aloud: 高大的阅览室里只有翻书声，一排排长桌上亮着绿罩台灯。借阅台后面坐着一位腰板笔直的女士，正抬眼扫视每一个进门的人。
+    keeper: 玛杰里·霍尔科姆的地盘。她讨厌凌乱、噪音和不敬；遵守就没事，否则她威胁赶人。后台办公室在借阅台后面。
+    features: [借阅台, 阅览室长桌, 书架]
+    public: true
+    outdoors: false
+    ground: building
+    scene_root: true
+  - id: library_office
+    name: 图书馆后台办公室
+    within: library
+    art: library_office
+    read_aloud: 借阅台后面的小办公室里堆满待整理的书和推车，一盏台灯下有人正在给书贴标签。
+    keeper: 凯莱布·莫罗经常在这里整理书籍。
+    features: [待整理的书堆, 凯莱布的工作台]
+    outdoors: false
+    ground: building
+  - id: registrar
+    name: 大学行政办公室
+    within: campus
+    art: registrar
+    read_aloud: 柜台后面是一排排档案柜，打字机的声音一下一下地响。柜台后的秘书抬起头。
+    keeper: 秘书鲁比·托伦斯在这里。学生档案里登记着詹姆斯的近亲属。
+    features: [柜台, 学生档案柜]
+    public: true
+    outdoors: false
+    ground: building
+  - id: dorm_yard
+    name: 寄宿公寓门前
+    art: dorm_yard
+    read_aloud: 校园东侧一栋较新的寄宿公寓，砖墙上爬满常春藤，一楼的窗户一字排开。
+    keeper: 詹姆斯的房间在一楼。进门失败、准备离开时要求一次侦查，成功会注意到他房间的窗户微开（线索 c_window），旁边是常春藤覆盖的排水管。
+    features: [公寓正门, 一楼的窗户, 常春藤覆盖的排水管]
+    scene_root: true
+    outdoors: true
+    ground: street
+    views:
+    - key: dorm_ivy_window
+      label: 常春藤旁的一楼窗户
+      features:
+      - 一楼的窗户
+      - 常春藤覆盖的排水管
+      prompt: 砖砌寄宿公寓的一楼外墙，一排木框上下推拉窗，其中一扇紧挨着一根爬满茂密常春藤的铸铁排水管
+    looks:
+    - when: knows:players:clue:c_window
+      change: 紧挨排水管的那扇窗户下沿留着一道窄缝，窗扇微微开着
+      'on': dorm_ivy_window
+  - id: dorm
+    name: 寄宿公寓
+    art: dorm_hall
+    entry: dorm_hall
+    read_aloud: 一栋较新的寄宿公寓。
+    keeper: 建筑容器，正常从正门进入一楼走廊。
+    features: []
+    scene_root: true
+    outdoors: false
+    ground: building
+  - id: dorm_hall
+    name: 公寓一楼走廊
+    within: dorm
+    art: dorm_hall
+    read_aloud: 一楼走廊安静而昏暗，两侧是一扇扇编了号的房门。詹姆斯的房门紧闭着，旁边就是邻居的门。通往地下的楼梯在走廊尽头。
+    keeper: 敲詹姆斯的门不会有人应。一直敲则要集体幸运检定，失败引来隔壁的伯纳德。
+    features: [詹姆斯的房门, 隔壁的房门, 通往地下的楼梯]
+    outdoors: false
+    ground: building
+  - id: bernard_room
+    name: 伯纳德的房间
+    within: dorm
+    art: bernard_room
+    read_aloud: 窗帘拉着，屋里一股隔夜的酒气，床上的被子乱成一团。
+    keeper: 伯纳德在里面睡觉解宿醉。他不会请调查员进来。
+    features: [凌乱的床]
+    outdoors: false
+    ground: building
+  - id: james_room
+    name: 詹姆斯的宿舍
+    within: dorm
+    art: james_room
+    read_aloud: 整个房间一片狼藉，乱得离奇。你们知道詹姆斯有点不爱收拾，却从没想到会乱成这样。混乱似乎都是从书桌开始的：书本、纸页堆成小山，桌子背后的墙上贴满了图形和草图。
+    keeper: 门边挂着第二把钥匙，可从里面开门。书桌上的逾期通知来自霍尔科姆夫人。草图辨认、侦查线索见 clues。搜房几分钟即可免检找到一封旧信和科拉阿姨的地址。
+    features: [书桌, 墙上的图形和草图, 书桌边的乱堆, 一封旧信, 门边的钥匙钩]
+    outdoors: false
+    ground: building
+    views:
+    - key: james_desk
+      label: 堆满纸页的书桌
+      features:
+      - 书桌
+      prompt: 凌乱不堪的学生书桌，书本和写满算式的纸页堆成小山，几张印着图书馆抬头的逾期通知压在上面，纸堆正中一张纸上用钢笔画着一个圆形里的奇怪几何图形
+    - key: james_wall_sketches
+      label: 墙上的几何草图
+      features:
+      - 墙上的图形和草图
+      prompt: 书桌背后的墙上密密麻麻贴满纸张，画着古典风格的几何作图：圆、三角形、直线构造，许多图形一层套一层地缩小重复，边上写满细小的注释
+    looks:
+    - when: knows:players:clue:c_postcard
+      change: 图形纸页底下露出半张风景明信片的一角
+      'on': james_desk
+  - id: janitor_office
+    name: 门卫的地下办公室
+    within: dorm
+    art: janitor_office
+    read_aloud: 地下室里一间小办公室，墙上的木板挂着一排排钥匙，桌上放着工具和半杯冷掉的咖啡。
+    keeper: 门卫的备用钥匙在这里。取得詹姆斯房间的备用钥匙需要潜行检定，有创造力的做法给一个奖励骰。门卫原文没有资料，由守秘人临场扮演。
+    features: [挂钥匙的木板, 门卫的桌子]
+    outdoors: false
+    ground: building
+    views:
+    - key: janitor_key_board
+      label: 挂钥匙的木板
+      features:
+      - 挂钥匙的木板
+      prompt: 地下室小办公室的墙上钉着一块木板，一排排铁钉上挂着黄铜钥匙，每把钥匙下面系着写了房号的小挂牌，旁边桌上有工具和半杯冷咖啡
+  - id: ludlow
+    name: 勒德洛北街
+    aliases: [勒德洛, 佛蒙特州勒德洛]
+    art: ludlow
+    read_aloud: 佛蒙特州的小镇勒德洛，北街两旁是木板房和店铺。街道尽头转入一条没有铺砖的土路，通往镇子边缘。
+    keeper: 从波士顿坐巴士要 5-6 小时。顺北街很快转入土路，科拉阿姨的房子在镇子边缘。
+    features: [北街, 通往镇外的土路]
+    public: true
+    scene_root: true
+    outdoors: true
+    ground: street
+  - id: cora_house
+    name: 科拉阿姨的房子
+    art: cora_house
+    entry: cora_ground
+    aliases: [科拉家, 韦布家]
+    read_aloud: 土路尽头，一栋小房子孤零零地立在镇子边缘，四周很安静。
+    keeper: 房子足够隐蔽，除了枪声和大火，镇上居民不会注意。门没有上锁。
+    features: [前门]
+    scene_root: true
+    outdoors: false
+    ground: building
+  - id: cora_ground
+    name: 一楼起居室与厨房
+    within: cora_house
+    art: cora_ground
+    read_aloud: 屋里收拾得很整洁，但家具上蒙着一层薄灰。起居室里摆着沙发和圆桌，厨房在后面。
+    keeper: 起初没有可疑之处。四处看过一会儿后，侦查成功发现恶臭从通往二楼的楼梯传来。一侧有通往地下室的楼梯。
+    features: [起居室, 厨房, 冰箱, 通往二楼的楼梯, 通往地下室的楼梯]
+    outdoors: false
+    ground: building
+    views:
+    - key: cora_icebox
+      label: 厨房里的冰箱
+      features:
+      - 冰箱
+      prompt: 1920年代乡间小屋整洁的厨房，一台老式木制冰箱（冰柜）门关着，旁边台面上落着一层薄灰，果盘里的水果颜色发暗
+    looks:
+    - when: knows:players:clue:c_spoiled_food
+      change: 冰箱门打开，里面一块用保鲜膜包着的自制烘肉卷长满了霉斑
+      'on': cora_icebox
+  - id: cora_landing
+    name: 二楼楼梯口
+    within: cora_house
+    art: cora_landing
+    read_aloud: 二楼很小，八字形的斜坡天花板压得人要低头。一间极小的浴室，一间卧室。苍蝇的嗡嗡声从卧室门后传来。
+    keeper: 恶臭的源头是卧室。
+    features: [卧室的门]
+    outdoors: false
+    ground: building
+  - id: cora_bath
+    name: 二楼浴室
+    within: cora_house
+    art: cora_bath
+    read_aloud: 一间极小的浴室，和楼下一样落满灰尘。
+    keeper: 没有任何不寻常的地方。
+    features: [浴缸, 洗手池]
+    outdoors: false
+    ground: building
+  - id: cora_bedroom
+    name: 二楼卧室
+    within: cora_house
+    art: cora_bedroom
+    read_aloud: 味道令人难以忍受。苍蝇在床上盘旋，床上躺着一个从头到脚盖着毯子的人形，毯子好几处被体液和血浸透，渗出的痕迹古怪地左右对称。
+    keeper: 科拉·韦布高度腐败的尸体。揭开毯子见线索 c_corpse（理智 0/1D4）。
+    features: [床上盖着毯子的尸体]
+    outdoors: false
+    ground: building
+    looks:
+      - when: flag:gate_closed
+        change: 床上空了，毯子掀落在地，只剩浸透的污渍
+      - when: knows:players:clue:c_corpse
+        change: 毯子被掀开，露出一位高度腐败的老妇人遗体，身上布满左右对称排列的深切口
+        'on': cora_blanket_bed
+      - when: flag:sign_fs_blanket_shifted_1
+        change: 床上的人形不见了，毯子半拖在地上，床边到门口的地板上多了一道污迹。
+    views:
+    - key: cora_blanket_bed
+      label: 毯子下的人形
+      features:
+      - 床上盖着毯子的尸体
+      prompt: 斜顶低矮的小卧室，苍蝇在一张旧床上方盘旋，床上躺着一个从头到脚盖着毯子的人形，毯子好几处被深色液体和血浸透，渗出的污痕左右对称
+  - id: cora_basement_hall
+    name: 地下室走廊
+    within: cora_house
+    art: cora_basement_hall
+    read_aloud: 楼梯通向一条狭小的走廊，尽头一扇门。嗡嗡声在这里愈发强烈，好像就是从门后发出的。
+    keeper: 满是尘土的楼梯井上有脚印（侦查）。
+    features: [满是尘土的楼梯, 通往主地下室的门]
+    outdoors: false
+    ground: building
+    views:
+    - key: cora_dusty_stairs
+      label: 积满尘土的楼梯
+      features:
+      - 满是尘土的楼梯
+      prompt: 通往地下室的窄木楼梯，台阶上积着厚厚的灰尘，下面是一条狭小的走廊和一扇关着的门，门缝里透出一点淡蓝色的光
+    looks:
+    - when: knows:players:clue:c_footprints
+      change: 尘土覆盖的台阶上清楚地印着一串上下往来的脚印
+      'on': cora_dusty_stairs
+    - when: flag:sign_fs_blue_under_door_1
+      change: 门缝底下那一线淡蓝色的光没有了，走廊暗了下来。
+  - id: cora_basement
+    name: 主地下室
+    within: cora_house
+    art: cora_basement
+    weather: [flicker]
+    read_aloud: 中等大小的房间，空气潮湿。所有架子和橱柜都被拉到一边，中间空出一片。整个房间被淡蓝色的光照亮。空地中央，詹姆斯赤裸的身体悬在半空，下面的地上是一个用血涂成的亵渎图案。旁边放着一本古老的书和一个桶。
+    keeper: 詹姆斯似乎在呼吸；唯一能看出他意识到处境的迹象，是他的眼神会聚焦到任何叫他名字的人身上，此外无法动弹。到达后不久守卫者下楼（事件 e_guardian）。杂乱的地下室可供躲藏（潜行奖励骰）。关闭大门的办法见守秘人须知。
+    features: [悬浮的詹姆斯, 地上的血绘图案, 古老的书, 桶, 拉到一边的架子和橱柜]
+    outdoors: false
+    ground: building
+    looks:
+      - when: flag:gate_closed
+        change: 蓝光熄灭，地下室只剩昏暗，空地上的人形瘫在血绘图案旁的地上
+      - when: knows:players:clue:c_chest_sigil
+        change: 他胸口刻着一个血淋淋的图形，和地上的血绘图案一模一样
+        'on': basement_floating_body
+      - when: knows:players:clue:c_bucket
+        change: 桶里装着满满的暗红色血液
+        'on': basement_bucket
+    views:
+    - key: basement_floating_body
+      label: 悬在半空的人
+      features:
+      - 悬浮的詹姆斯
+      prompt: 潮湿的地下室被淡蓝色光照亮，一个赤裸消瘦的年轻男子悬浮在半空，身体微微起伏像在呼吸，下方地面上是用血涂成的几何图案
+    - key: basement_blood_sigil
+      label: 地上的血绘图案
+      features:
+      - 地上的血绘图案
+      prompt: 地下室中间清空的水泥地面上，用暗红的血涂出一个巨大的几何图形，圆、交叉的基准线和锯齿形折线，四周的架子和橱柜被推到墙边，一切笼罩在淡蓝色的光里
+    - key: basement_old_book
+      label: 图案旁的旧书
+      features:
+      - 古老的书
+      prompt: 血绘图案旁边的地上放着一本古老厚重的书，皮面磨损，书页发黄卷边，被淡蓝色的光照着
+    - key: basement_bucket
+      label: 图案旁的桶
+      features:
+      - 桶
+      prompt: 血绘图案旁边放着一只旧木桶（或铁皮桶），桶沿上挂着暗红色的干涸痕迹
+
+passages:
+  - id: campus__classroom
+    a: campus
+    b: classroom
+    kind: door
+    minutes: 1
+  - id: campus__hartman_office
+    a: campus
+    b: hartman_office
+    kind: door
+    minutes: 2
+  - id: campus__library
+    a: campus
+    b: library
+    kind: door
+    minutes: 3
+  - id: library__library_office
+    a: library
+    b: library_office
+    kind: door
+    minutes: 0
+    gate:
+      open: false
+    perception: 借阅台后面的门；关门后在办公室里压低声音的对质阅览室听不清，大声喧哗则会惊动霍尔科姆夫人
+  - id: campus__registrar
+    a: campus
+    b: registrar
+    kind: door
+    minutes: 3
+  - id: campus__dorm_yard
+    a: campus
+    b: dorm_yard
+    kind: road
+    minutes: 8
+  - id: dorm_yard__dorm_hall
+    a: dorm_yard
+    b: dorm_hall
+    kind: door
+    minutes: 0
+    gate:
+      open: false
+  - id: dorm_hall__bernard_room
+    a: dorm_hall
+    b: bernard_room
+    kind: door
+    minutes: 0
+    gate:
+      open: false
+      locked: true
+    perception: 隔壁房门，走廊上一直敲门或撬锁的动静屋里听得见（集体幸运检定失败则伯纳德出来）
+  - id: dorm_hall__james_room
+    a: dorm_hall
+    b: james_room
+    kind: door
+    minutes: 0
+    gate:
+      open: false
+      locked: true
+    perception: 房门，敲门声和撬锁声隔壁听得见
+  - id: dorm_yard__james_room
+    a: dorm_yard
+    b: james_room
+    kind: opening
+    minutes: 2
+    secret: true
+    found: clue:c_window
+    perception: 一楼微开的窗户，旁边是常春藤覆盖的排水管
+  - id: dorm_hall__janitor_office
+    a: dorm_hall
+    b: janitor_office
+    kind: stairs
+    minutes: 1
+    perception: 走廊尽头通往地下的楼梯，楼上楼下说话彼此听不清
+  - id: campus__ludlow
+    a: campus
+    b: ludlow
+    kind: road
+    minutes: 330
+    perception: 巴士或汽车，路程 5-6 小时
+  - id: ludlow__cora_ground
+    a: ludlow
+    b: cora_ground
+    kind: road
+    minutes: 10
+    gate:
+      open: false
+  - id: cora_ground__cora_landing
+    a: cora_ground
+    b: cora_landing
+    kind: stairs
+    minutes: 0
+    perception: 通往二楼的楼梯，恶臭从这里传下来（侦查）
+  - id: cora_landing__cora_bath
+    a: cora_landing
+    b: cora_bath
+    kind: door
+    minutes: 0
+  - id: cora_landing__cora_bedroom
+    a: cora_landing
+    b: cora_bedroom
+    kind: door
+    minutes: 0
+    gate:
+      open: false
+    perception: 卧室门后传出苍蝇的嗡嗡声和恶臭
+  - id: cora_ground__cora_basement_hall
+    a: cora_ground
+    b: cora_basement_hall
+    kind: stairs
+    minutes: 0
+    perception: 楼梯井，地下室的声音顺着它传上来；守卫者下楼时笨拙响亮的脚步声不需侦查即可听见
+  - id: cora_basement_hall__cora_basement
+    a: cora_basement_hall
+    b: cora_basement
+    kind: door
+    minutes: 0
+    gate:
+      open: false
+    perception: 嗡嗡声从门后发出，在走廊里愈发强烈
+plans:
+- building: dorm
+  floors:
+  - name: 一层
+    rooms:
+    - place: dorm_hall
+    - place: bernard_room
+      size: small
+    - place: james_room
+      size: small
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: janitor_office
+      size: small
+  basis: 原文：詹姆斯的宿舍在校园东侧较新寄宿公寓的一楼，伯纳德住在他隔壁，门卫在地下办公室存着备用钥匙。一楼走廊（dorm_hall）是入口房间；房间并排在同一条走廊上、地下办公室从走廊尽头的楼梯下去，这一同层布局为
+    AutoKeeper 补充。
+  layout:
+    rooms:
+    - {place: dorm_hall, x: 10, y: 10, w: 12, h: 2.5}
+    - {place: james_room, x: 10, y: 12.5, w: 4, h: 4}
+    - {place: bernard_room, x: 14, y: 12.5, w: 4, h: 4}
+    - {place: janitor_office, x: 16, y: 10, w: 6, h: 2.5}
+    doors:
+    - {passage: dorm_yard__dorm_hall, at: [10, 11.2], main: true}
+    - {passage: dorm_hall__james_room, at: [12, 12.5]}
+    - {passage: dorm_hall__bernard_room, at: [16, 12.5]}
+    - {passage: dorm_yard__james_room, at: [12, 16.5]}
+    windows:
+    - {room: james_room, at: [10, 16], width: 0.8}
+    - {room: bernard_room, at: [16.5, 16.5]}
+    - {room: dorm_hall, at: [22, 11.5], width: 0.8}
+    stairs:
+    - {passage: dorm_hall__janitor_office, x: 19, y: 10.5, w: 3, h: 1}
+    fixtures:
+    - {room: dorm_hall, feature: 詹姆斯的房门, label: 詹姆斯的房门, sketch: door, x: 10.3, y: 12, w: 0.8, h: 0.4}
+    - {room: dorm_hall, feature: 隔壁的房门, label: 隔壁的房门, sketch: door, x: 17.1, y: 12, w: 0.8, h: 0.4}
+    - {room: dorm_hall, feature: 通往地下的楼梯, label: 通往地下的楼梯, sketch: stairs, x: 19, y: 11.7, w: 2.5, h: 0.6}
+    - {room: bernard_room, feature: 凌乱的床, label: 凌乱的床, sketch: bed, x: 14.2, y: 14, w: 1, h: 2}
+    - {room: james_room, feature: 书桌, label: 书桌, sketch: desk, x: 10.3, y: 13.6, w: 0.6, h: 1.2}
+    - {room: james_room, feature: 墙上的图形和草图, label: 墙上的草图, sketch: mark, x: 10, y: 13.4, w: 0.2, h: 1.6}
+    - {room: james_room, feature: 书桌边的乱堆, label: 书本纸堆, sketch: clutter, x: 11, y: 13.6, w: 1, h: 1}
+    - {room: james_room, feature: 一封旧信, label: 信件, sketch: papers, x: 11, y: 15, w: 0.5, h: 0.4}
+    - {room: james_room, feature: 门边的钥匙钩, label: 钥匙钩, sketch: mark, x: 13.1, y: 12.6, w: 0.3, h: 0.2}
+    - {room: james_room, sketch: bed, x: 12.9, y: 14.3, w: 1, h: 2}
+    - {room: janitor_office, feature: 挂钥匙的木板, label: 钥匙板, sketch: mark, x: 16, y: 10.5, w: 0.2, h: 1.5}
+    - {room: janitor_office, feature: 门卫的桌子, label: 门卫的桌子, sketch: desk, x: 16.6, y: 11.6, w: 1.2, h: 0.6}
+    sides:
+    - {side: w, faces: 公寓门前, way: dorm_front_door, place: dorm_yard}
+    - {side: s, faces: 窗下排水管小路, way: dorm_window_drainpipe}
+    - {side: n, faces: 校园草地}
+    - {side: e, faces: 校园东边空地}
+    basis: 没有原书平面图，照原文描述：詹姆斯与伯纳德的房间相邻、都在一楼，地下有门卫办公室；走廊东西走向、两间房在走廊南侧、楼梯在走廊东头、正门开在西端，这些由 AutoKeeper 补充，依据是门前在西南、排水管那条路在南边。
+- building: cora_house
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: cora_landing
+      size: small
+    - place: cora_bath
+      size: small
+    - place: cora_bedroom
+      size: small
+  - name: 一层
+    rooms:
+    - place: cora_ground
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: cora_basement_hall
+      size: small
+    - place: cora_basement
+  basis: 原文：一楼起居室和厨房；二楼极小，只有一间极小的浴室和一间卧室，受八字形斜坡天花板所限；地下室楼梯通向小走廊，走廊尽头一扇门通往主地下室。原文附科拉阿姨家地图（第 12 页）。一楼起居室与厨房（cora_ground）是入口房间。
+  layout:
+    rooms:
+    - {place: cora_bedroom, x: 10, y: 10, w: 4, h: 6}
+    - {place: cora_landing, x: 14, y: 10, w: 4, h: 3}
+    - {place: cora_bath, x: 14, y: 13, w: 2, h: 3}
+    - {place: cora_ground, x: 10, y: 10, w: 8, h: 6}
+    - {place: cora_basement, x: 10, y: 10, w: 5, h: 6}
+    - {place: cora_basement_hall, x: 15, y: 10, w: 3, h: 6}
+    doors:
+    - {passage: cora_landing__cora_bedroom, at: [14, 11.5]}
+    - {passage: cora_landing__cora_bath, at: [15, 13]}
+    - {passage: cora_basement_hall__cora_basement, at: [15, 14]}
+    - {passage: ludlow__cora_ground, at: [18, 14.5], main: true}
+    windows:
+    - {room: cora_ground, at: [12, 10]}
+    - {room: cora_ground, at: [14, 10]}
+    - {room: cora_ground, at: [10, 12]}
+    - {room: cora_ground, at: [13, 16]}
+    - {room: cora_ground, at: [16.5, 16]}
+    - {room: cora_bedroom, at: [10, 12.5]}
+    - {room: cora_bedroom, at: [12, 10]}
+    - {room: cora_landing, at: [15.5, 10]}
+    - {room: cora_bath, at: [15, 16]}
+    stairs:
+    - {passage: cora_ground__cora_landing, x: 17, y: 10, w: 1, h: 3}
+    - {passage: cora_ground__cora_basement_hall, x: 15.5, y: 10.5, w: 1, h: 3}
+    fixtures:
+    - {room: cora_landing, feature: 卧室的门, label: 卧室门, sketch: door, x: 14.1, y: 12.1, w: 0.3, h: 0.7}
+    - {room: cora_bath, feature: 浴缸, label: 浴缸, sketch: sink, x: 14.1, y: 15.2, w: 1.7, h: 0.7}
+    - {room: cora_bath, feature: 洗手池, label: 洗手池, sketch: sink, x: 15.5, y: 14, w: 0.4, h: 0.5}
+    - {room: cora_bedroom, feature: 床上盖着毯子的尸体, label: 床上的人形, sketch: bed, x: 10.5, y: 13.5, w: 1.2, h: 2}
+    - {room: cora_ground, feature: 起居室, label: 起居室, sketch: area, x: 10.5, y: 10.5, w: 4, h: 2.5}
+    - {room: cora_ground, feature: 厨房, label: 厨房, sketch: area, x: 11, y: 13.5, w: 3.5, h: 2.2}
+    - {room: cora_ground, feature: 冰箱, label: 冰箱, sketch: machine, x: 10.2, y: 14, w: 0.7, h: 0.7}
+    - {room: cora_ground, feature: 通往二楼的楼梯, label: 上楼楼梯, sketch: stairs, x: 16.6, y: 10.5, w: 0.4, h: 1}
+    - {room: cora_ground, feature: 通往地下室的楼梯, label: 地下室楼梯, sketch: stairs, x: 15, y: 10.5, w: 0.4, h: 1}
+    - {room: cora_ground, sketch: lounge, x: 11.5, y: 10.3, w: 2, h: 0.8}
+    - {room: cora_ground, sketch: table, x: 13.5, y: 11.5, w: 0.8, h: 0.8}
+    - {room: cora_basement_hall, feature: 满是尘土的楼梯, label: 尘土楼梯, sketch: stairs, x: 16.6, y: 11, w: 0.4,
+      h: 1}
+    - {room: cora_basement_hall, feature: 通往主地下室的门, label: 尽头的门, sketch: door, x: 15.1, y: 15.2, w: 0.3,
+      h: 0.6}
+    - {room: cora_basement, feature: 地上的血绘图案, label: 血绘图案, sketch: mark, x: 11, y: 12, w: 2.5, h: 2.5}
+    - {room: cora_basement, feature: 悬浮的詹姆斯, label: 悬浮的詹姆斯, sketch: person, x: 11.8, y: 12.5, w: 0.9,
+      h: 1.5}
+    - {room: cora_basement, feature: 古老的书, label: 古老的书, sketch: papers, x: 13.8, y: 13, w: 0.5, h: 0.4}
+    - {room: cora_basement, feature: 桶, label: 桶, sketch: vessel, x: 13.8, y: 14, w: 0.5, h: 0.5}
+    - {room: cora_basement, feature: 拉到一边的架子和橱柜, label: 推开的架柜, sketch: clutter, x: 10.1, y: 10.2, w: 4.5,
+      h: 1}
+    sides:
+    - {side: e, faces: 通往镇上的土路, way: dirt_road_to_cora}
+    - {side: s, faces: 空地，远处是勒德洛镇}
+    - {side: w, faces: 空地}
+    - {side: n, faces: 空地}
+    basis: 照原书第12页平面图：二楼西为卧室、中间小浴室、东侧楼梯口；一楼整层为起居室（北）连厨房（南），东侧一条楼梯带；地下室西为主地下室、东为楼梯走廊。来路在东南，正门开在东墙。二楼东南角斜坡屋檐下不放房间、窗位和尺寸是补的
+- building: library
+  floors:
+  - name: 一层
+    rooms:
+    - place: library
+      label: 阅览室与借阅台
+      size: large
+    - place: library_office
+      size: small
+  basis: 原文：霍尔科姆夫人把调查员指向其中一间后台办公室，凯莱布常在那里整理书籍。阅览室本身作主厅；后台办公室在借阅台后面、与阅览室同层为 AutoKeeper 补充。
+  layout:
+    rooms:
+    - {place: library, x: 10, y: 10, w: 16, h: 10}
+    - {place: library_office, x: 20, y: 6, w: 4, h: 4}
+    doors:
+    - {passage: campus__library, at: [18, 20], width: 2, main: true}
+    - {passage: library__library_office, at: [22, 10]}
+    windows:
+    - {room: library, at: [10, 15], width: 1.5}
+    - {room: library, at: [26, 15], width: 1.5}
+    - {room: library, at: [13, 20], width: 1.5}
+    - {room: library, at: [23, 20], width: 1.5}
+    - {room: library_office, at: [22.5, 6]}
+    fixtures:
+    - {room: library, feature: 借阅台, label: 借阅台, sketch: desk, x: 20.5, y: 11.5, w: 3, h: 0.8}
+    - {room: library, feature: 阅览室长桌, label: 阅览室长桌, sketch: longtable, x: 12, y: 13.5, w: 8, h: 1}
+    - {room: library, sketch: longtable, x: 12, y: 16.5, w: 8, h: 1}
+    - {room: library, feature: 书架, label: 书架, sketch: shelf, x: 10, y: 11, w: 0.4, h: 8}
+    - {room: library, sketch: shelf, x: 25.6, y: 11, w: 0.4, h: 8}
+    - {room: library_office, feature: 待整理的书堆, label: 待整理的书堆, sketch: boxes, x: 20.2, y: 6.5, w: 1.5, h: 1}
+    - {room: library_office, feature: 凯莱布的工作台, label: 凯莱布的工作台, sketch: desk, x: 22.5, y: 6.3, w: 1.2,
+      h: 0.6}
+    - {room: library_office, x: 20.2, y: 8.3, w: 0.6, h: 0.9}
+    sides:
+    - {side: s, faces: 校园步道, way: campus_walk}
+    - {side: e, faces: 去寄宿公寓的小路, way: campus_to_dorm, place: dorm_yard}
+    - {side: w, faces: 波士顿去勒德洛的大路, way: boston_ludlow_bus_road}
+    - {side: n, faces: 校园草坪}
+    basis: 原书无平面图，照原文描述：阅览室为进门主厅，借阅台在阅览室北侧、后台办公室在借阅台后面（同层、北墙外侧）为 AutoKeeper 补充；正门朝南对校园步道，窗、第二张长桌、东墙书架和推车为按常理补充。
+interior_reviews:
+  dorm:
+    fingerprint: 66bba8abad49365c713e48321d5a9284dd6eb2afb420dd65e02a924d8282e542
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 原文：詹姆斯的宿舍在校园东侧较新寄宿公寓的一楼，伯纳德住在他隔壁，门卫在地下办公室存着备用钥匙。一楼走廊（dorm_hall）是入口房间；房间并排在同一条走廊上、地下办公室从走廊尽头的楼梯下去，这一同层布局为
+      AutoKeeper 补充。
+  classroom:
+    fingerprint: 91e09192b27585d1d606c18322558821b471fb9667eae4be1d7e78045eb47749
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 单一阶梯教室，原文全部情节（听课、离场潜行、问同学）发生在同一空间。
+  hartman_office:
+    fingerprint: 7af82c3c997b01773c9f2efcc71178f4a72fac14148e476ebcbbd1e1e9f4a316
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 狭小的单间办公室，只用于第二天见哈特曼，无内部结构。
+  registrar:
+    fingerprint: e1773b5718d1decb9d2a627d1d0519441176d342a76ceb61d39ebd4e6fbf77d2
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 原文只写秘书鲁比与档案；柜台与档案柜是同一间办公室里的陈设，作 features 即可，档案查阅受鲁比交涉门槛控制而非门锁。
+  dorm_yard:
+    fingerprint: a5e30512218c821901e1541af6b8b265c0275c705b310167944e21041ab5536d
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 公寓门前的户外区域；窗户与排水管是可调查陈设，进窗通路已由 dorm_yard__james_room 暗通路表达。
+  ludlow:
+    fingerprint: 8024499f4fc1f66a117297d8d3a749d57de90b2103fcbbae89604518eb060afb
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 小镇街道，户外区域，原文只用来转入通往科拉家的土路。
+  campus:
+    fingerprint: 9a41adf78e4e3d2f089b2ed1336372302c36f0f0493ff7fcffecde6aa8cb9035
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 校园是户外区域，不是一栋楼。教室、哈特曼办公室、图书馆、行政办公室和寄宿公寓门前都已经是独立地点，从校园走过去。原文没有写校园本身还有哪些室内房间，所以不拆，也不改成建筑。
+  library:
+    fingerprint: 19a05ce1cfc7532d91d3439a1fd3b8bd23312649e8e55b77d3ae9aa784cc920e
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 现有平面图里已经有阅览室兼借阅台（library，霍尔科姆夫人在这里）和借阅台后面的后台办公室（library_office，凯莱布在这里）。原文只写了“其中一间后台办公室，凯莱布经常在那里整理书籍”，有玩法意义的空间就这两处：霍尔科姆在不在场、和凯莱布私下对质。两者之间那扇门的声音传递也已经写进通路。原文没有别的房间、楼层或上锁区域，所以不再补。
+  cora_house:
+    fingerprint: 23cd35d2cc2d69e8637eea63e1e5581be27c4638e28d2d655ca642a5f18a4751
+    source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+    reason: 现有平面图已经和原文以及“科拉阿姨家的地图”对上了：一层是起居室与厨房（cora_ground）；二层只有楼梯口、极小的浴室和卧室（原文写明“二楼非常小，只有一间极小的浴室和一间卧室”）；地下室是楼梯下的小走廊加一扇门后的主地下室。科拉的尸体、詹姆斯、《缟玛瑙石板》、桶和各条线索都已经放在原文写明的那一间，楼梯和门的通路也都有了。厨房原文和起居室并写，又没有单独的事件或分头行动的需要，所以留作一层的可调查项，不再拆。
+
+geography:
+  title: 波士顿与勒德洛
+  subtitle: 马萨诸塞州波士顿 · 佛蒙特州勒德洛 · 1920 年代
+  minutes_across: 49
+  places:
+  - place: campus
+    at: [0.7, 0.66]
+    glyph: street
+  - place: dorm_yard
+    at: [0.86, 0.62]
+    glyph: street
+  - place: dorm
+    at: [0.92, 0.5]
+    glyph: house
+  - place: ludlow
+    at: [0.28, 0.38]
+    glyph: street
+  - place: cora_house
+    at: [0.1, 0.24]
+    glyph: house
+  ways:
+  - id: campus_walk
+    kind: path
+    points:
+    - [0.62, 0.7]
+    - [0.7, 0.66]
+    - [0.78, 0.64]
+    street: campus
+  - id: campus_to_dorm
+    kind: lane
+    points:
+    - [0.72, 0.65]
+    - [0.79, 0.635]
+    - [0.86, 0.62]
+    passage: campus__dorm_yard
+  - id: dorm_front_door
+    kind: path
+    points:
+    - [0.86, 0.62]
+    - [0.89, 0.56]
+    - [0.92, 0.5]
+    passage: dorm_yard__dorm_hall
+  - id: dorm_window_drainpipe
+    kind: path
+    points:
+    - [0.87, 0.61]
+    - [0.92, 0.58]
+    - [0.94, 0.52]
+    passage: dorm_yard__james_room
+  - id: ludlow_north_street
+    kind: main
+    points:
+    - [0.22, 0.33]
+    - [0.28, 0.38]
+    - [0.36, 0.44]
+    street: ludlow
+  - id: boston_ludlow_bus_road
+    kind: main
+    points:
+    - [0.36, 0.44]
+    - [0.45, 0.5]
+    - [0.55, 0.56]
+    - [0.63, 0.62]
+    - [0.7, 0.66]
+    passage: campus__ludlow
+  - id: dirt_road_to_cora
+    kind: lane
+    points:
+    - [0.22, 0.33]
+    - [0.17, 0.29]
+    - [0.13, 0.26]
+    - [0.1, 0.24]
+    passage: ludlow__cora_ground
+  regions:
+  - kind: woods
+    shape:
+    - [0.02, 0.12]
+    - [0.12, 0.13]
+    - [0.16, 0.19]
+    - [0.06, 0.33]
+    - [0.02, 0.3]
+    near: cora_house
+  - kind: fields
+    shape:
+    - [0.3, 0.25]
+    - [0.42, 0.27]
+    - [0.44, 0.37]
+    - [0.35, 0.36]
+    near: ludlow
+  - kind: hills
+    shape:
+    - [0.05, 0.5]
+    - [0.2, 0.48]
+    - [0.3, 0.58]
+    - [0.18, 0.68]
+    - [0.04, 0.64]
+  - kind: woods
+    shape:
+    - [0.48, 0.36]
+    - [0.6, 0.38]
+    - [0.62, 0.47]
+    - [0.52, 0.48]
+  - kind: fields
+    shape:
+    - [0.38, 0.66]
+    - [0.5, 0.64]
+    - [0.54, 0.78]
+    - [0.4, 0.8]
+  houses:
+  - along: ludlow_north_street
+    span: [0.2, 0.85]
+    density: dense
+  - along: dirt_road_to_cora
+    span: [0.0, 0.3]
+  basis: 原书唯一附图是科拉阿姨家的楼层平面图，不是镇区地图，所以没有用它来定位置。位置依据原文：寄宿公寓在校园东侧，房子在勒德洛镇边缘的土路尽头。远近按通路分钟数推算：校园到公寓 8 分钟，北街到房子
+    10 分钟；坐巴士 330 分钟的那段路没有按比例画，两地分放在图的东南和西北，大致对应勒德洛在波士顿西北方的实际方位。树林、田和山丘是为了让图面不空而少量补上的。

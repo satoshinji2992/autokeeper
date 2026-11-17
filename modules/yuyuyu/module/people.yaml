@@ -1,0 +1,383 @@
+npcs:
+- id: ruan_shining
+  name: 阮施宁
+  called: 穿浅色短袖的孩子
+  role: 失踪的同学，调查员的好朋友，深潜者混血儿，已在闸门口完成转化
+  look: 穿着她自己的浅色短袖和裤子；头颅已变成湿润、苍白的鱼头，巨大的眼睛，宽阔的嘴里排着细密的尖齿
+  personality: 原本准时、守约，什么都会告诉朋友；如今只剩最后一点不舍
+  voice: 只能发出含混不清的呱叫
+  goal: 回到一直呼唤她的海里
+  knows:
+  - 闸门后面是海，“家人”在那里等她
+  location: drain_gate
+  portrait: ruan_shining
+  looks:
+  - when: flag:ruan_gone
+    change: 闸门口空了，只剩几张湿透的卡片和一张纸条
+- id: ruan_mother
+  name: 阮施宁的母亲
+  called: 堵在门缝里的高个子女人
+  role: 阮施宁的母亲，深潜者混血种
+  look: 高得几乎占满门框，垂着眼帘，一只手扶着门框边缘，目光落在孩子们头顶上方
+  personality: 平静得出奇，像在凝神看只有她看得见的东西
+  voice: 声音很轻，句子短，被追问时只反复说“不行。不行。你们走吧。”
+  goal: 打发走孩子们；不久后自己也入海
+  knows:
+  - 阮施宁确实“回家了”——回到了海里
+  secrets:
+  - 她和丈夫都是深潜者混血种，乐见女儿的变化，计划不久后也入海
+  lies:
+  - 阿宁回家了，回奶奶那里了
+  clues:
+  - c_ruan_mother_says
+  - c_ruan_calm
+  gates:
+    c_ruan_calm:
+      skill: 心理学
+  location: ruan_home
+  portrait: ruan_mother
+- id: ruan_father
+  name: 阮施宁的父亲
+  called: 背光站在屋里的男人
+  role: 阮施宁的父亲，深潜者混血种
+  look: 站在屋内，光线从身后照来，脸上的细节看不清
+  personality: 冷淡，没有情绪起伏
+  voice: 不带感情地重复“走吧。”
+  goal: 让孩子们别再来找阮施宁
+  knows:
+  - 阮施宁确实“回家了”
+  secrets:
+  - 他和妻子都是深潜者混血种，计划不久后也入海
+  clues:
+  - c_ruan_father_warns
+  location: ruan_home
+  portrait: ruan_father
+- id: grannies
+  name: 剥豆的阿婆们
+  called: 门口剥豆的阿婆们
+  role: 阮施宁家门口的邻居阿婆
+  look: 坐在矮凳上，膝上放着铁盆，手指熟练地掰开绿色豆壳
+  personality: 爱聊天，热心
+  voice: 闽南腔的家常话，偶尔叫孩子“阿宁仔”
+  goal: 照看巷子里的孩子
+  knows:
+  - 昨天阿宁盯着排水沟里的水看了很久，叫她都没听见
+  - 阿宁最爱吃夜市那家虾饼，跟卖虾饼的阿伯很熟
+  clues:
+  - c_grannies
+  location: ruan_home
+  portrait: grannies
+- id: huang_yi
+  name: 黄懿
+  called: 楼梯口甩袖子的女孩
+  role: 阮施宁最亲密的朋友，调查员的同龄人
+  look: 黑色短发，左眼下有颗小痣，常把双手缩进上衣前襟
+  personality: 爱演，想得到阿嫲的认可；守着朋友托付的秘密
+  voice: 说话时偶尔学几声小锣“锵锵”，嘴馋
+  goal: 替阮施宁保管好日记本；学会阿嫲的戏
+  knows:
+  - 昨天和阮施宁写作业时，她握笔的手指在发抖，字比平时歪
+  - 不相信阮施宁会爽约
+  - 日记本的密码
+  secrets:
+  - 阮施宁把日记本交给她保管
+  clues:
+  - c_huang_hands
+  - c_diary
+  gates:
+    c_diary:
+      skill: 说服
+  location: huang_home
+  portrait: huang_yi
+- id: huang_grandma
+  name: 黄懿的阿嫲
+  called: 摇椅上读书的阿嫲
+  role: 黄懿的祖母，地方高甲戏戏班成员，深潜者混血种
+  look: 戴老花镜，额头狭窄，眼睛有些奇特且突出
+  personality: 慈爱好客，心里藏着对孙女的担忧
+  voice: 慢声细语，招呼孩子“来，食啊”；说起孙女的将来时会停下来很久
+  goal: 让黄懿离开这座城市，做一个普通的孩子
+  knows:
+  - 海边近来不太平
+  - 夜里的潮声不该放进屋子
+  secrets:
+  - 她是深潜者混血种，不希望黄懿留在这里继承她的衣钵
+  clues:
+  - c_grandma_wish
+  location: huang_home
+  portrait: huang_grandma
+- id: librarian
+  name: 图书馆管理员
+  called: 借阅台后的管理员
+  role: 少儿图书馆管理员
+  look: 低头给书盖日期戳
+  personality: 认得常来的孩子
+  voice: 压低声音说话，偶尔“嘘”一下吵闹的孩子
+  knows:
+  - 昨天见到阮施宁时她魂不守舍，话都说不利索
+  clues:
+  - c_librarian
+  location: library
+  portrait: librarian
+  goal: 把新到和归还的书盖好日期戳、整理上架，让馆里保持安静（依据原文场景：低头为几册图书加盖日期戳；原作未写别的动机）
+- id: busker
+  name: 流浪汉
+  called: 喷泉边弹唱的流浪汉
+  role: 在音乐广场卖唱的流浪汉，已被感染
+  look: 抱着吉他，面前打开的琴盒里散着皱巴巴的纸币和硬币；衣服很脏
+  personality: 随和，有人搭话就停下来聊
+  voice: 唱一句喘一下；说话时总在掏耳朵
+  knows:
+  - 没见过阮施宁模样的小孩
+  - 最近几天广场上多了些深夜逗留的人，坐在喷泉边把手伸进水里，一坐几个小时，到凌晨才散
+  clues:
+  - c_busker_talk
+  location: music_square
+  portrait: busker
+  goal: 在喷泉边弹唱，挣点琴盒里的零钱过日子（依据原文：面前打开的琴盒里散着纸币和硬币；原作未写别的动机）
+- id: yang_zongxi
+  name: 杨纵溪
+  called: 挎相机的青年女子
+  role: 《石头屿晚报》要闻部编辑，正在做清淤工程专题
+  look: 挎着一台相机，手里攥着卷了边的笔记本，随身带记者证
+  personality: 友善而有些疲惫，纸媒没落仍奔波在第一线；把小学生当成年人看待
+  voice: 语速正常，不用简化的词，偶尔讲个闽南语冷笑话（梨子念起来是“来啊”）
+  goal: 晚上七点多在石坡尾采访现场负责人陈工
+  knows:
+  - 早上听工人说，昨天工地附近几条狗喝了排水通道里冒出的水，当晚就喘不上气
+  - 今晚七点多约了陈工在石坡尾碰面
+  - 报社开设小记者班
+  - 她写过石坡尾闸门渗漏的报道
+  clues:
+  - c_yang_dogs
+  - c_yang_interview
+  - c_busker_talk
+  location: music_square
+  portrait: yang_zongxi
+  important: true
+- id: toy_vendor
+  name: 塑料玩具摊主
+  called: 塑料玩具摊的女摊主
+  role: 夜市摊贩，已被感染
+  look: 呼吸有点急促，两只耳朵里塞着东西
+  personality: 典型的老一辈，非重病不去医院，固执
+  voice: 嗓门大，招呼孩子看玩具
+  knows:
+  - 她以为自己只是中耳炎，自己买了药水在滴
+  portrait: toy_vendor
+  goal: 照常出摊卖玩具，自己滴药水治“中耳炎”，不去医院（依据原文：老一辈非重病不去医院，自行购置药水来滴）
+- id: jianfu
+  name: 建福
+  called: 虾饼摊的阿伯
+  role: 夜市虾饼和海蛎饼摊主，深潜者混血种中的“留下派”
+  look: 守着油锅，铁勺里裹着米浆的虾饼滋啦作响
+  personality: 想保护还没变化的年轻人，又怕被同族视为背叛
+  voice: 话少，压低声音；跟阿宁熟，叫她“阿宁仔”
+  goal: 让城里的混血孩子留在人类社会；暗中帮想阻止这事的孩子
+  knows:
+  - 排水通道里的闸门被打开了，必须关上
+  - 排水通道里大概的样子
+  secrets:
+  - 他是深潜者混血种
+  - 他知道有人期待今晚两点回归大海
+  clues:
+  - c_jianfu_help
+  portrait: jianfu
+- id: liying
+  name: 丽英
+  called: 眼睛不眨的春卷摊主
+  role: 夜市春卷摊主，深潜者混血种晚期，“回归派”
+  look: 脑门狭窄，鼻梁扁平，眼睛突出且长时间不眨，额头和下巴向后收缩
+  personality: 狂热，把还没发生的事说成注定的结局
+  voice: 说起排水通道时声音黏糊糊的，像和那股腥臭水汽连成了一体
+  goal: 让闸门开着，等今晚两点的大潮
+  knows:
+  - 排水闸门开了
+  - 混血种里有人想回归大海，有人想留下
+  secrets:
+  - 她白天在海洋乐园外远远看着调查员
+  clues:
+  - c_liying_talk
+  portrait: liying
+- id: abao
+  name: 阿宝
+  called: 工地边的老渔民
+  role: 在石坡尾捕鱼四十多年的老渔民，普通人
+  look: 约六十岁，身形粗壮，皮肤黝黑粗糙；旧 POLO 衫、宽松深色长裤、防滑胶鞋，腰间挂一串钥匙，指甲缝嵌着泥，浑身鱼腥味
+  personality: 耐心，热心肠，舍不得这片海
+  voice: 满口闽南话，说时辰爱讲“几点几个字”
+  goal: 每天来看看石坡尾
+  knows:
+  - 今天农历十七
+  - 涨潮推算口诀
+  - 认识工地看门的老张
+  clues:
+  - c_tide_rhyme
+  location: shipowei
+  portrait: abao
+- id: chen_gong
+  name: 陈工
+  called: 穿旧工装的女工头
+  role: 石坡尾清淤项目现场负责人
+  look: 洗得发白的旧工装，脖子上挂着哨子
+  personality: 严厉刻薄，对孩子没耐心，只对记者客气
+  voice: 一开口就是骂人，吹着哨子催工人
+  goal: 赶工；台风过后浇筑水泥封住排水通道
+  knows:
+  - 台风过后会浇筑水泥封住排水通道
+  - 清淤时清出过旧衣服、鞋和一些说不清的东西
+  secrets:
+  - 清出来的“奇怪的东西”里有她不愿说清的东西
+  clues:
+  - c_chen_seal
+  - c_chen_strange
+  location: shipowei
+  portrait: chen_gong
+- id: lao_zhang
+  name: 老张
+  called: 看守室里的老头
+  role: 石坡尾工地夜间看门人
+  look: 守在堆着水泥袋和沙袋的看守室里
+  personality: 尽职但上了年纪
+  voice: 咳两声再说话
+  goal: 看好工地，不让人进坞底
+  knows:
+  - 阿宝是老熟人
+  location: shipowei_guardroom
+  portrait: lao_zhang
+pregens:
+- id: lin_xiaozhou
+  name: 林小舟
+  occupation: 小学生（四年级）
+  age: 10
+  sex: 男
+  residence: 石头屿老城区
+  birthplace: 石头屿
+  portrait: lin_xiaozhou
+  known_locations:
+  - ocean_park
+  - ruan_home
+  - player_home
+  - library
+  characteristics:
+    力量: 40
+    体质: 60
+    体型: 40
+    敏捷: 70
+    外貌: 55
+    智力: 65
+    意志: 55
+    教育: 45
+  luck: 65
+  skills:
+    侦查: 60
+    聆听: 50
+    母语(汉语): 50
+    话术: 45
+    计算机使用: 40
+    博物学: 35
+    语言(闽南语): 40
+    攀爬: 45
+    潜行: 40
+    闪避: 40
+  inventory:
+  - 小浣熊卡片册
+  - 手电筒（家里拿的）
+  backstory:
+    关键玩具: 一辆掉了漆的四驱车，马达是攒零花钱换的（AutoKeeper 补充）
+    个人描述: 家里有一台装 Windows XP 的旧台式机，伙伴们约好下午来他家玩电脑（AutoKeeper 补充）
+    重要之人: 阮施宁，一起交换卡片、互抄作业的好朋友（AutoKeeper 补充）
+    家庭: 爸爸是开小货车送鱼的，家庭信用评级 25（AutoKeeper 补充）
+- id: chen_manman
+  name: 陈蔓蔓
+  occupation: 小学生（四年级）
+  age: 10
+  sex: 女
+  residence: 石头屿老城区
+  birthplace: 石头屿
+  portrait: chen_manman
+  known_locations:
+  - ocean_park
+  - ruan_home
+  - library
+  characteristics:
+    力量: 35
+    体质: 55
+    体型: 35
+    敏捷: 60
+    外貌: 60
+    智力: 70
+    意志: 60
+    教育: 50
+  luck: 60
+  skills:
+    侦查: 55
+    聆听: 55
+    母语(汉语): 60
+    说服: 45
+    图书馆使用: 50
+    心理学: 40
+    语言(闽南语): 45
+    艺术(绘画): 35
+    潜行: 35
+    闪避: 35
+  inventory:
+  - 带锁的铅笔盒
+  - 零花钱十几块
+  backstory:
+    关键玩具: 一只缝过两次耳朵的布兔子，出门总挂在书包上（AutoKeeper 补充）
+    个人描述: 图书馆借书证上的借阅记录比谁都长，周末常和阮施宁一起去少儿图书馆（AutoKeeper 补充）
+    重要之人: 阮施宁，暑假作业她负责数学那一部分（AutoKeeper 补充）
+    家庭: 妈妈在菜市场卖干货，家庭信用评级 30（AutoKeeper 补充）
+creatures:
+- id: deep_ones
+  name: 深潜者
+  called: 积水里扑腾的湿滑东西
+  description: 4 个正在巡查排水通道的深潜者。鱼类般的头部，硕大的眼球向外突出，几乎无法完全闭合；湿润的皮肤覆着黏液，脖颈两侧的鳃不断开合；指间连着半透明的肉蹼，末端是长而弯曲的指爪，既能在水中移动，也能抓住湿滑的石壁攀爬。
+  sanity: 0/1D6
+  pursues: true
+  stats:
+    力量: 90
+    体质: 60
+    体型: 80
+    敏捷: 45
+    智力: 65
+    意志: 55
+    生命: 13
+    移动: 8
+    闪避: 25
+    攀爬: 30
+    聆听: 40
+    侦查: 40
+    潜行: 40
+    游泳: 90
+  attacks:
+  - 格斗（爪击、啃咬、武器）45%，伤害 1D6+DB
+  notes: 共 4 只一起行动；护甲 1（带鳞皮肤）；伤害加值 +1D4；体格 1；移动 8；魔法值 10；每轮攻击 1 次；能熟练使用标枪和三叉戟。孩子们不可能在正面对抗中存活。追到点 10 的侧向裂隙前为止，调查员挤进裂隙后它们放弃追击。
+creation:
+  summary: 本模组的调查员都是十岁左右的小学生。力量、体型、教育不超过 50，其余属性不超过 70，幸运取两次掷骰中较高的一次；本职技能点为教育×4，家庭信用评级 0 至 49。不能把点数投入需要成年人的专业训练、执照或资格才能掌握的技能。须选一件关键玩具，写入背景。
+  age:
+    low: 10
+    adjust: false
+  caps:
+    each: {力量: 50, 体型: 50, 教育: 50}
+    rest: 70
+  luck: best_of_two
+  only: true
+  occupations:
+  - name: 小学生
+    points: [教育×4]
+    credit: [0, 49]
+    credit_note: 家庭信用评级，不是个人收入
+    skills:
+    - 侦查
+    - 聆听
+    - 母语
+    - {pick: 1, of: [魅惑, 话术, 说服], note: 三项交涉技能三选一}
+    - {pick: 2, of: [图书馆使用, 计算机使用, 心理学, 博物学, 艺术与手艺(任一), 科学(任一), 历史, 外语(任一)], note: 考虑学校生活和个人兴趣}
+  skill_caps:
+    occupation: 70
+    interest: 55
+  barred_skills: [会计, 法律, 医学, 精神分析, 汽车驾驶, 驾驶, 操作重型机械, 射击]
+  credit_label: 家庭信用评级
+  connection_label: 关键玩具

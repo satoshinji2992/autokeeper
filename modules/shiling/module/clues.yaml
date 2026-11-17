@@ -1,0 +1,1136 @@
+items:
+- id: suicide_kit
+  name: 伪装自杀的材料
+  description: 一瓶过量的安眠药、一封伪造的遗书、一份伪造的心理疾病诊断书和几张安眠药的开具发票。
+  where: agent_home
+  owner: nora
+  status: 幻象之物，某个时候会变成乱涂乱画的废纸（如发票抬头写着特工自己）
+- id: adamson_key
+  name: 考克斯家的钥匙
+  description: 一把普通的门钥匙，挂在特工包里。
+  where: agent_home
+  owner: nora
+- id: nora_pistol
+  name: 配枪
+  description: 特工的制式手枪。
+  where: agent_home
+  owner: nora
+  equipment: concealed
+- id: invitation_card
+  name: 邀请函
+  description: 一张崭新精致的米色卡片，印着花卉卷草纹、一行 YouTube 视频地址和一段英文花体字，结尾印着一个黑色的符号。
+  where: adamson_bedroom
+  hidden: true
+- id: warpneck_book
+  name: 《瓦普内克剧院》
+  description: 一本用棉线装订的正方形手绘小画册，封面是黑色涂鸦字体，书页上满是狂躁的批注和修改。
+  where: adamson_home
+  hidden: true
+- id: peter_laptop
+  name: 皮特的手提电脑
+  description: 一台手提电脑，连着一根藏起来的数据线和网线，开机要六位数密码。
+  where: bar_cellar
+  hidden: true
+- id: bar_camera
+  name: 酒吧的摄像机
+  description: 藏在角落杂物里的一台摄像机，目前不工作，一根藏起来的数据线通往墙上的装饰画后面。
+  where: bar
+  hidden: true
+- id: cellar_key
+  name: 地窖钥匙
+  description: 别在皮特腰间钥匙扣上的一把钥匙。
+  where: bar
+  owner: peter
+  equipment: worn
+- id: walkman
+  name: 皮特的随身听
+  description: 一台破旧的 WM-EX422 随身听，连着耳机。
+  where: bar
+  owner: peter
+  equipment: held
+- id: king_in_yellow
+  name: 红皮无名小书
+  description: 一本红色皮质封面的书，封面闪着油腻的光，没有书名。
+  where: jim_bedroom
+  hidden: true
+- id: dream_machine
+  name: 造梦机
+  description: 蒸汽时代风格的机械装置：二色曲面显示器、两个喇叭、投币口、带圆球的扳手、吐出纸带的长缝和一副望远镜似的笨重眼镜。
+  where: theatre_dream
+- id: duff_toy
+  name: 狮子玩偶达夫
+  description: 30 厘米高的棕褐色狮子毛绒玩偶。
+  where: theatre_childhood
+- id: plaza_control_key
+  name: 中控室钥匙
+  description: 中央广场中控室的钥匙。
+  where: horn_media
+  owner: austin
+clues:
+- id: c_halting_brief
+  title: 停机行动简报
+  text: 坎蒂在门口的车里关掉引擎和灯后交代：两小时前他从亚当森处收到专用信道的加密邮件，亚当森请求接受组织“处理”，并指名由你完成，组织已同意。组织近期没给亚当森新任务，不清楚他崩溃的原因，你需要弄明白他为何崩溃、为何指名你、有没有非自然因素。他交给你过量的安眠药、伪造的遗书、伪造的心理疾病诊断书和几张安眠药的开具发票，要你营造“抑郁症服安眠药过量而亡”的假象。组织暂时没有掩护身份或人手；你提供足够线索后联系他，他会考虑。行动名为“停机行动”（Operation
+    Halting）。
+  where: agent_home
+  feature: 门口停着的车里
+  npc: kandi
+  core: true
+  points_to:
+  - k_adamson_dead
+- id: c_adamson_email
+  title: 亚当森的邮件
+  text: “我想我被 ** 影响了…让【特工】来结束。他把它拾起的，我向你保证。通往解答的道路。不要再为这个事情自责，真的。这样…你才会拥有选择的机会因为，落入它之手，还是就这样逃出去。”
+  where: agent_home
+  feature: 门口停着的车里
+  npc: kandi
+  points_to:
+  - k_agent_self
+- id: c_bart_phone
+  title: 巴特在电话里的话
+  text: 巴特一两个月前调离了奥克兰，对新的不幸一无所知：“噢，亚当森早就该去坟墓了。在很早以前他就开始握不稳咖啡杯的小耳朵柄，我都弄不清楚他是怎样握紧扳机至今的。向我们曾经的队友致敬。”
+  where: agent_home
+  feature: 打给巴特的电话
+  points_to:
+  - k_adamson_dead
+- id: c_adamson_note1
+  title: 第一张纸条
+  text: 一张皱巴巴的打印纸，上面工整地手写着乱码。你立刻认出这是你和亚当森约定的加密法，解出来是“我的电脑密码”和一串英文数字混合的乱码。你记得这张纸条是黑线行动后组织转交给你的。
+  where: adamson_bedroom
+  feature: 书桌上的第一张纸条
+  core: true
+  points_to:
+  - k_adamson_dead
+  - k_agent_self
+- id: c_invitation
+  title: 第二张纸条：邀请函
+  text: 一张崭新精致的邀请函，印着一个 YouTube 视频地址和一行花体字：“前次分别匆忙，未能充分表达我们的敬意。我们于此诚挚邀请您前来晚会。”结尾印着一个黑色的符号。
+  where: adamson_bedroom
+  feature: 书桌上的第二张纸条
+  core: true
+  sanity: 0/1D4
+  points_to:
+  - k_agent_self
+  - k_bar
+- id: c_adamson_pc
+  title: 亚当森电脑的使用痕迹
+  text: 接上电源后，电脑弹出非正常关机提示，随后正常开机，纸条上的密码能解锁。近段时间的使用痕迹都来自你自己。浏览记录 2 月 8 日之前被清除；8 日到 12 日有大量日常网络监察，悖论网站和
+    YouTube 主页从 8 日起开始被检索、力度渐大，11 日之后下降；11 日晚有一条搜索 IP 对应位置的记录（没记下具体 IP）；12 日傍晚至今没有记录。找不到亚当森发给坎蒂的邮件。最近打开的文件是“项目08”文件夹。
+  where: adamson_bedroom
+  feature: 电脑
+  requires:
+  - c_adamson_note1
+  core: true
+  points_to:
+  - k_agent_self
+  - k_adamson_dead
+- id: c_project08
+  title: 项目08
+  text: 文件夹里是两个程序：一个发钓鱼邮件收集 IP，一个利用 IP 在对方设备上留后门。执行报告显示目标邮箱 zeno@paradox.com，已执行一次。根目录有一个纯文本文件，里面是一串 IP；简单调查即可知道这个
+    IP 属于辛普敦大厦。
+  where: adamson_bedroom
+  feature: 电脑
+  requires:
+  - c_adamson_pc
+  core: true
+  points_to:
+  - k_agent_self
+  - k_bar
+- id: c_backdoor_watch
+  title: 后门：数据传输
+  text: 监视那台被留了后门的电脑，它与奥克兰中央广场的某台设备间歇地交换数据。
+  where: adamson_bedroom
+  feature: 电脑
+  check:
+    skill: 计算机使用
+  requires:
+  - c_project08
+  points_to:
+  - k_broadcast
+- id: c_warpneck
+  title: 《瓦普内克剧院》
+  text: 一本棉线装订的正方形手绘小画册，黑色涂鸦字体的封面，满是狂躁的批注和修改，三分之二之后风格剧变成几何图形。原名 Teatro Warpneck，也可译作《折颈剧院》。里面有三个故事：住在火车上、宣称自己住在书里的会说话的卷心菜，它吞下反对它的朋友，好看的排泄成毛线球、难看的排泄成金色屎壳郎；吵架的狮子和蛇，一只金色的鹿样生物从狮子肚子里钻出来杀死狮子，从此与蛇幸福生活，最后一页的鹿头是长着鹿角的一大团黑线；害怕衣服的舞者，赤裸地靠自动喂食器活着，踢断电源饿死在舞台上，成为舞蹈之神，命令所有人赤裸着不停跳舞。画里的观众都戴着面具，不看故事，只在舞蹈时拍手。
+  where: adamson_home
+  feature: 桌上一摞书
+  requires:
+  - flag:corr_25
+  points_to:
+  - k_site
+  - k_jim_patricide
+- id: c_warpneck_room
+  title: 读完绘本后的陌生卧室
+  text: 读完绘本，你发现自己站在一间温馨的儿童卧室里，墙上画着图样，窗帘拉得死死的，窗外传来火车车轮撞击铁轨的声音。一挪步，你又回到了原处。
+  where: adamson_home
+  feature: 桌上一摞书
+  requires:
+  - c_warpneck
+  sanity: 0/1D3
+  points_to:
+  - k_mansion
+- id: c_si_trailer
+  title: SI 预告片
+  text: 不足两分钟的视频，简介是空的。昏暗的地下酒吧里两名男性在跳舞，剪辑琐碎：两人赤裸上身，戴着灰色纸盒头套，体型相似，身上用夜光涂料画着奇特的符号，绕着圈做随意而费解的动作；观众陆续加入。最后屏幕渐渐变绿，出现白色数字
+    0218-2018。背景是失真的富鲁格号声，掺着火车撞击铁轨的哐当声。符号与肢体组成了一个图案。
+  where: adamson_bedroom
+  feature: 电脑
+  requires:
+  - c_invitation
+  sanity: 0/1
+  core: true
+  points_to:
+  - k_bar
+  - k_paradox
+- id: c_trailer_double
+  title: 预告片里的自己
+  text: 观众里有一个酷似你自己的人。
+  where: adamson_bedroom
+  feature: 电脑
+  check:
+    skill: 灵感
+  requires:
+  - c_si_trailer
+  points_to:
+  - k_agent_self
+- id: c_paradox_web
+  title: 网上的“芝诺悖论”
+  text: 艺术评论网站：悖论是现代舞团体，2007 年 12 月 25 日起在 YouTube 发表作品，共 4 部完整舞蹈，有忠实观众，最近一部的拍摄水准明显上升。私人主页建于 2008 年 1
+    月 18 日，最新作品是 SI 预告片，留有“悖论”邮箱。YouTube 主页最初只有 3 名成员，居住地都在奥克兰，最近的简介显示新增一名成员；一般两人主舞，戴简单的几何形状头罩。民间论坛上，ID“旅客”（The
+    Tourist）上周说自己在某家酒吧碰上了现场演出。
+  where: home_study
+  feature: 书房电脑
+  points_to:
+  - k_paradox
+- id: c_fan_photos
+  title: 狂热观众的偷拍照
+  text: 论坛上的狂热观众 1D6+2 小时后回复，要 50 美元提供物理位置（辛普敦大厦的地下酒吧），再要 50 美元用邮件发来偷拍的成员照片：一张是戴头罩的男人，一张是摆弄摄像机的男人。
+  where: home_study
+  feature: 书房电脑
+  requires:
+  - c_paradox_web
+  points_to:
+  - k_bar
+  - k_paradox
+- id: c_photo_identity
+  title: 摆弄摄像机的人是谁
+  text: 约 1D6 小时后得知：摆弄摄像机的是皮特·戴维斯，就职于加州鹿角传媒公司，若干年前因偷拍成年人的猥亵图片被判两年有期徒刑，有案底。戴头套的人信息太少，无法判断。
+  where: oakland_pd
+  feature: 值班柜台
+  check:
+    skill: 说服
+  requires:
+  - c_fan_photos
+  points_to:
+  - k_paradox
+- id: c_paradox_mail
+  title: 悖论的回信
+  text: 给主页邮箱写信，对方把你当热情的粉丝回答，刻意隐瞒位置和人员；回信古板无趣、缺乏想象力，看不出艺术才能。
+  where: home_study
+  feature: 书房电脑
+  requires:
+  - c_paradox_web
+  points_to:
+  - k_paradox
+- id: c_bertha_word
+  title: 伯莎的许可
+  text: 伯莎同意你查看亚当森的办公室。问起亚当森，她表示遗憾，明显在回避。
+  where: nppd_office
+  feature: 伯莎的办公室
+  npc: bertha
+  points_to:
+  - k_adamson_dead
+- id: c_adamson_office
+  title: 过分干净的办公室
+  text: 个人电脑被格式化了，文件按亚当森的习惯散乱地堆着，却没有一份有用的材料。一切都摆在原处，干净得过分。
+  where: adamson_office
+  feature: 格式化的电脑
+  requires:
+  - c_bertha_word
+  points_to:
+  - k_adamson_dead
+- id: c_office_vision
+  title: 音容宛在
+  text: 腐化达到 16 时：一瞬间，椅子上坐着埋头办公的“亚当森”，你耳边响起一句“我来收拾你的东西了”，“亚当森”点了点头。
+  where: adamson_office
+  feature: 散乱的文件
+  requires:
+  - c_bertha_word
+  points_to:
+  - k_adamson_dead
+  - k_agent_self
+- id: c_former_chief
+  title: 前任负责人的反应
+  text: 他认出了你的声音：“噢，是你。不，你知道的比我多不是吗？”
+  where: nppd_office
+  feature: 前任负责人的电话
+  points_to:
+  - k_agent_self
+- id: c_austin_peter
+  title: 奥斯丁说皮特
+  text: 皮特最近一两个月心不在焉，最近两周忽视顾客的请求，这两天干脆没来上班，奥斯丁完全不知道原因。中央广场的投放方刚来投诉：商家两周前提出更换广告，一直没有落实。
+  where: horn_media
+  feature: 奥斯丁的办公室
+  npc: austin
+  points_to:
+  - k_paradox
+  - k_broadcast
+- id: c_austin_oddity
+  title: 一件小怪事
+  text: 10 号夜里奥斯丁正要下班，听见皮特办公室里有响动，敲门后听到皮特的声音，皮特说顾客着急，需要处理，奥斯丁就走了。再提起时他疑惑地说：“但是那天好像没有人看见皮特走进办公室……而现在顾客的需求也没能得到解决。”
+  where: horn_media
+  feature: 奥斯丁的办公室
+  npc: austin
+  points_to:
+  - k_paradox
+- id: c_plaza_password
+  title: 中控室的钥匙和密码
+  text: 奥斯丁看过官方材料后，交出中央广场中控室的钥匙，并告诉你控制电脑的密码。
+  where: horn_media
+  feature: 奥斯丁的办公室
+  npc: austin
+  points_to:
+  - k_broadcast
+- id: c_photo_wall
+  title: 照片墙上的皮特
+  text: 进门走廊的在职员工照片墙上有皮特·戴维斯：脸部松弛的中年男人，皱着眉。
+  where: horn_media
+  feature: 员工照片墙
+  points_to:
+  - k_paradox
+- id: c_drawer_photos_a
+  title: 抽屉里的照片（一）
+  text: 抽屉里一沓照片，一部分是男女交合的场面，男方手持相机自拍，拍摄时间是两三个月前。
+  where: peter_office
+  feature: 办公桌抽屉
+  points_to:
+  - k_paradox
+- id: c_drawer_photos_b
+  title: 抽屉里的照片（二）
+  text: 另一部分是夜里从一栋房子的窗外偷拍的，像是一个人在对另一个人施虐，噪点很厚、距离很远，认不出人。其中一张拍到了路牌“罗伯勒多大道”。拍摄时间集中在一个半月前左右，最近一个月没有照片。
+  where: peter_office
+  feature: 办公桌抽屉
+  core: true
+  points_to:
+  - k_mansion
+- id: c_control_link
+  title: 中控电脑被动了手脚
+  text: 花 1D2 小时，发现这台本不能联网的电脑在与一台远程电脑交换数据。
+  where: plaza_control
+  feature: 控制电脑
+  check:
+    skill: 计算机使用
+  points_to:
+  - k_broadcast
+- id: c_bar_google
+  title: 谷歌地图上的酒吧
+  text: 谷歌地图在辛普敦大厦标着一枚图钉：“凌晨十二点闹钟”酒吧，地下一层，24 小时营业，正在营业。
+  where: home_study
+  feature: 书房电脑
+  requires:
+  - c_project08
+  points_to:
+  - k_bar
+- id: c_simpton_records
+  title: 辛普敦大厦的记录
+  text: 城市记录：辛普敦大厦建于 1985 年，负一楼同年卖给罗伯特·R·罗伯特开了罗伯特书店，1996 年转让给约瑟芬·莱特，开了闹钟酒吧至今。大厦管理人员对这家店毫无印象，不确定有没有地下一层；简单翻查文件后，惊讶地发现文档里清楚写着这家酒吧，总是按时交租。
+  where: simpton_building
+  feature: 大厦管理处
+  points_to:
+  - k_bar
+  - k_paradox
+- id: c_bar_phone
+  title: 打给酒吧的电话
+  text: 一个自称约瑟芬的大嗓门女人接了电话，说还在营业。
+  where: agent_home
+  feature: 电话
+  requires:
+  - c_bar_google
+  points_to:
+  - k_bar
+- id: c_dust_mark
+  title: 玻璃积灰上的痕迹
+  text: 腐化不高于 20 时：盯着积灰的玻璃看久了，你注意到灰上被擦去的痕迹组成了一个图案。
+  where: simpton_building
+  feature: 负一楼的门面
+  points_to:
+  - k_bar
+- id: c_bar_mirror
+  title: 门玻璃上的倒影
+  text: 进门的一瞬间，门上玻璃的倒影是亚当森的脸，嘴一张一合，随即消失。
+  where: bar
+  feature: 吧台
+  requires:
+  - flag:corr_10
+  sanity: 0/1
+  points_to:
+  - k_agent_self
+- id: c_bar_mirror_words
+  title: 镜中亚当森在说什么
+  text: 你读懂了倒影里亚当森的口型（守秘人借此放出一条暗示特工记忆的信息）。
+  where: bar
+  feature: 吧台
+  check:
+    skill: 灵感
+  requires:
+  - c_bar_mirror
+  points_to:
+  - k_agent_self
+- id: c_bar_watch_self
+  title: 黄昏走进酒吧的人
+  text: 腐化达到 15 时：约黄昏时，一个很像亚当森的人小心翼翼、左顾右盼地走进了酒吧。
+  where: simpton_building
+  feature: 负一楼的门面
+  points_to:
+  - k_agent_self
+- id: c_bar_ledger
+  title: 前台的账本
+  text: 前台电脑里只有收账文件，没有悖论的信息。账本上不难看出：夜晚的营业比白天好不少；监控设施很久没有运行了。
+  where: bar
+  feature: 前台电脑
+  check:
+    skill: 说服
+  points_to:
+  - k_bar
+- id: c_bar_lan
+  title: 酒吧网络里的另一台电脑
+  text: 另有一台电脑连在酒吧的局域网上。
+  where: bar
+  feature: 前台电脑
+  check:
+    skill: 计算机使用
+  requires:
+  - c_bar_ledger
+  points_to:
+  - k_broadcast
+- id: c_bar_camera
+  title: 角落里的摄像机
+  text: 角落的杂物里藏着一台摄像机，目前不工作；一根掩藏起来的数据线顺着墙通到墙上一幅装饰画后面。
+  where: bar
+  feature: 角落杂物堆
+  check:
+    skill: 侦查
+  core: true
+  points_to:
+  - k_paradox
+- id: c_camera_purpose
+  title: 摄像机的用途
+  text: 从线路和设置看，这台摄像机是拍 SI 预告片用的。
+  where: bar
+  feature: 角落杂物堆
+  check:
+    skill: 电气维修
+  requires:
+  - c_bar_camera
+  points_to:
+  - k_paradox
+- id: c_camera_footage
+  title: 摄像机里的完整录像
+  text: 摄像机里是 2 月 12 日夜预演的完整版。开头皮特多次出现、调整角度，一个中等身高的男人裤腿出镜，没有露脸；结尾皮特摆弄相机，录下一段对话。男声：“很顺利，快要结束了。”皮特：“嗯，吉姆，我想这样一定没问题了。你确定到时候不在这里？这里会更安全。”男声：“嗯，有一个很早以前就决定了的地方。”皮特：“听你的。”画面里还有一些你没预料到的东西。
+  where: bar
+  feature: 角落杂物堆
+  requires:
+  - c_bar_camera
+  core: true
+  points_to:
+  - k_paradox
+  - k_site
+  - k_agent_self
+- id: c_bar_blood
+  title: 舞池的血迹
+  text: 腐化达到 17 时：舞池中间一大摊新鲜血迹，溅到了墙上的装饰画；坏凳子和破沙发格外扎眼。采集的样本会逐渐变质，最后变成腐败的糖水。其他员工耸耸肩，建议你去问约瑟芬。
+  where: bar
+  feature: 舞池
+  points_to:
+  - k_paradox
+- id: c_josephine_lie_blood
+  title: 约瑟芬在胡说
+  text: 她说前几天醉客打架、一个倒霉鬼被砸了脑袋送了医院——她显然在胡说。
+  where: bar
+  feature: 吧台后
+  npc: josephine
+  points_to:
+  - k_paradox
+- id: c_si_poster
+  title: SI 海报
+  text: 墙上一张海报：正中是海底火车的横截面，轨道在海底自由飘动，挂着海带和贝类，飘动的线条构成一个图案；远处有鲸鱼的阴影；一对戴灰色方盒的赤裸男性肢体缠绕，站在火车的小桌上。海报上标着预演时间和正式演出时间（2
+    月 18 日晚）。
+  where: bar
+  feature: 墙上的装饰画
+  requires:
+  - flag:corr_20
+  points_to:
+  - k_broadcast
+  - k_site
+- id: c_cellar_door
+  title: 画着门的装饰画
+  text: 腐化低于 25 时：墙上一幅画着门的装饰画。掀开它，它变成了一扇真正的木门。（腐化达到 25 以上时，这里直接就是一扇木门，不用检定，也没有理智损失。）
+  where: bar
+  feature: 墙上的装饰画
+  sanity: 0/1D3
+  core: true
+  points_to:
+  - k_broadcast
+- id: c_peter_laptop
+  title: 地窖里的电脑
+  text: 架子后面藏着一台手提电脑，酒吧摄像机的数据线连着它，还接着网线。开机要六位数密码。
+  where: bar_cellar
+  feature: 两侧的架子
+  check:
+    skill: 侦查
+  core: true
+  points_to:
+  - k_broadcast
+- id: c_laptop_contents
+  title: 皮特电脑里的东西
+  text: 破解密码后，电脑里有普通的工作文档（主人皮特，鹿角传媒雇用的工程师）、SI 预演的完整版、悖论的宣传材料、一个代码项目和一份 SI 的富鲁格号乐谱。
+  where: bar_cellar
+  feature: 两侧的架子
+  check:
+    skill: 计算机使用
+  requires:
+  - c_peter_laptop
+  core: true
+  points_to:
+  - k_paradox
+  - k_broadcast
+- id: c_laptop_code
+  title: 劫持大屏的代码
+  text: 花 1D3 小时看懂代码：它劫持中央广场的屏幕，把摄像机正在录制的内容实时传到中央广场的大屏上，设定在 2 月 18 日晚上自动运行。
+  where: bar_cellar
+  feature: 两侧的架子
+  requires:
+  - c_laptop_contents
+  core: true
+  points_to:
+  - k_broadcast
+- id: c_laptop_score
+  title: 富鲁格号乐谱
+  text: 乐谱开头一切正常，往后越来越杂乱，带着莫名其妙的标记。
+  where: bar_cellar
+  feature: 两侧的架子
+  requires:
+  - c_laptop_contents
+  points_to:
+  - k_paradox
+- id: c_josephine_paradox
+  title: 约瑟芬的迟疑
+  text: 问到悖论时，她和别的客人一样疑惑地说不知情，但回答前有一下迟疑。
+  where: bar
+  feature: 吧台后
+  npc: josephine
+  points_to:
+  - k_paradox
+- id: c_josephine_gaze
+  title: 她止不住朝那个人看
+  text: 夜里约瑟芬不再轻浮，目光止不住地朝吧台旁那个戴牛仔帽的男人看。
+  where: bar
+  feature: 吧台后
+  npc: josephine
+  points_to:
+  - k_paradox
+- id: c_josephine_midnight
+  title: 午夜溜走的老板
+  text: 午夜时分，约瑟芬悄悄从那扇铁门溜了进去。
+  where: bar
+  feature: 铁门
+  check:
+    skill: 侦查
+  points_to:
+  - k_paradox
+- id: c_josephine_in_trailer
+  title: 预告片里的约瑟芬
+  text: 你想起来了：预告片里，她站在靠近舞台的那一圈，带着毫不掩饰的笑容注视着舞台。
+  where: bar
+  feature: 吧台
+  check:
+    skill: 灵感
+  requires:
+  - c_si_trailer
+  points_to:
+  - k_paradox
+- id: c_josephine_scar
+  title: 锁骨的伤痕
+  text: 她锁骨附近的伤是两天之内留下的。
+  where: bar
+  feature: 吧台
+  check:
+    skill: 医学
+  points_to:
+  - k_paradox
+- id: c_josephine_body
+  title: 约瑟芬身上的伤口
+  text: 在她的办公室里，你看到她身上更大面积的伤口：无数重叠的同一个图案，以凸起的鞭痕和齿痕长在身上。她自语：“我应该将你介绍给吉姆看看。”
+  where: bar_office
+  feature: 员工办公室
+  npc: josephine
+  sanity: 0/1D3
+  points_to:
+  - k_paradox
+  - k_mansion
+- id: c_peter_tape
+  title: 皮特的磁带
+  text: 从磁带盒看得出，他在听 Neutral Milk Hotel 1998 年的《In the Aeroplane Over the Sea》。以此搭话，他愿意聊下去。
+  where: bar
+  feature: 皮特的角落
+  check:
+    skill: 艺术与手艺(音乐)
+  points_to:
+  - k_paradox
+- id: c_peter_lie
+  title: 皮特停下了抖腿
+  text: 他说自己只是个磁带收藏家、没听说过悖论网站时，腿停止了抖动——他在撒谎。
+  where: bar
+  feature: 皮特的角落
+  npc: peter
+  points_to:
+  - k_paradox
+- id: c_peter_slip
+  title: 皮特懂计算机
+  text: 旁敲侧击几句技术话题，他漏了马脚：他非常懂计算机。
+  where: bar
+  feature: 皮特的角落
+  npc: peter
+  check:
+    skill: 计算机使用
+  points_to:
+  - k_paradox
+- id: c_peter_glance
+  title: 看向地窖的一眼
+  text: 他紧张地一口咬定不知道，眼睛却有一瞬看向了地窖的方向。
+  where: bar
+  feature: 皮特的角落
+  check:
+    skill: 侦查
+  points_to:
+  - k_broadcast
+- id: c_peter_admits
+  title: 皮特承认
+  text: 拿出确凿证据证明他的身份后，他停止抖腿，严肃地承认自己是悖论的成员，并告诉你正式演出的时间：2 月 18 日晚。
+  where: bar
+  feature: 皮特的角落
+  npc: peter
+  points_to:
+  - k_paradox
+  - k_broadcast
+- id: c_peter_walkman
+  title: 随身听里的声音
+  text: 皮特分享了他的随身听。耳机里是不该在那里的声音：亚当森的声音、失忆前你自己的声音，还有皮特录下的约瑟芬被鞭打时欢乐的喊声。
+  where: bar
+  feature: 皮特的角落
+  npc: peter
+  sanity: 0/1
+  points_to:
+  - k_agent_self
+  - k_mansion
+- id: c_jim_admits
+  title: 吉姆的两次承认
+  text: 问到马里亚诺怎么死的，吉姆毫不犹豫地承认是自己杀的。问到是否对约瑟芬施虐，他点头：“当我施加或感受到疼痛的时候，我感觉我回到了一致。”接着非常细致地描述，像正在做一样。
+  where: bar
+  feature: 吧台旁
+  npc: jim
+  points_to:
+  - k_jim_patricide
+  - k_paradox
+- id: c_jim_carcosa
+  title: 吉姆谈卡尔克萨
+  text: 吉姆像孩子一样滔滔不绝地讲卡尔克萨，讲旅途中遇到的人，包括喀巴奇·劳国王，毫不掩饰崇拜。
+  where: bar
+  feature: 吧台旁
+  npc: jim
+  points_to:
+  - k_paradox
+- id: c_jim_offer
+  title: 吉姆的问题
+  text: 问他的目的，他岔开话题，举你生活中的幸事讨论它们是否带来幸福，又一件件列出你在这几天遭遇的不幸，像亲眼所见，最后问：“我们是否可以构建一个永远幸福的生活？”
+  where: bar
+  feature: 吧台旁
+  npc: jim
+  points_to:
+  - k_paradox
+- id: c_mathia_inspiration
+  title: 带来灵感的年轻客人
+  text: 马蒂亚无意提起：2 月 8 日夜她和一位年轻客人聊天，对方认可她的才华，建议说：“如果你想塑造一个恐怖的故事，不如试试使用一些神秘主义的符号？——那种从你的脑海里浮现出来，但你不知道其含义的符号，然后对其做出意义不明的诠释。我想这会让人感到恐惧。”白天追问，她说记不清那人的样子。
+  where: bar
+  feature: 靠窗的台子
+  npc: mathia
+  points_to:
+  - k_paradox
+- id: c_mathia_novel
+  title: 马蒂亚的小说《失灵》
+  text: 夜里马蒂亚放得开，给你看她正在写的小说《失灵》：一个军人自以为背着友人的尸体（其实背着一袋法式面包），乘火车想到宇宙尽头埋葬友人；故事发生在虚构的国度“卡寇莎”，军人在火车上徒劳打转，途经的地点连起来构成一个图案。此时她想起了那位年轻客人的样貌；吉姆在场时，她会为你指认他。
+  where: bar
+  feature: 靠窗的台子
+  npc: mathia
+  points_to:
+  - k_site
+  - k_paradox
+- id: c_thomas_math
+  title: 托马斯的末世论
+  text: 托马斯说自己是早已离开大不列颠、在漫长路途上赶路的旅客；他把这个世界叫做“彼岸”（The Other），说闹钟酒吧是建在剧院之上的一个站台，剧院的终点是伊提尔的宴会。他在埃及从古代祭司的石板上读到了这一切，草稿纸上满是繁复跳跃的计算——阿拉伯数字，用法却截然不同，等式互相矛盾。结论是：世界的信息传递效率在逐渐变慢，“支持高等动物思维的器官都会退化，最终进入一种所有生命都没有感觉、混沌到仿佛一切都静止的世界”。
+  where: bar
+  feature: 靠窗的台子
+  npc: thomas
+  points_to:
+  - k_site
+- id: c_thomas_egypt
+  title: 托马斯的埃及史
+  text: 他说的埃及史和公认的历史不同，但讲的确实是埃及。
+  where: bar
+  feature: 靠窗的台子
+  check:
+    skill: 历史
+  requires:
+  - c_thomas_math
+  points_to: []
+- id: c_thomas_heat
+  title: 托马斯的推算
+  text: 他的结论与 1852 年开尔文的热寂假说相似。
+  where: bar
+  feature: 靠窗的台子
+  check:
+    skill: 科学(物理)
+  requires:
+  - c_thomas_math
+  points_to: []
+- id: c_bart_other
+  title: 另一个巴特
+  text: 你拿出与他惊人一致的证据（同样的“停机行动”）后，巴特说他在执行“特工坎蒂”发布的“停机行动”，追踪一个与你同代号的特工 A：A 汇报自己被腐化后从房间里消失了。A、“亚当森·考克斯”和他是另一个世界的三人小队，那个世界的亚当森在黑线行动中牺牲了。
+  where: bar
+  feature: 靠窗的台子
+  npc: bart
+  requires:
+  - flag:corr_20
+  points_to:
+  - k_adamson_dead
+  - k_agent_self
+- id: c_mansion_watch
+  title: 宅邸的夜
+  text: 昼夜门窗紧闭；白天没有人车进出；接近半夜时灯亮了；午夜后二楼传来鞭打声和一女两男隐约的喊叫，持续约两小时。
+  where: greenwood_mansion
+  feature: 门廊与花园
+  points_to:
+  - k_mansion
+  - k_paradox
+- id: c_mansion_record
+  title: 宅邸的城市记录
+  text: 格林伍德宅邸由著名建筑师阿萨·达利邦迪受委托设计，1925 年完工；上一代主人是马里亚诺，现在归约瑟芬·莱特所有。
+  where: home_study
+  feature: 书房电脑
+  points_to:
+  - k_mansion
+- id: c_neighbors
+  title: 邻居的闲话
+  text: 邻居不愿和约瑟芬打交道，又同情又厌恶，说她不守妇道，常带不同的男人回家，最近这位男人固定了；有人神秘地说从没见过那男人走出来，约瑟芬迟早把他吃干抹净。
+  where: greenwood_mansion
+  feature: 邻居家门口
+  points_to:
+  - k_mansion
+- id: c_neighbors_photo
+  title: 邻居认出照片
+  text: 看了抽屉里的照片，邻居指认照片里的女人是约瑟芬。
+  where: greenwood_mansion
+  feature: 邻居家门口
+  requires:
+  - c_drawer_photos_a
+  points_to:
+  - k_paradox
+- id: c_old_rumor
+  title: 老街坊的说法
+  text: 老街坊提起宅子的两件怪事：马里亚诺自杀，吉姆失踪。他们暗示都是约瑟芬干的——嫌弃前夫、觊觎财产，杀夫后花钱打通关系脱了嫌，又处理掉了可能目击的儿子。
+  where: greenwood_mansion
+  feature: 邻居家门口
+  points_to: []
+- id: c_utility
+  title: 社区管理部门
+  text: 宅邸的水电网一切正常，业主因没及时缴费被警告过几次；最近一次缴费在 1 月底，收费员说约瑟芬既兴奋又睡眠不足，难掩无奈。
+  where: agent_home
+  feature: 电话
+  points_to:
+  - k_mansion
+- id: c_mansion_rooms
+  title: 宅邸里的痕迹
+  text: 屋里有腐败的气味，却有人生活的痕迹。客厅家具乱堆在角落，正中的空地上有新鲜的、剐蹭状的深褐色血迹；厨房的速食盒、腐败食物和垃圾袋堆在洗手台上，褐色液体粘在地上；卫生间沾血的纸团堵住了马桶；墙上有黑色或绿色的不明划痕；主卧的床至少两周没用过，厚灰盖在掀开的被套上；客卧空荡，久未使用。
+  where: greenwood_mansion
+  feature: 客厅中央的血迹
+  points_to:
+  - k_mansion
+- id: c_mariano_case
+  title: 马里亚诺自杀案卷宗
+  text: 报案人与第一发现人是约瑟芬和邻居。子弹从右脑进入，当场死亡；手臂上有巨大的淤青，是某种较宽的绑带用力勒出来的，现场没找到绑带，法医认定捆绑痕迹产生于死亡之前。门窗都从里面反锁（邻居一同撞门证实），手枪上只有马里亚诺的指纹。马里亚诺因油漆公司经营不善患抑郁症多年，判为自杀。
+  where: oakland_pd
+  feature: 马里亚诺自杀案卷宗
+  check:
+    skill: 说服
+  points_to:
+  - k_jim_patricide
+- id: c_jim_missing_case
+  title: 吉姆失踪案卷宗
+  text: 报案人是约瑟芬。吉姆回房后再没出来，第二天房间里空无一人；奥克兰找不到他任何住行的迹象，连续数日搜查无果，判为失踪。吉姆 1985 年早产，生于奥克兰市立医院，被标记可能存在遗传病。奥克兰地方志格林伍德家族一节的结尾说他沉默寡言，社交可能有问题；他从前的老师说他非常不合群，但很喜欢画画。
+  where: oakland_pd
+  feature: 吉姆失踪案卷宗
+  check:
+    skill: 说服
+  points_to:
+  - k_jim_patricide
+  - k_paradox
+- id: c_old_papers
+  title: 旧报刊
+  text: 1975 年石油危机重创了马里亚诺的油漆厂，又受电子产业冲击；同年马里亚诺接手，1992 年破产，此后不再露面。《奥克兰花边》指责约瑟芬外遇是压垮他的最后一根稻草，说她刻意回避。
+  where: home_study
+  feature: 书房电脑
+  check:
+    skill: 图书馆使用
+  points_to: []
+- id: c_storage_stain
+  title: 储物间的人形污渍
+  text: 撬开钉死的木条，一股浓烈的尸臭。不足十平米的空房间，地面正中是一圈人形的黄色污渍。
+  where: mansion_storage
+  feature: 地上的人形污渍
+  sanity: 0/1
+  points_to:
+  - k_jim_patricide
+- id: c_playroom_table
+  title: 台球桌上的血迹
+  text: 台球桌上褐色的血迹斑驳，有些还是新鲜的，一组一组构成同一个图案。
+  where: mansion_playroom
+  feature: 台球桌
+  points_to:
+  - k_mansion
+  - k_paradox
+- id: c_family_photo
+  title: 撕掉三分之一的团圆照
+  text: 书桌上一张家庭照片，父亲那三分之一被撕去了。三个人站在有不少水上游乐设施的地方，背景里有半截招牌“……aterpark”。照片背面写着“终点站”（Terminal）。
+  where: jim_bedroom
+  feature: 书桌上的家庭照片
+  core: true
+  points_to:
+  - k_site
+- id: c_paper_balls
+  title: 写满名字的纸团
+  text: 揉皱的纸团上是用不同的笔写的“吉姆·格林伍德”，有些落了时间，1996 年到 2007 年都有，没有 2008 年。
+  where: jim_bedroom
+  feature: 书桌上的纸团
+  points_to:
+  - k_paradox
+- id: c_handwriting
+  title: 纸团的笔迹
+  text: 这些笔迹都出自同一个人——约瑟芬·莱特。
+  where: jim_bedroom
+  feature: 书桌上的纸团
+  check:
+    skill: 科学(司法科学)
+  requires:
+  - c_paper_balls
+  points_to:
+  - k_paradox
+- id: c_warpneck_jim
+  title: 纸团下的绘本
+  text: 若你此时还没有《瓦普内克剧院》：纸团下面压着一本（内容同亚当森住所那本）。
+  where: jim_bedroom
+  feature: 书桌上的纸团
+  points_to:
+  - k_site
+  - k_jim_patricide
+- id: c_kiy_book
+  title: 红皮无名书
+  text: 一本红色皮质封面、闪着油腻光彩、没有书名的剧本——吉姆从书店得到的《黄衣之王》。读完要 1 小时。
+  where: jim_bedroom
+  feature: 书柜
+  requires:
+  - flag:corr_35
+  sanity: 1D4+2/1D4+2
+  mythos: 5
+  points_to:
+  - k_paradox
+- id: c_doorless
+  title: 《无门之界》
+  text: 1936 年的小说，作者艾米琳·F·菲茨罗伊：无门的国度里，人们因一种特殊的音乐困在无尽重复的生活中；主人公小女孩艾比击败音乐的源头，寂静的城市崩溃，她成为新的歌唱者，重新进入重复。一页上有批注：“我想和她交朋友，和艾比，和艾米琳，和……”作者
+    12 岁出版此书，26 岁在家中失踪，五年后被哥哥宣布死亡。读完要 2D4 小时。
+  where: jim_bedroom
+  feature: 书柜
+  sanity: 0/1D3
+  points_to: []
+- id: c_train_book
+  title: 《火车的历史》
+  text: 一本翻烂的 1930 年代的书，扉页写着“奥克兰铁路总局赠格林伍德。”下方是歪歪扭扭的字：“喜欢火车。它有自己的轨道。乘客们都只有一个目的。大家可以在上面打牌，看风景。火车上没有争吵，因为大家有目的。我希望找到那永不能实现的目的。”书里有一张东方快车餐车的图片。读完要
+    1D6+3 小时。
+  where: jim_bedroom
+  feature: 书柜
+  points_to:
+  - k_paradox
+- id: c_recipes
+  title: 《卡尔克萨王族食谱》
+  text: 百科全书式排版，大量水生生物插图，解说是食谱改成的韵歌，出版标记“AKY 15”。序言：“这是对不再存在的食材和前代王朝宫廷菜谱的整理”，旁边有手写英文批注“一个奇怪的推销员硬要给我的”。贝肉食谱旁的批注：“我尝试割自己成三角形的小块，但它会长好，只要我想。这有点疼，但也很快乐，我有一种感觉。”完整读完要
+    2D6 小时。
+  where: jim_bedroom
+  feature: 书柜
+  requires:
+  - flag:corr_25
+  mythos: 2
+  points_to:
+  - k_paradox
+- id: c_recipes_script
+  title: 食谱的文字
+  text: 这种形似楔形文字的文字不属于任何人类已知的语言。
+  where: jim_bedroom
+  feature: 书柜
+  check:
+    skill: 历史
+  points_to: []
+- id: c_site_wordplay
+  title: 字母游戏
+  text: 从剧院的全名 Teatro Warpneck 里删去 Waterpark 的字母，剩下的拼成 Nocte——Nocte Waterpark，夜间水上公园。
+  where: jim_bedroom
+  feature: 书桌上的家庭照片
+  check:
+    skill: 智力
+    bonus: -1
+  requires:
+  - c_family_photo
+  core: true
+  points_to:
+  - k_site
+- id: c_site_map
+  title: 地图上的图案
+  text: 你自己的家、亚当森住所、鹿角传媒、闹钟酒吧、格林伍德宅邸，再加上一座水上公园，正是地图上那个图案的所有转折点；顺着折角和延长线，能定位到海滨公园。
+  where: home_study
+  feature: 书房电脑
+  requires:
+  - flag:corr_30
+  points_to:
+  - k_site
+- id: c_light_bands
+  title: 两条光带的交汇
+  text: 沿着从亚当森住所或格林伍德宅邸朝海边延伸的光带走，你来到海滨公园，看见两条光带在这里交汇。
+  where: seaside_park
+  feature: 公园大门
+  requires:
+  - flag:corr_30
+  points_to:
+  - k_site
+- id: c_seaside_gate
+  title: 公园中心的旧大门
+  text: 海滨公园的前身是夜间水上公园（Nocte Waterpark），1995 年关停，2003 年改建重开。公园中心作为纪念品保留的那扇大门，正是团圆照里的那一扇。
+  where: seaside_park
+  feature: 公园大门
+  points_to:
+  - k_site
+- id: c_adamson_ghost
+  title: 亚当森的呓语
+  text: 椅子上的亚当森断断续续地问候你，话里夹着非英语的句子，像同时在和好几个人说话；胡话里出现你的名字、“温妮”和“瓦普内克”。他知道你的来意，悄悄说出两段你已经忘掉的过去（由守秘人从特工 2
+    月 8 日至 12 日追查悖论的经历中选取）。问到“选择”，他只摇头：“寻求选择的意义就是选择本身。”
+  where: adamson_bedroom
+  feature: 椅子上的亚当森
+  npc: adamson
+  points_to:
+  - k_agent_self
+- id: c_scar_blackline
+  title: 黑线行动的真相
+  text: 爆炸中心的亚当森和园区门口持枪待命的“你”都被定在原处，却能说话。他们讲出黑线行动的大部分事实：2007 年 12 月 24 日，斑衣笛手在废弃工厂留下远程引爆装置；亚当森作前锋发觉陷阱，通知你撤离，随后爆炸；他被倒塌的厂房掩埋，当场死亡；你和巴特撤离时因有毒气体昏迷，被救援人员在工厂附近发现。
+  where: theatre_scar
+  feature: 爆炸中心
+  core: true
+  points_to:
+  - k_adamson_dead
+- id: c_theatre_self
+  title: 迷途的“自己”
+  text: 剧院里另一个“你”和你交换情报，揭示一部分你尚未发现的信息，甚至部分黑线行动的事实（信息不一定正确，但必然有助于找到正确的解释）。
+  where: theatre
+  feature: 包厢小门
+  requires:
+  - flag:entered_theatre
+  sanity: 0/1D4
+  points_to:
+  - k_agent_self
+  - k_adamson_dead
+- id: c_passenger_lore
+  title: 乘客的常识
+  text: 乘客们说：这里叫卡尔克萨，统治者是黄衣之王，没人知道他的真名；这里叫剧院，是行驶在哈利湖底的旅行机械，正朝一场化妆舞会前进，没人说得清何时抵达，或许是“明天”。想找人，他们推荐去餐车，或去问“卷心菜国王”，并神秘地提醒你考虑好措辞；说想离开，他们会奇怪：“因为世界除了‘这里’没有‘那里’了。”
+  where: theatre
+  feature: 走廊地毯
+  points_to:
+  - k_site
+- id: c_duff_doll
+  title: 未完成的《瓦普内克剧院》
+  text: 狮子玩偶达夫告诉你，你是“格林伍德十世”，现在是“吉姆历 10 年”。对话结束时，它从肚子里掏出一本《瓦普内克剧院》递给你：“来，你快画完了。”离开时你手里拿着这本未完成的绘本。
+  where: theatre_childhood
+  feature: 怀里的玩偶
+  npc: duff_doll
+  points_to:
+  - k_site
+  - k_jim_patricide
+- id: c_crib_corpse
+  title: 婴儿床里的声音
+  text: 尸体腹部那张“嘴”以吉姆的声音直接在你脑海里说：吉姆想创造一个一致的、永不能抵达的目标；名叫“达夫”的怪物在这里诞生，它是那不可直呼其名的王的碎片，是纯粹可能性的集合，不能被瓦解；只有在子宫之外切除脐带，才能暂停这场噩梦。它斥责那“永不能抵达的终点”是人造的虚无欢愉、自欺欺人的谎言，带着强烈的感情请求你帮吉姆和约瑟芬解脱，阻止他们的仪式。
+  where: theatre_crib
+  feature: 尸体腹部的裂缝
+  npc: mariano_corpse
+  sanity: 0/1D3
+  core: true
+  points_to:
+  - k_stop
+  - k_jim_patricide
+- id: c_dream_tape
+  title: 造梦机的纸带
+  text: 纸带以话剧台本的形式，事无巨细地记录了你从开始追踪悖论到最后一次进入剧院之前的全部行动，带着长篇的动作和环境描写。它默认读者知道开局前的一切，涉及更早的黑线行动时不作解释。其中有错误。
+  where: theatre_dream
+  feature: 造梦机的纸带
+  sanity: 0/1
+  points_to:
+  - k_agent_self
+- id: c_king_murder
+  title: 国王讲述的谋杀
+  text: 卷心菜国王说，它是马里亚诺谋杀案里吉姆的同伙：1995 年吉姆经剧院的门进入父亲的书房，令它捆住马里亚诺，伪造自杀的现场后开枪打死了他，再从剧院离开。
+  where: theatre_king
+  feature: 纸做的长桌
+  npc: cabbage_king
+  core: true
+  points_to:
+  - k_jim_patricide
+- id: c_king_lore
+  title: 国王讲述的卡尔克萨
+  text: 国王说：王的使者行于这列车中；卡尔克萨是“无数陨落王国的尸骸与温床”，彼岸是尚待成熟的世界，或是卡尔克萨的一部分；剧院是卡尔克萨中的一本书，又是通道，由被腐化者共同创造，思想可以干预它——“如果你希望离开这里，那么你可以试着想象离开这里。”这里的居民“死去”并不真死，只是永远停在夹缝里寻找前往卡尔克萨的路；这里的疼痛与死亡提供瞥见“那个舞台”的机会。
+  where: theatre_king
+  feature: 纸做的长桌
+  npc: cabbage_king
+  points_to:
+  - k_stop
+- id: c_king_pages
+  title: 国王纸片身上的文字
+  text: 国王纸片般的身体上写着咣物瓜王国的历史：从国王诞生，到王后在他身上刻完《黄衣之王》的剧本。这个王国崇拜强有力的藤蔓，在同族身上刻字，死后展开晒干当书；卡尔克萨的外交团（使官戴着苍白的面具）来访后，居民转而崇拜卡尔克萨，在同族身上刻满《黄衣之王》的台词，覆盖了原来的文化，王国就此覆灭。
+  where: theatre_king
+  feature: 满地纸团
+  requires:
+  - flag:king_dead
+  sanity: 1D4+2/1D4+2
+  mythos: 5
+  points_to: []
+- id: c_pleasure_duff
+  title: 从吉姆身体里分裂出的人
+  text: 仪式结束，三人短暂呆滞。吉姆的身体里分裂出一个赤裸的男性，头部是一团跳动的黑线。吉姆主动介绍：这是达夫·格林伍德。达夫没有反应。一瞬间，你回想起了自己遭遇的一切。
+  where: theatre_pleasure
+  feature: 台球桌
+  sanity: 1/1D8
+  core: true
+  points_to:
+  - k_agent_self
+  - k_paradox
+- id: c_whip_knowledge
+  title: 鞭子之后
+  text: 仪式结束后，平静的吉姆和你交谈，剧院的知识混乱地灌注进来。
+  where: theatre_pleasure
+  feature: 台球桌
+  requires:
+  - flag:whipped
+  points_to:
+  - k_stop
+- id: c_dante_joy
+  title: 但丁的一丝快乐
+  text: 他介绍造梦机时，你捕捉到他脸上一丝转瞬即逝的快乐。
+  where: other_station
+  feature: 大门旁的小木桌
+  npc: dante
+  points_to: []
+- id: c_dante_trade
+  title: 但丁的交易
+  text: 但丁说他弄丢了王的侍者俾德丽采给的邀请函；她给了他一张清单，把造梦机卖给清单上的人，就能取回邀请函去宴会与她重逢。他愿意提供胶囊让你体验造梦机，前提是取你的血；以血液和一段回忆，换走这台造梦机。清单上有你的名字。
+  where: other_station
+  feature: 大门旁的小木桌
+  npc: dante
+  points_to: []
+- id: c_adamson_gift
+  title: 亚当森的礼盒
+  text: 亚当森站在门口，穿着标志性的格子衫，说自己收到了前往舞会的邀请函，也打算去；他把一张卡片和一个小礼盒交给你，希望在舞会上见到你。卡片和亚当森卧室桌上那张邀请函一模一样，礼盒里是一本《瓦普内克剧院》。问来历，他说是吉姆·格林伍德寄给他、委托他转交的；问吉姆是谁：“我们的朋友，一个理想主义者。”问为什么去，他耸肩：“这可是那位王的宴会。”你提出同去，他道谢，说想和家人一起去。
+  where: other_home
+  feature: 门口
+  npc: adamson
+  points_to:
+  - k_site
+- id: c_edge_song
+  title: 遮罩对面的歌声
+  text: 遮罩对面传来一个女童反复唱着的歌声。
+  where: other_edge
+  feature: 镜子般的遮罩
+  check:
+    skill: 聆听
+  points_to: []
+- id: c_edge_brass
+  title: 地下铜管的旋律
+  text: 地下铜管奏的是 SI 的背景旋律，只是去掉了装饰音，慢了很多，庄严肃穆。
+  where: other_edge
+  feature: 地下的铜管乐器
+  check:
+    skill: 艺术与手艺(音乐)
+  points_to:
+  - k_site
+- id: c_jim_plea
+  title: 吉姆的劝说
+  text: 吉姆欢迎你，灰袍人为你让开路。他劝你放弃阻挠，让彼岸成立：现在的彼岸还不完善，这场演出会完善它，成为一个永远目的一致、毫无分歧的世界，暴露在永恒的存在之下，受其宠信和祝福；在场之人的存在会从现实所有人的认知中消失，活在永恒幸福的世界里；不在现场的人很快会恢复。
+  where: other_edge
+  feature: 灰袍人的圆圈
+  npc: jim
+  requires:
+  - flag:finale_started
+  core: true
+  points_to:
+  - k_stop
+- id: c_jim_sincere
+  title: 他是由衷的
+  text: 吉姆说这些话是由衷的。
+  where: other_edge
+  feature: 灰袍人的圆圈
+  check:
+    skill: 心理学
+  requires:
+  - c_jim_plea
+  points_to: []
+
+handouts:
+  - id: h_oakland_map
+    title: 奥克兰市区地图
+    kind: 地图
+    paper: card
+    text: 奥克兰市区街道图（CITY OF OAKLAND），无标注。
+    images: [oakland_map]
+  - id: h_oakland_map_marked
+    title: 标注过的奥克兰地图
+    kind: 地图
+    paper: card
+    text: 七处地点被红钉标出：亚当森住所、鹿角传媒、中央广场、特工的家、海滨公园、闹钟酒吧、格林伍德宅邸。（确定演出地点后才给出）
+    images: [oakland_map_marked]
+  - id: h_invitation
+    title: 邀请函
+    kind: 信件
+    paper: card
+    text: |
+      We regret that we were unable to express our full respect on our last parting.
+      We would like to invite you to our evening party.
+    images: [invitation_card]
+  - id: h_adamson_house
+    title: 亚当森住所资料
+    kind: 照片与平面图
+    paper: card
+    text: 亚当森住所的正面照、亚当森的拍立得照片，以及一、二楼平面图。
+    images: [adamson_house_plan]
+  - id: h_bar_plan
+    title: 闹钟酒吧平面图
+    kind: 平面图
+    paper: card
+    text: 闹钟酒吧北半部平面：储物间、办公室、员工通道、厨房、卫生间、吧台。
+    images: [bar_plan]
+  - id: h_mansion_plan
+    title: 格林伍德宅邸平面图
+    kind: 平面图
+    paper: card
+    text: 宅邸三层平面：储物间、客厅、餐厅、车库、厨房；书房、主卧、阳台；儿童卧室、娱乐室、露台。
+    images: [mansion_plan_lower, mansion_plan_upper]
+  - id: h_mariano_photo
+    title: 一张旧照片
+    kind: 照片
+    paper: card
+    text: 灰白络腮胡的中年男人。（原图无名，AutoKeeper 推断为马里亚诺，查阅自杀案报道时可给出）
+    images: [mariano_photo]
+  - id: h_dream_machine
+    title: 造梦机
+    kind: 图片
+    paper: card
+    text: 一台青绿屏幕、吐出纸卷的复古机械。
+    images: [dream_machine]

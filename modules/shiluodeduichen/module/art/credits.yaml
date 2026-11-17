@@ -1,0 +1,828 @@
+pictures:
+  h_sigil:
+    source: source/images/p10_image01.png
+    original: true
+    purpose: document
+  h_postcard:
+    source: source/images/p11_image01.png
+    original: true
+    purpose: document
+  h_cora_map:
+    source: source/images/p12_image01.png
+    original: true
+    purpose: document
+  cover:
+    source: source/images/p01_image01.png
+    original: true
+    purpose: reference
+  campus:
+    title: File:Aston Webb Hall, Birmingham University.jpg
+    page: https://commons.wikimedia.org/wiki/File:Aston_Webb_Hall,_Birmingham_University.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Aston_Webb_Hall%2C_Birmingham_University.jpg/500px-Aston_Webb_Hall%2C_Birmingham_University.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Graham Norrie
+    width: 640
+    height: 524
+    kind: scene
+  library:
+    title: File:Graz University-Library reading-room.jpg
+    page: https://commons.wikimedia.org/wiki/File:Graz_University-Library_reading-room.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Graz_University-Library_reading-room.jpg/500px-Graz_University-Library_reading-room.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: Dr. Marcus Gossler
+    width: 1600
+    height: 1200
+    kind: scene
+  classroom:
+    title: File:University of Edinburgh Lecture Theatre (28779436435).jpg
+    page: https://commons.wikimedia.org/wiki/File:University_of_Edinburgh_Lecture_Theatre_(28779436435).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/University_of_Edinburgh_Lecture_Theatre_%2828779436435%29.jpg/500px-University_of_Edinburgh_Lecture_Theatre_%2828779436435%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 2.0
+    artist: Open Ed
+    width: 3092
+    height: 2319
+    kind: scene
+  registrar:
+    title: File:House of Representatives Office Building (no. 5). Interior with filing cabinets LCCN2007683621.jpg
+    page: https://commons.wikimedia.org/wiki/File:House_of_Representatives_Office_Building_(no._5)._Interior_with_filing_cabinets_LCCN2007683621.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/House_of_Representatives_Office_Building_%28no._5%29._Interior_with_filing_cabinets_LCCN2007683621.jpg/500px-House_of_Representatives_Office_Building_%28no._5%29._Interior_with_filing_cabinets_LCCN2007683621.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Fawcett, Waldon, photographer
+    width: 5165
+    height: 6499
+    kind: scene
+  dorm_yard:
+    title: File:Brick Building Covered with Ivy. - DPLA - 25ea743fbcbd3c1ee48c919158a6996c (page 1).jpg
+    page: https://commons.wikimedia.org/wiki/File:Brick_Building_Covered_with_Ivy._-_DPLA_-_25ea743fbcbd3c1ee48c919158a6996c_(page_1).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9f/Brick_Building_Covered_with_Ivy._-_DPLA_-_25ea743fbcbd3c1ee48c919158a6996c_%28page_1%29.jpg/500px-Brick_Building_Covered_with_Ivy._-_DPLA_-_25ea743fbcbd3c1ee48c919158a6996c_%28page_1%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: ''
+    width: 3265
+    height: 2015
+    kind: scene
+  dorm_hall:
+    title: File:Zappe Boarding House 04.jpg
+    page: https://commons.wikimedia.org/wiki/File:Zappe_Boarding_House_04.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c9/Zappe_Boarding_House_04.jpg/500px-Zappe_Boarding_House_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Patricia Duncan
+    width: 1059
+    height: 746
+    kind: scene
+  bernard_room:
+    title: File:Messy Bed (6827707428).jpg
+    page: https://commons.wikimedia.org/wiki/File:Messy_Bed_(6827707428).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3f/Messy_Bed_%286827707428%29.jpg/500px-Messy_Bed_%286827707428%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Gary J. Wood from Toronto, ON, Canada
+    width: 4096
+    height: 2731
+    kind: scene
+  janitor_office:
+    title: File:Schlüsselbrett Pension Hindelang Ravensburg MHQ.jpg
+    page: https://commons.wikimedia.org/wiki/File:Schl%C3%BCsselbrett_Pension_Hindelang_Ravensburg_MHQ.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3e/Schl%C3%BCsselbrett_Pension_Hindelang_Ravensburg_MHQ.jpg/500px-Schl%C3%BCsselbrett_Pension_Hindelang_Ravensburg_MHQ.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: 'Photo: Andreas Praefcke'
+    width: 3264
+    height: 2448
+    kind: scene
+  hartman_office:
+    title: hartman_office
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 哈特曼教授的办公室：狭小的办公室里书和讲义堆到窗台，墙上的黑板留着擦了一半的推导。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  ludlow:
+    title: File:Main street on Armistice Day8d10112v.jpg
+    page: https://commons.wikimedia.org/wiki/File:Main_street_on_Armistice_Day8d10112v.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/Main_street_on_Armistice_Day8d10112v.jpg/500px-Main_street_on_Armistice_Day8d10112v.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Marjory Collins
+    width: 1024
+    height: 761
+    kind: scene
+  cora_house:
+    title: File:SturbridgeSmallHouse.jpg
+    page: https://commons.wikimedia.org/wiki/File:SturbridgeSmallHouse.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/SturbridgeSmallHouse.jpg/500px-SturbridgeSmallHouse.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: ''
+    width: 3872
+    height: 2592
+    kind: scene
+  cora_landing:
+    title: File:INTERIOR, FRONT STAIRCASE TO ATTIC - Solon W. Stone House, 15 Frost Street, Marlborough, Cheshire County, NH HABS NH,3-MARLB,1-15.tif
+    page: https://commons.wikimedia.org/wiki/File:INTERIOR,_FRONT_STAIRCASE_TO_ATTIC_-_Solon_W._Stone_House,_15_Frost_Street,_Marlborough,_Cheshire_County,_NH_HABS_NH,3-MARLB,1-15.tif
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/INTERIOR%2C_FRONT_STAIRCASE_TO_ATTIC_-_Solon_W._Stone_House%2C_15_Frost_Street%2C_Marlborough%2C_Cheshire_County%2C_NH_HABS_NH%2C3-MARLB%2C1-15.tif/lossy-page1-500px-INTERIOR%2C_FRONT_STAIRCASE_TO_ATTIC_-_Solon_W._Stone_House%2C_15_Frost_Street%2C_Marlborough%2C_Cheshire_County%2C_NH_HABS_NH%2C3-MARLB%2C1-15.tif.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: ''
+    width: 4033
+    height: 5000
+    kind: scene
+  library_office:
+    title: library_office
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 图书馆后台办公室：借阅台后面的小办公室里堆满待整理的书和推车，一盏台灯下有人正在给书贴标签。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cora_ground:
+    title: File:Living Room 19-10-12 031.jpg
+    page: https://commons.wikimedia.org/wiki/File:Living_Room_19-10-12_031.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/Living_Room_19-10-12_031.jpg/500px-Living_Room_19-10-12_031.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Chris Light
+    width: 4608
+    height: 3072
+    kind: scene
+  cora_basement_hall:
+    title: File:Corridor in the basement of Muness Castle - geograph.org.uk - 2823173.jpg
+    page: https://commons.wikimedia.org/wiki/File:Corridor_in_the_basement_of_Muness_Castle_-_geograph.org.uk_-_2823173.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d1/Corridor_in_the_basement_of_Muness_Castle_-_geograph.org.uk_-_2823173.jpg/500px-Corridor_in_the_basement_of_Muness_Castle_-_geograph.org.uk_-_2823173.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Mike Pennington
+    width: 532
+    height: 800
+    kind: scene
+  james_room:
+    title: james_room
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 詹姆斯的宿舍：整个房间一片狼藉，乱得离奇。你们知道詹姆斯有点不爱收拾，却从没想到会乱成这样。混乱似乎都是从书桌开始的：书本、纸页堆成小山，桌子背后的墙上贴满了图形和草图。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cora_bedroom:
+    title: Bed in Mexican home. In practically all Mexican homes the beds consist of old blankets and quilts that are spread upon t
+    page: https://www.loc.gov/item/2017782381/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/fsa/8b21000/8b21000/8b21011v.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 1024
+    height: 782
+    kind: scene
+  cora_bath:
+    title: An abandoned house bathroom interior features a pedestal sink, a toilet, and a c
+    page: https://i.redd.it/yjidasm1n0ob1.jpg
+    thumb: https://i.redd.it/yjidasm1n0ob1.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  classroom_empty_seat:
+    title: classroom_empty_seat
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 数学系教室·空着的座位：1920年代大学阶梯教室里一排木制连排座椅，中间一个座位空着，桌板上什么也没放，左右两边的座位上摊着笔记本和钢笔，远处黑板上写满数学公式
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  james_desk:
+    title: james_desk
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 詹姆斯的宿舍·堆满纸页的书桌：凌乱不堪的学生书桌，书本和写满算式的纸页堆成小山，几张印着图书馆抬头的逾期通知压在上面，纸堆正中一张纸上用钢笔画着一个圆形里的奇怪几何图形
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  dorm_ivy_window:
+    title: dorm_ivy_window
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 寄宿公寓门前·常春藤旁的一楼窗户：砖砌寄宿公寓的一楼外墙，一排木框上下推拉窗，其中一扇紧挨着一根爬满茂密常春藤的铸铁排水管
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  james_wall_sketches:
+    title: james_wall_sketches
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 詹姆斯的宿舍·墙上的几何草图：书桌背后的墙上密密麻麻贴满纸张，画着古典风格的几何作图：圆、三角形、直线构造，许多图形一层套一层地缩小重复，边上写满细小的注释
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  janitor_key_board:
+    title: janitor_key_board
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 门卫的地下办公室·挂钥匙的木板：地下室小办公室的墙上钉着一块木板，一排排铁钉上挂着黄铜钥匙，每把钥匙下面系着写了房号的小挂牌，旁边桌上有工具和半杯冷咖啡
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cora_icebox:
+    title: cora_icebox
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 一楼起居室与厨房·厨房里的冰箱：1920年代乡间小屋整洁的厨房，一台老式木制冰箱（冰柜）门关着，旁边台面上落着一层薄灰，果盘里的水果颜色发暗
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cora_blanket_bed:
+    title: cora_blanket_bed
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 二楼卧室·毯子下的人形：斜顶低矮的小卧室，苍蝇在一张旧床上方盘旋，床上躺着一个从头到脚盖着毯子的人形，毯子好几处被深色液体和血浸透，渗出的污痕左右对称
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cora_dusty_stairs:
+    title: cora_dusty_stairs
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 地下室走廊·积满尘土的楼梯：通往地下室的窄木楼梯，台阶上积着厚厚的灰尘，下面是一条狭小的走廊和一扇关着的门，门缝里透出一点淡蓝色的光
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  basement_bucket:
+    title: basement_bucket
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 主地下室·图案旁的桶：血绘图案旁边放着一只旧木桶（或铁皮桶），桶沿上挂着暗红色的干涸痕迹
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  basement_blood_sigil:
+    title: basement_blood_sigil
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 主地下室·地上的血绘图案：地下室中间清空的水泥地面上，用暗红的血涂出一个巨大的几何图形，圆、交叉的基准线和锯齿形折线，四周的架子和橱柜被推到墙边，一切笼罩在淡蓝色的光里
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  basement_floating_body:
+    title: File:Daylit basement 112 state st.jpg
+    page: https://commons.wikimedia.org/wiki/File:Daylit_basement_112_state_st.jpg
+    thumb: https://upload.wikimedia.org/wikipedia/commons/3/36/Daylit_basement_112_state_st.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled
+    license: Public domain
+    artist: 'Pocket Hand-Book of
+
+      Electro-Glazed Luxfer Prisms
+
+
+      Luxfer Prism Co, Chicago, 1898, 289p'
+    width: 349
+    height: 251
+    kind: scene
+  basement_old_book:
+    title: basement_old_book
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 主地下室·图案旁的旧书：血绘图案旁边的地上放着一本古老厚重的书，皮面磨损，书页发黄卷边，被淡蓝色的光照着
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  hartman:
+    title: File:Unidentified Man (2678301322).jpg
+    page: https://commons.wikimedia.org/wiki/File:Unidentified_Man_(2678301322).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d7/Unidentified_Man_%282678301322%29.jpg/500px-Unidentified_Man_%282678301322%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: George Eastman House
+    width: 836
+    height: 1000
+    kind: portrait
+  holcomb:
+    title: File:Photograph, black and white, studio portrait of young man (15840576219).jpg
+    page: https://commons.wikimedia.org/wiki/File:Photograph,_black_and_white,_studio_portrait_of_young_man_(15840576219).jpg
+    thumb: https://upload.wikimedia.org/wikipedia/commons/d/de/Photograph%2C_black_and_white%2C_studio_portrait_of_young_man_%2815840576219%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled
+    license: No restrictions
+    artist: Tyne &amp; Wear Archives &amp; Museums
+    width: 379
+    height: 600
+    kind: portrait
+  bernard:
+    title: Get rich quick" Ponzi now a charity patients
+    page: https://www.loc.gov/item/2007676122/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/cph/3c30000/3c37000/3c37100/3c37170_150px.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 119
+    height: 150
+    kind: portrait
+  caleb:
+    title: Sam
+    page: https://www.loc.gov/item/2011660966/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/cph/3a30000/3a33000/3a33500/3a33587r.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 446
+    height: 640
+    kind: portrait
+  james:
+    title: File:A standing young man, naked and viewed from the front in ful Wellcome V0029499.jpg
+    page: https://commons.wikimedia.org/wiki/File:A_standing_young_man,_naked_and_viewed_from_the_front_in_ful_Wellcome_V0029499.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/A_standing_young_man%2C_naked_and_viewed_from_the_front_in_ful_Wellcome_V0029499.jpg/500px-A_standing_young_man%2C_naked_and_viewed_from_the_front_in_ful_Wellcome_V0029499.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 4.0
+    artist: ''
+    width: 2400
+    height: 2919
+    kind: portrait
+  eleanor_shaw:
+    title: File:Student, Berea College- young woman - DPLA - 2a21192138b30b973c49aa3ebe01e0e9.jpg
+    page: https://commons.wikimedia.org/wiki/File:Student,_Berea_College-_young_woman_-_DPLA_-_2a21192138b30b973c49aa3ebe01e0e9.jpg
+    thumb: https://upload.wikimedia.org/wikipedia/commons/3/31/Student%2C_Berea_College-_young_woman_-_DPLA_-_2a21192138b30b973c49aa3ebe01e0e9.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled
+    license: Public domain
+    artist: ''
+    width: 411
+    height: 580
+    kind: portrait
+  item-i_second_key:
+    title: File:Metal brass keys.jpg
+    page: https://commons.wikimedia.org/wiki/File:Metal_brass_keys.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bf/Metal_brass_keys.jpg/500px-Metal_brass_keys.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Gausanchennai
+    width: 4896
+    height: 3672
+    kind: item
+  walter_price:
+    title: Portrait photographs. Portrait of young man
+    page: https://www.loc.gov/item/2019680083/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/thc/5a49000/5a49300/5a49350r.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 343
+    height: 420
+    kind: portrait
+  cora_bedroom_gate_closed:
+    title: 二楼卧室：味道令人难以忍受。苍蝇在床上盘旋，床上躺着一个从头到脚盖着毯子的人形，（床上空了，毯子掀落在地，只剩浸透的污渍）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      Edit the attached picture of 场景：二楼卧室：味道令人难以忍受。苍蝇在床上盘旋，床上躺着一个从头到脚盖着毯子的人形，毯子好几处被体液和血浸透，渗出的痕迹古怪地左右对称。
+
+      Show it after this change: 床上空了，毯子掀落在地，只剩浸透的污渍
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: Bed in Mexican home. In practically all Mexican homes the beds consist of old blankets and quilts that are spread upon t
+      page: https://www.loc.gov/item/2017782381/
+      thumb: https://tile.loc.gov/storage-services/service/pnp/fsa/8b21000/8b21000/8b21011v.jpg
+      license: 美国国会图书馆藏照片，授权各异，只在本机使用
+      artist: ''
+      width: 1024
+      height: 782
+      kind: scene
+    width: 1024
+    height: 773
+  dorm_ivy_window_knows_players_clue_c_window:
+    title: 寄宿公寓门前（紧挨排水管的那扇窗户下沿留着一道窄缝，窗扇微微开着）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      Edit the attached picture of 场景：寄宿公寓门前·常春藤旁的一楼窗户：砖砌寄宿公寓的一楼外墙，一排木框上下推拉窗，其中一扇紧挨着一根爬满茂密常春藤的铸铁排水管
+
+      Show it after this change: 紧挨排水管的那扇窗户下沿留着一道窄缝，窗扇微微开着
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: dorm_ivy_window
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 寄宿公寓门前·常春藤旁的一楼窗户：砖砌寄宿公寓的一楼外墙，一排木框上下推拉窗，其中一扇紧挨着一根爬满茂密常春藤的铸铁排水管
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  james_desk_knows_players_clue_c_postcard:
+    title: 詹姆斯的宿舍（图形纸页底下露出半张风景明信片的一角）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      Edit the attached picture of 场景：詹姆斯的宿舍·堆满纸页的书桌：凌乱不堪的学生书桌，书本和写满算式的纸页堆成小山，几张印着图书馆抬头的逾期通知压在上面，纸堆正中一张纸上用钢笔画着一个圆形里的奇怪几何图形
+
+      Show it after this change: 图形纸页底下露出半张风景明信片的一角
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: james_desk
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 詹姆斯的宿舍·堆满纸页的书桌：凌乱不堪的学生书桌，书本和写满算式的纸页堆成小山，几张印着图书馆抬头的逾期通知压在上面，纸堆正中一张纸上用钢笔画着一个圆形里的奇怪几何图形
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  cora_icebox_knows_players_clue_c_spoiled_food:
+    title: 一楼起居室与厨房（冰箱门打开，里面一块用保鲜膜包着的自制烘肉卷长满了霉斑）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      Edit the attached picture of 场景：一楼起居室与厨房·厨房里的冰箱：1920年代乡间小屋整洁的厨房，一台老式木制冰箱（冰柜）门关着，旁边台面上落着一层薄灰，果盘里的水果颜色发暗
+
+      Show it after this change: 冰箱门打开，里面一块用保鲜膜包着的自制烘肉卷长满了霉斑
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: cora_icebox
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 一楼起居室与厨房·厨房里的冰箱：1920年代乡间小屋整洁的厨房，一台老式木制冰箱（冰柜）门关着，旁边台面上落着一层薄灰，果盘里的水果颜色发暗
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  cora_blanket_bed_knows_players_clue_c_corpse:
+    title: 二楼卧室（毯子被掀开，露出一位高度腐败的老妇人遗体，身上布满左右对称排列的深切口）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      Edit the attached picture of 场景：二楼卧室·毯子下的人形：斜顶低矮的小卧室，苍蝇在一张旧床上方盘旋，床上躺着一个从头到脚盖着毯子的人形，毯子好几处被深色液体和血浸透，渗出的污痕左右对称
+
+      Show it after this change: 毯子被掀开，露出一位高度腐败的老妇人遗体，身上布满左右对称排列的深切口
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: cora_blanket_bed
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 二楼卧室·毯子下的人形：斜顶低矮的小卧室，苍蝇在一张旧床上方盘旋，床上躺着一个从头到脚盖着毯子的人形，毯子好几处被深色液体和血浸透，渗出的污痕左右对称
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  cora_dusty_stairs_knows_players_clue_c_footprints:
+    title: 地下室走廊（尘土覆盖的台阶上清楚地印着一串上下往来的脚印）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      Edit the attached picture of 场景：地下室走廊·积满尘土的楼梯：通往地下室的窄木楼梯，台阶上积着厚厚的灰尘，下面是一条狭小的走廊和一扇关着的门，门缝里透出一点淡蓝色的光
+
+      Show it after this change: 尘土覆盖的台阶上清楚地印着一串上下往来的脚印
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: cora_dusty_stairs
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 地下室走廊·积满尘土的楼梯：通往地下室的窄木楼梯，台阶上积着厚厚的灰尘，下面是一条狭小的走廊和一扇关着的门，门缝里透出一点淡蓝色的光
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  basement_bucket_knows_players_clue_c_bucket:
+    title: 主地下室（桶里装着满满的暗红色血液）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      Edit the attached picture of 场景：主地下室·图案旁的桶：血绘图案旁边放着一只旧木桶（或铁皮桶），桶沿上挂着暗红色的干涸痕迹
+
+      Show it after this change: 桶里装着满满的暗红色血液
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: basement_bucket
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 主地下室·图案旁的桶：血绘图案旁边放着一只旧木桶（或铁皮桶），桶沿上挂着暗红色的干涸痕迹
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  ruby:
+    title: ruby
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: portrait
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+
+      Subject (人物头像): 梳着整齐的发髻，手指停在打字机键上
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 936
+  item-i_onyx_tablets:
+    title: item-i_onyx_tablets
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: item
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A close-up of this one object on a plain dark background.
+
+      Subject (物件特写): 《缟玛瑙石板》英译本：一本古老的书，书页发黄，放在血绘图案旁边
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  item-i_spare_key:
+    title: item-i_spare_key
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: item
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A close-up of this one object on a plain dark background.
+
+      Subject (物件特写): 门卫的备用钥匙：门卫办公室木板上挂着的詹姆斯房间备用钥匙，挂牌上写着房号
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 683
+    height: 1024
+  item-i_manuscript:
+    title: item-i_manuscript
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: item
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A close-up of this one object on a plain dark background.
+
+      Subject (物件特写): 欧几里得的打字机手稿：装在信封里的一叠打字稿，前面贴着一张图书馆信头的便条
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  creature-guardian:
+    title: creature-guardian
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: creature
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      This one creature seen from the front, head and upper body filling the frame, facing the viewer as if about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of
+      it falls away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4).
+
+      Subject (怪物): 跌跌撞撞下楼的腐尸：科拉阿姨复活的遗体，是从裂缝中溜出的饥饿之物与这个世界互动的工具。非常强健的外壳，很难在战斗中打败。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 768
+    height: 1024
+  cora_basement_gate_closed:
+    title: 主地下室：中等大小的房间，空气潮湿。所有架子和橱柜都被拉到一边，中间空出一片。整（蓝光熄灭，地下室只剩昏暗，空地上的人形瘫在血绘图案旁的地上）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 主地下室：中等大小的房间，空气潮湿。所有架子和橱柜都被拉到一边，中间空出一片。整个房间被淡蓝色的光照亮。空地中央，詹姆斯赤裸的身体悬在半空，下面的地上是一个用血涂成的亵渎图案。旁边放着一本古老的书和一个桶。。现在：蓝光熄灭，地下室只剩昏暗，空地上的人形瘫在血绘图案旁的地上
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683

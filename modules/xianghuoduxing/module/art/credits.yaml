@@ -1,0 +1,1448 @@
+pictures:
+  cover:
+    source: source/images/p01_image01.png
+    original: true
+    purpose: reference
+  bus_ticket:
+    source: source/images/p03_image01.png
+    original: true
+    purpose: document
+  village_map:
+    source: source/images/p06_image01.png
+    original: true
+    purpose: document
+  lantern:
+    source: source/images/p18_image01.png
+    original: true
+    purpose: reference
+  black_bear:
+    source: source/images/p25_image01.png
+    original: true
+    purpose: reference
+  forest_road:
+    source: source/images/p28_image01.png
+    original: true
+    purpose: reference
+  fomalhaut_chart:
+    source: source/images/p41_image01.png
+    original: true
+    purpose: document
+  east_road:
+    source: source/images/p46_image01.png
+    original: true
+    purpose: reference
+  bus:
+    source: source/images/p52_image01.png
+    original: true
+    purpose: reference
+  hometown_stop:
+    title: An antique school bus with an orange body and green hood sits parked on a grassy
+    page: https://i.etsystatic.com/6285516/r/il/493343/292234260/il_fullxfull.292234260.jpg
+    thumb: https://i.etsystatic.com/6285516/r/il/493343/292234260/il_fullxfull.292234260.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  village_edge:
+    title: File:Stone House Farm - geograph.org.uk - 6990006.jpg
+    page: https://commons.wikimedia.org/wiki/File:Stone_House_Farm_-_geograph.org.uk_-_6990006.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/Stone_House_Farm_-_geograph.org.uk_-_6990006.jpg/500px-Stone_House_Farm_-_geograph.org.uk_-_6990006.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: N Chadwick
+    width: 1024
+    height: 684
+    kind: scene
+  central_street:
+    title: '[Greenfield Village Henry Ford Museum, Dearborn, Michigan. Main Street of Greenfield Village]'
+    page: https://www.loc.gov/item/2020714260/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/ppem/00400/00424v.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 1024
+    height: 673
+    kind: scene
+  ledbetter_house:
+    title: '[Kitchen in Massachusetts farmhouse]'
+    page: https://www.loc.gov/item/2002698439/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/cph/3b20000/3b23000/3b23400/3b23425r.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 640
+    height: 497
+    kind: scene
+  guest_room:
+    title: File:Fireplace and Picture in Doge's South Bedroom.jpg
+    page: https://commons.wikimedia.org/wiki/File:Fireplace_and_Picture_in_Doge%27s_South_Bedroom.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e6/Fireplace_and_Picture_in_Doge%27s_South_Bedroom.jpg/500px-Fireplace_and_Picture_in_Doge%27s_South_Bedroom.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Davidlwinkler
+    width: 2988
+    height: 3984
+    kind: scene
+  may_bedroom:
+    title: File:Museum Ons' Lieve Heer op Solder - bedroom 2383.jpg
+    page: https://commons.wikimedia.org/wiki/File:Museum_Ons%27_Lieve_Heer_op_Solder_-_bedroom_2383.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d1/Museum_Ons%27_Lieve_Heer_op_Solder_-_bedroom_2383.jpg/500px-Museum_Ons%27_Lieve_Heer_op_Solder_-_bedroom_2383.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: C messier
+    width: 4632
+    height: 3464
+    kind: scene
+  cellar:
+    title: cellar
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 地窖：活板门下是阴冷的地窖，靠墙摞着一大堆旅行箱和公文包。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  general_store:
+    title: File:General store interior Alabama Walker Evans.jpg
+    page: https://commons.wikimedia.org/wiki/File:General_store_interior_Alabama_Walker_Evans.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/General_store_interior_Alabama_Walker_Evans.jpg/500px-General_store_interior_Alabama_Walker_Evans.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Walker Evans
+    width: 5616
+    height: 4431
+    kind: scene
+  village_hall:
+    title: File:New Mills Town Hall, west side.jpg
+    page: https://commons.wikimedia.org/wiki/File:New_Mills_Town_Hall,_west_side.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/New_Mills_Town_Hall%2C_west_side.jpg/500px-New_Mills_Town_Hall%2C_west_side.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 3.0
+    artist: Rcsprinter123
+    width: 3264
+    height: 2448
+    kind: scene
+  private_room:
+    title: File:Radio MARCONI.jpg
+    page: https://commons.wikimedia.org/wiki/File:Radio_MARCONI.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Radio_MARCONI.jpg/500px-Radio_MARCONI.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: F1jmm
+    width: 902
+    height: 791
+    kind: scene
+  hidden_alcove:
+    title: File:Bookshelves and hidden door at Dar Khalifa.jpg
+    page: https://commons.wikimedia.org/wiki/File:Bookshelves_and_hidden_door_at_Dar_Khalifa.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/Bookshelves_and_hidden_door_at_Dar_Khalifa.jpg/500px-Bookshelves_and_hidden_door_at_Dar_Khalifa.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Secretum Mundi
+    width: 768
+    height: 1024
+    kind: scene
+  workshops:
+    title: File:Horseshoe Forge, Blacksmith Workshop - Enniskerry, Wicklow (County) - Ireland.jpg
+    page: https://commons.wikimedia.org/wiki/File:Horseshoe_Forge,_Blacksmith_Workshop_-_Enniskerry,_Wicklow_(County)_-_Ireland.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f3/Horseshoe_Forge%2C_Blacksmith_Workshop_-_Enniskerry%2C_Wicklow_%28County%29_-_Ireland.jpg/500px-Horseshoe_Forge%2C_Blacksmith_Workshop_-_Enniskerry%2C_Wicklow_%28County%29_-_Ireland.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC0
+    artist: L'Estrange, Robert Augustus Henry
+    width: 4264
+    height: 3520
+    kind: scene
+  locked_workshop:
+    title: locked_workshop
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 上锁的工坊：凉风拂面，屋檐漏进几道光。屋子正中有一块垫高的石板，略带坡度，石板下面的豁口里放着什么东西，也许是盆。对面墙边平放着一排盖着红布的东西，看上去……像是人。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  old_church:
+    title: File:Knocktopher Church Ruin North window.jpg
+    page: https://commons.wikimedia.org/wiki/File:Knocktopher_Church_Ruin_North_window.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b6/Knocktopher_Church_Ruin_North_window.jpg/500px-Knocktopher_Church_Ruin_North_window.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: A.-K. D.
+    width: 1280
+    height: 1280
+    kind: scene
+  school_alcove:
+    title: File:Black-mountain-slopes-east-tn1.jpg
+    page: https://commons.wikimedia.org/wiki/File:Black-mountain-slopes-east-tn1.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b6/Black-mountain-slopes-east-tn1.jpg/500px-Black-mountain-slopes-east-tn1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 3.0
+    artist: Brian Stansberry
+    width: 1148
+    height: 857
+    kind: scene
+  cell:
+    title: cell
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 囚室：一间小牢房，只有一扇窄窗和一张床。你的手被反绑在背后。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cliff_foot:
+    title: File:Cliff face adjacent to the Elephant Rock, Angus - geograph.org.uk - 4609776.jpg
+    page: https://commons.wikimedia.org/wiki/File:Cliff_face_adjacent_to_the_Elephant_Rock,_Angus_-_geograph.org.uk_-_4609776.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/2/20/Cliff_face_adjacent_to_the_Elephant_Rock%2C_Angus_-_geograph.org.uk_-_4609776.jpg/500px-Cliff_face_adjacent_to_the_Elephant_Rock%2C_Angus_-_geograph.org.uk_-_4609776.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Adrian Diack
+    width: 1390
+    height: 973
+    kind: scene
+  arbogast_cave:
+    title: File:Small rock cave (53248654038).jpg
+    page: https://commons.wikimedia.org/wiki/File:Small_rock_cave_(53248654038).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Small_rock_cave_%2853248654038%29.jpg/500px-Small_rock_cave_%2853248654038%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: BLMUtah
+    width: 4800
+    height: 3200
+    kind: scene
+  hilltop:
+    title: File:Valley near Hilltop Farm - geograph.org.uk - 5374084.jpg
+    page: https://commons.wikimedia.org/wiki/File:Valley_near_Hilltop_Farm_-_geograph.org.uk_-_5374084.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/7/77/Valley_near_Hilltop_Farm_-_geograph.org.uk_-_5374084.jpg/500px-Valley_near_Hilltop_Farm_-_geograph.org.uk_-_5374084.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Derek Harper
+    width: 3072
+    height: 2048
+    kind: scene
+  beacon_platform:
+    title: File:StAugustineLighthouse StairsLookingDown.jpg
+    page: https://commons.wikimedia.org/wiki/File:StAugustineLighthouse_StairsLookingDown.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/StAugustineLighthouse_StairsLookingDown.jpg/500px-StAugustineLighthouse_StairsLookingDown.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: S.W. Clyde
+    width: 2592
+    height: 1944
+    kind: scene
+  stop_roof_rack:
+    title: stop_roof_rack
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 家乡汽车站·车顶行李架：灰色小长途车的车顶,铁条行李架高高架在车身上,一只沉重的旧皮箱靠在车尾,路边尘土,烟草店的招牌在背景里
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  coach_window:
+    title: coach_window
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 长途车上·窗外风景：长途车窗外掠过的深秋景色:溪流、白色山脉的轮廓、黄红相间的果园,林边一头白尾鹿抬起头,车窗玻璃有灰尘和震动的痕迹
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  edge_engine:
+    title: edge_engine
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 村口空地·掀开的发动机舱：傍晚的光里,长途车的引擎盖掀开,发动机舱里油污斑斑,黑色的机器静止着,旁边是第一座粗糙红石头砌成的低矮住宅
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  street_to_beacon:
+    title: street_to_beacon
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 中央大街·笔直指向灯塔的大街：一条笔直的土路穿过阴郁的低矮房屋,尽头是村东北角一座漆黑的熟铁建筑,孤零零直指天空
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  kitchen_table:
+    title: kitchen_table
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 莱德贝特家·厨房餐桌：低矮厨房里的木餐桌,桌上有茶壶和杯子,旁边炉火上烧着水,小窗外望得见群山
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  guest_fireplace:
+    title: guest_fireplace
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 客房·客房壁炉：冷清客房里的石砌壁炉,炉膛里是冰冷的灰烬,旁边是一张铺着洁净床单的床
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  bedroom_rug:
+    title: bedroom_rug
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 梅的卧室·床下的地毯：凌乱的卧室,脏衣服堆在地上,课本和廉价小说散落在被褥上,床下露出一个旧洋娃娃和一角地毯,地板上有一道浅浅的拖痕
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cellar_luggage:
+    title: cellar_luggage
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 地窖·摞起的行李箱：阴冷昏暗的地窖,靠墙摞着一大堆各种尺寸的旅行箱和公文包,落满灰尘
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  store_counter:
+    title: store_counter
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 杂货店·杂货店柜台：杂货店的木柜台,后面货架上摆着日用品,柜台上有一把积着灰的旧狩猎小刀,浆硬围裙的人影站在后方
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  hall_board:
+    title: hall_board
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 村会堂·布告板：明亮的集会室墙上并排挂着两块布告板,一块贴着旧广告和泛黄的价目表,另一块钉满孩子们五颜六色的涂鸦
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  room_manuscript:
+    title: room_manuscript
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): “私用”房间·手写的手稿：桌上摊着一盒泛黄的手写稿纸,字迹密密麻麻,纸边卷曲发脆
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  room_shelf_window:
+    title: room_shelf_window
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): “私用”房间·靠砖窗的书架：昏暗房间里一排挨着北墙的高书架,书脊整齐,有些书套看着像是粘在架子上的
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  alcove_fire_tome:
+    title: alcove_fire_tome
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 书架后的壁龛·红三角书套的典籍：狭窄壁龛里的旧书架上,一部厚重巨大的旧书,书套上有暗红色的三角形,周围是些手写本
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  workshop_padlock:
+    title: workshop_padlock
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 工匠大院·上锁的工坊门：一圈工坊中唯一紧闭的木门,上面挂着一把老旧的挂锁,门缝漆黑,旁边是空着的工作台和铁砧
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  workshop_red_cloth:
+    title: workshop_red_cloth
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 上锁的工坊·红布下的人形：昏暗工坊对面墙边,一排平放着的东西盖着红布,轮廓分明像是人形,屋檐漏进几道光
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  workshop_slab:
+    title: workshop_slab
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 上锁的工坊·带坡度的石板：屋子正中垫高的一块略带坡度的石板,下方的豁口里放着一个盆样的东西
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  beacon_wood:
+    title: beacon_wood
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 灯塔·成捆的木柴：漆黑的熟铁灯塔脚下堆着一捆捆整齐的木柴,头顶的弧形平台和蛇形撑架在天空下轮廓粗重
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  church_post:
+    title: church_post
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 坍圮教堂与墓地·弯曲的木柱：坍塌教堂后半截里,一根弯曲发朽的木柱撑着残破的屋顶,长椅长满霉斑,窗户破碎
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  alcove_scorch:
+    title: alcove_scorch
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 学校后的壁凹·草地上的黑斑：悬崖顶的壁凹,草地一直铺到崖边,边缘是夜晚般的黑暗
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cell_window:
+    title: cell_window
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 囚室·囚室窄窗：小牢房里一张粗糙的床,一扇窄窗透进暗淡的光,墙面斑驳
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cliff_notches:
+    title: cliff_notches
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 崖下·崖壁上的豁口：北面悬崖壁上,突出的岩石和几处像人工凿出的豁口连成一线,下方是岩盘,右边远处有一间土褐色的小棚屋
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  road_narrow_gap:
+    title: road_narrow_gap
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 东盘山路·两块岩石间的窄道：山脊边两块大岩石紧紧挨在一起,中间的缝隙很暗,杂草丛生,一旁是通往下坡的路
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  cave_loose_rocks:
+    title: cave_loose_rocks
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 崖下山洞·松脱的岩石：狭小昏暗的天然山洞,洞壁上岩石松松垮垮,地面铺着杂乱的破布和稻草,光线只从窄缝漏入
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  forest_mossy_trail:
+    title: forest_mossy_trail
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 东去林间路·青苔树桩标出的小径：秋天的树林里,几个爬满青苔的树桩标出一条窄小径,枝条越往前越密
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  hilltop_view:
+    title: hilltop_view
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 山顶·山顶回望：一座小山的山顶,远处高地上是黑漆漆的村庄剪影,金属建筑的轮廓直指天空,落日余晖映着树林
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  platform_frame:
+    title: platform_frame
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 灯塔高台·高台撑架与铁链：高处的弧形铁平台,中央蛇形撑架上的雕刻早已熔化变形,撑架上系着沉重的黑铁链
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  may:
+    title: may
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: portrait
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+
+      Subject (人物头像): 卷发，穿着粗糙的便服，手上常沾着面粉或洗衣水
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 936
+  ruth:
+    title: File:Young Ashaninka girl in an Apiwtxa village, Acre state, Brazil.jpg
+    page: https://commons.wikimedia.org/wiki/File:Young_Ashaninka_girl_in_an_Apiwtxa_village,_Acre_state,_Brazil.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/Young_Ashaninka_girl_in_an_Apiwtxa_village%2C_Acre_state%2C_Brazil.jpg/500px-Young_Ashaninka_girl_in_an_Apiwtxa_village%2C_Acre_state%2C_Brazil.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 2.0
+    artist: Pedro França/MinC (upload on Flickr by Ministério da Cultura)
+    width: 4256
+    height: 2832
+    kind: portrait
+  silas:
+    title: silas
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: portrait
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+
+      Subject (人物头像): 瘦削，五十多岁，衬衫上有车行的徽标和污渍，眼神锐利，常叼着烟卷
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 936
+  winters:
+    title: File:Judge E.A. Wilson bust portrait (cropped).jpg
+    page: https://commons.wikimedia.org/wiki/File:Judge_E.A._Wilson_bust_portrait_(cropped).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/4/47/Judge_E.A._Wilson_bust_portrait_%28cropped%29.jpg/500px-Judge_E.A._Wilson_bust_portrait_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Charles Roscoe Savage
+    width: 621
+    height: 932
+    kind: portrait
+  arbogast:
+    title: arbogast
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: portrait
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+
+      Subject (人物头像): 上了年纪，外套破烂，扯一块布当头巾裹着头；下颌到右眼眶苍白衰老，左半边脸满是伤疤，眼皮覆着熔化的血肉，半边鼻子被扯开
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 936
+  craftsman:
+    title: File:Bearded man with long hair-3052641.jpg
+    page: https://commons.wikimedia.org/wiki/File:Bearded_man_with_long_hair-3052641.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/Bearded_man_with_long_hair-3052641.jpg/500px-Bearded_man_with_long_hair-3052641.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC0
+    artist: subhamshome28
+    width: 4000
+    height: 5000
+    kind: portrait
+  store_keeper:
+    title: File:Bahar (2599760344).jpg
+    page: https://commons.wikimedia.org/wiki/File:Bahar_(2599760344).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Bahar_%282599760344%29.jpg/500px-Bahar_%282599760344%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: runran
+    width: 1471
+    height: 2215
+    kind: portrait
+  old_gentleman:
+    title: 'An old man with a full white beard, wearing a dark coat and patterned trousers, '
+    page: https://i.ebayimg.com/images/g/dCcAAOSw3zJfvIMe/s-l1200.jpg
+    thumb: https://i.ebayimg.com/images/g/dCcAAOSw3zJfvIMe/s-l1200.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: portrait
+  grey_woman:
+    title: old-man-field-farm-hat-preview.jpg
+    page: https://i2.pickpik.com/photos/254/704/979/old-man-field-farm-hat-preview.jpg
+    thumb: https://i2.pickpik.com/photos/254/704/979/old-man-field-farm-hat-preview.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: portrait
+  crone:
+    title: File:Sarah Garbitt, arrested for stealing from shop doors (16021405964).jpg
+    page: https://commons.wikimedia.org/wiki/File:Sarah_Garbitt,_arrested_for_stealing_from_shop_doors_(16021405964).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Sarah_Garbitt%2C_arrested_for_stealing_from_shop_doors_%2816021405964%29.jpg/500px-Sarah_Garbitt%2C_arrested_for_stealing_from_shop_doors_%2816021405964%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: Tyne &amp; Wear Archives &amp; Museums
+    width: 595
+    height: 855
+    kind: portrait
+  watchers:
+    title: watchers
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: portrait
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+
+      Subject (人物头像): 一个光头缺了一只耳朵，一个机警的少年，一个凶神恶煞的中年主妇，一个扛着棍子的男人
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  village_guards:
+    title: A man and a woman, both farmers, stand side by side in a field, each holding a p
+    page: https://i.pinimg.com/originals/ba/d9/af/bad9afbcf2919e7ffe90f77262c113d2.jpg
+    thumb: https://i.pinimg.com/originals/ba/d9/af/bad9afbcf2919e7ffe90f77262c113d2.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: portrait
+  assassins:
+    title: A vintage photograph captures an angry man with deeply furrowed brows and a ster
+    page: https://images.stockcake.com/public/b/5/2/b520b417-bbf1-43b8-a5ea-b5bfb66b38f9_large/intense-angry-man-stockcake.jpg
+    thumb: https://images.stockcake.com/public/b/5/2/b520b417-bbf1-43b8-a5ea-b5bfb66b38f9_large/intense-angry-man-stockcake.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: portrait
+  coachman:
+    title: File:Portrait photograph of unidentified man n.d. (3192675746).jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait_photograph_of_unidentified_man_n.d._(3192675746).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Portrait_photograph_of_unidentified_man_n.d._%283192675746%29.jpg/500px-Portrait_photograph_of_unidentified_man_n.d._%283192675746%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: "Snyder, Frank R. \n\nFlickr: Miami U. Libraries - Digital Collections"
+    width: 894
+    height: 1368
+    kind: portrait
+  old_coachman:
+    title: File:Russia - elderly man in a gray sweater.jpg
+    page: https://commons.wikimedia.org/wiki/File:Russia_-_elderly_man_in_a_gray_sweater.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3e/Russia_-_elderly_man_in_a_gray_sweater.jpg/500px-Russia_-_elderly_man_in_a_gray_sweater.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Dmitry Makeev
+    width: 3456
+    height: 5184
+    kind: portrait
+  eleanor_hale:
+    title: '[Portrait of a young woman]'
+    page: https://www.loc.gov/item/2019702452/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/matpc/11700/11743v.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 728
+    height: 1024
+    kind: portrait
+  thomas_reed:
+    title: File:Portrait of Ahmed Zaki Abushady, (1892-1955) as a young man, ca 1909, taken in Cairo, Egypt.jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_Ahmed_Zaki_Abushady,_(1892-1955)_as_a_young_man,_ca_1909,_taken_in_Cairo,_Egypt.jpg
+    thumb: https://upload.wikimedia.org/wikipedia/commons/9/91/Portrait_of_Ahmed_Zaki_Abushady%2C_%281892-1955%29_as_a_young_man%2C_ca_1909%2C_taken_in_Cairo%2C_Egypt.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled
+    license: Public domain
+    artist: Abushady Archive, New York, c/o Joy Garnett
+    width: 426
+    height: 640
+    kind: portrait
+  item-hunting_knife:
+    title: File:Hunting Knife MET DP273706.jpg
+    page: https://commons.wikimedia.org/wiki/File:Hunting_Knife_MET_DP273706.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Hunting_Knife_MET_DP273706.jpg/500px-Hunting_Knife_MET_DP273706.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC0
+    artist: Creator:Hans Sumersperger
+    width: 3913
+    height: 1861
+    kind: item
+  item-derby_poems:
+    title: '[Signed trade binding book cover for "The Queen''s Twin" by Sarah Orne Jewett, showing title of book between foliage and '
+    page: https://www.loc.gov/item/2002735957/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/ppmsca/02900/02990v.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 787
+    height: 1024
+    kind: item
+  item-fire_tome:
+    title: File:Old book bindings.jpg
+    page: https://commons.wikimedia.org/wiki/File:Old_book_bindings.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Old_book_bindings.jpg/500px-Old_book_bindings.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: Tom Murphy VII
+    width: 3072
+    height: 2048
+    kind: item
+  item-bicycle:
+    title: File:Old bicycleML.jpg
+    page: https://commons.wikimedia.org/wiki/File:Old_bicycleML.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fc/Old_bicycleML.jpg/500px-Old_bicycleML.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Macieklew
+    width: 2200
+    height: 2010
+    kind: item
+  creature-black_bear:
+    title: creature-black_bear
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: creature
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      This one creature seen from the front, head and upper body filling the frame, facing the viewer as if about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of
+      it falls away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4).
+
+      Subject (怪物): 林间空地上的黑熊：一头黑熊，用后腿站起来，对树上的果子很感兴趣
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 768
+    height: 1024
+  creature-burning_beasts:
+    title: creature-burning_beasts
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: creature
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      This one creature seen from the front, head and upper body filling the frame, facing the viewer as if about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of
+      it falls away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4).
+
+      Subject (怪物): 荧光眼的矮小野兽：一群矮小、黑暗的动物，长着又长又尖的耳朵，眼睛发着荧光，带着麝香味，从树上下来挡住去路
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 768
+    height: 1024
+  beacon_beacon_lit:
+    title: 灯塔：村子东北角三条路交汇处立着一座熟铁铸成的灯塔，外面烤着黑漆。头顶高处是一个（灯塔高台上燃起冲天大火，橘黄的火光照亮整片夜空，浓烟里火星四溅）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 灯塔：村子东北角三条路交汇处立着一座熟铁铸成的灯塔，外面烤着黑漆。头顶高处是一个巨大的弧形平台，撑架像蛇一样蜿蜒汇聚到中心，上面的雕刻都熔化变形了。旁边堆着成捆的木头。。现在：灯塔高台上燃起冲天大火，橘黄的火光照亮整片夜空，浓烟里火星四溅
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  village_edge_at_silas_village_edge:
+    title: 村口空地（空地上停着一辆灰色小长途车，发动机舱盖掀开，车头前扔着一块擦手的油布）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：村口空地：坡顶的小村，第一座粗糙的红石低矮住宅旁有一片空地，长途车就停在路边。四周的建筑阴郁沉默，小巷里没有灯。
+
+      Show it after this change: 空地上停着一辆灰色小长途车，发动机舱盖掀开，车头前扔着一块擦手的油布
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Stone House Farm - geograph.org.uk - 6990006.jpg
+      page: https://commons.wikimedia.org/wiki/File:Stone_House_Farm_-_geograph.org.uk_-_6990006.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/Stone_House_Farm_-_geograph.org.uk_-_6990006.jpg/500px-Stone_House_Farm_-_geograph.org.uk_-_6990006.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 2.0
+      artist: N Chadwick
+      width: 1024
+      height: 684
+      kind: scene
+    width: 1024
+    height: 684
+  guest_fireplace_knows_players_clue_c_powder:
+    title: 客房（壁炉角落里多了顶针大小的一撮黑色粉末,带着一缕细烟）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：客房·客房壁炉：冷清客房里的石砌壁炉,炉膛里是冰冷的灰烬,旁边是一张铺着洁净床单的床
+
+      Show it after this change: 壁炉角落里多了顶针大小的一撮黑色粉末,带着一缕细烟
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: guest_fireplace
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 客房·客房壁炉：冷清客房里的石砌壁炉,炉膛里是冰冷的灰烬,旁边是一张铺着洁净床单的床
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  bedroom_rug_knows_players_clue_c_trapdoor:
+    title: 梅的卧室（床被拉开,地毯掀起,露出一扇通向黑暗的木活板门）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：梅的卧室·床下的地毯：凌乱的卧室,脏衣服堆在地上,课本和廉价小说散落在被褥上,床下露出一个旧洋娃娃和一角地毯,地板上有一道浅浅的拖痕
+
+      Show it after this change: 床被拉开,地毯掀起,露出一扇通向黑暗的木活板门
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: bedroom_rug
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 梅的卧室·床下的地毯：凌乱的卧室,脏衣服堆在地上,课本和廉价小说散落在被褥上,床下露出一个旧洋娃娃和一角地毯,地板上有一道浅浅的拖痕
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  cellar_luggage_knows_players_clue_c_luggage:
+    title: 地窖（许多箱子的提手上挂着行李标签,写着各不相同的名字）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：地窖·摞起的行李箱：阴冷昏暗的地窖,靠墙摞着一大堆各种尺寸的旅行箱和公文包,落满灰尘
+
+      Show it after this change: 许多箱子的提手上挂着行李标签,写着各不相同的名字
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: cellar_luggage
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 地窖·摞起的行李箱：阴冷昏暗的地窖,靠墙摞着一大堆各种尺寸的旅行箱和公文包,落满灰尘
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  hall_board_knows_players_clue_c_board:
+    title: 村会堂（孩子那块板上有一张少了图钉、倒吊着的画,画着一只巨鸟扑向一个小村）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：村会堂·布告板：明亮的集会室墙上并排挂着两块布告板,一块贴着旧广告和泛黄的价目表,另一块钉满孩子们五颜六色的涂鸦
+
+      Show it after this change: 孩子那块板上有一张少了图钉、倒吊着的画,画着一只巨鸟扑向一个小村
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: hall_board
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 村会堂·布告板：明亮的集会室墙上并排挂着两块布告板,一块贴着旧广告和泛黄的价目表,另一块钉满孩子们五颜六色的涂鸦
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  room_manuscript_knows_players_clue_c_manuscript:
+    title: “私用”房间（手稿读到末页戛然中断,最后一页的句子只写了一半）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：“私用”房间·手写的手稿：桌上摊着一盒泛黄的手写稿纸,字迹密密麻麻,纸边卷曲发脆
+
+      Show it after this change: 手稿读到末页戛然中断,最后一页的句子只写了一半
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: room_manuscript
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): “私用”房间·手写的手稿：桌上摊着一盒泛黄的手写稿纸,字迹密密麻麻,纸边卷曲发脆
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  room_shelf_window_knows_players_clue_c_secret_shelf:
+    title: “私用”房间（一只书套被向左拉开,一段书架向外敞开,后面露出黑暗的缝隙）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：“私用”房间·靠砖窗的书架：昏暗房间里一排挨着北墙的高书架,书脊整齐,有些书套看着像是粘在架子上的
+
+      Show it after this change: 一只书套被向左拉开,一段书架向外敞开,后面露出黑暗的缝隙
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: room_shelf_window
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): “私用”房间·靠砖窗的书架：昏暗房间里一排挨着北墙的高书架,书脊整齐,有些书套看着像是粘在架子上的
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  alcove_fire_tome_knows_players_clue_c_fire_tome:
+    title: 书架后的壁龛（书页翻开,满是星图、炼金符号和排列整齐的诗句）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：书架后的壁龛·红三角书套的典籍：狭窄壁龛里的旧书架上,一部厚重巨大的旧书,书套上有暗红色的三角形,周围是些手写本
+
+      Show it after this change: 书页翻开,满是星图、炼金符号和排列整齐的诗句
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: alcove_fire_tome
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 书架后的壁龛·红三角书套的典籍：狭窄壁龛里的旧书架上,一部厚重巨大的旧书,书套上有暗红色的三角形,周围是些手写本
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  workshop_red_cloth_knows_players_clue_c_corpses:
+    title: 上锁的工坊（红布掀开,是三具枯瘦、缠着绷带的干尸,脚趾上挂着标签）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：上锁的工坊·红布下的人形：昏暗工坊对面墙边,一排平放着的东西盖着红布,轮廓分明像是人形,屋檐漏进几道光
+
+      Show it after this change: 红布掀开,是三具枯瘦、缠着绷带的干尸,脚趾上挂着标签
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: workshop_red_cloth
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 上锁的工坊·红布下的人形：昏暗工坊对面墙边,一排平放着的东西盖着红布,轮廓分明像是人形,屋檐漏进几道光
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  workshop_slab_knows_players_clue_c_slab:
+    title: 上锁的工坊（石板下的豁口里能看清是个盆形容器）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：上锁的工坊·带坡度的石板：屋子正中垫高的一块略带坡度的石板,下方的豁口里放着一个盆样的东西
+
+      Show it after this change: 石板下的豁口里能看清是个盆形容器
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: workshop_slab
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 上锁的工坊·带坡度的石板：屋子正中垫高的一块略带坡度的石板,下方的豁口里放着一个盆样的东西
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  beacon_at_winters_beacon:
+    title: 灯塔（灯塔脚下的空地被黑脸村民和成排的火把围满，人人左眼画着红三角，铁阶梯两侧站着披黑）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 灯塔：村子东北角三条路交汇处立着一座熟铁铸成的灯塔，外面烤着黑漆。头顶高处是一个巨大的弧形平台，撑架像蛇一样蜿蜒汇聚到中心，上面的雕刻都熔化变形了。旁边堆着成捆的木头。。现在：灯塔脚下的空地被黑脸村民和成排的火把围满，人人左眼画着红三角，铁阶梯两侧站着披黑长袍的高大身影
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  alcove_scorch_knows_players_clue_c_school_scorch:
+    title: 学校后的壁凹（草地上有凝固发黏的暗色斑块,和草丛里一道道熏黑的线条）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：学校后的壁凹·草地上的黑斑：悬崖顶的壁凹,草地一直铺到崖边,边缘是夜晚般的黑暗
+
+      Show it after this change: 草地上有凝固发黏的暗色斑块,和草丛里一道道熏黑的线条
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: alcove_scorch
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 学校后的壁凹·草地上的黑斑：悬崖顶的壁凹,草地一直铺到崖边,边缘是夜晚般的黑暗
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  road_narrow_gap_knows_players_clue_c_cave_entrance:
+    title: 东盘山路（窄道向悬崖下延伸,尽头隐约可见一个天然小山洞）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：东盘山路·两块岩石间的窄道：山脊边两块大岩石紧紧挨在一起,中间的缝隙很暗,杂草丛生,一旁是通往下坡的路
+
+      Show it after this change: 窄道向悬崖下延伸,尽头隐约可见一个天然小山洞
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: road_narrow_gap
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 东盘山路·两块岩石间的窄道：山脊边两块大岩石紧紧挨在一起,中间的缝隙很暗,杂草丛生,一旁是通往下坡的路
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  forest_road_at_coachman_forest_road:
+    title: 东去林间路（夜色里的林间路上停着一辆双马马车，车头挂着一盏提灯，光把树影晃成迷宫）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      Edit the attached picture of 场景：东去林间路：出村的路钻进秋天的树林，黄、绿、橙红的树叶层层叠叠，前面有一片林间空地，道路绕着山麓蜿蜒。
+
+      Show it after this change: 夜色里的林间路上停着一辆双马马车，车头挂着一盏提灯，光把树影晃成迷宫
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      source: source/images/p28_image01.png
+      original: true
+      purpose: reference
+    width: 1024
+    height: 771
+  beacon:
+    title: beacon
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 灯塔：村子东北角三条路交汇处立着一座熟铁铸成的灯塔，外面烤着黑漆。头顶高处是一个巨大的弧形平台，撑架像蛇一样蜿蜒汇聚到中心，上面的雕刻都熔化变形了。旁边堆着成捆的木头。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683

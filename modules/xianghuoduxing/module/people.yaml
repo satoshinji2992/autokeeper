@@ -1,0 +1,302 @@
+npcs:
+  - id: may
+    name: 梅·莱德贝特
+    role: 寡妇，在家里收留过路旅客的房东
+    called: 卷发的妇人
+    look: 卷发，穿着粗糙的便服，手上常沾着面粉或洗衣水
+    personality: 热情周到，像个好客的主妇；内里冷静，事事以村子和女儿为先
+    voice: 爱尔兰口音，说话爽快，偶尔叹一句“我还要照顾女儿”
+    goal: 把外来人安顿在家里，平平稳稳留到节日那天
+    location: ledbetter_house
+    portrait: may
+    important: true
+    knows:
+      - 节日在后天晚上（D3 晚），每年火把游行，点燃悬崖上的灯塔，保佑全年平安（§21）
+      - 西拉斯开车太快，撞死过一匹母马，是村子唯一的对外联系，同一条路跑了十五年（§14）
+      - 西拉斯在村那头有个叫特洛伊的欢喜冤家，可能在他家过夜（§138）
+      - 村里没人有汽车；工坊在锡尔伯里街，文特斯下午才在村会堂（§3/§218）
+      - 她的妹妹住在纽约（§31）
+    secrets:
+      - 她替村子收留孤身旅客、寄存行李，卧室床下活板门通往的地窖里摞着八九个前人的行李
+      - 第二天夜里她在客房壁炉里点燃含莨菪的黑色粉末，让客人昏睡
+    lies:
+      - 被撞见在壁炉边时说“我觉得你可能会冷，想生个火”（§260）
+      - 被逼问粉末时说那是帮助睡眠的东西，“明天对于你很重要”（§19）
+      - 说自己是寡妇，没有丈夫（露丝说“他们带走了我爸”）
+    clues: [c_may_silas, c_may_festival, c_may_life, c_may_troy]
+    gates:
+      c_may_life: {skill: 取悦}
+  - id: ruth
+    name: 露丝·莱德贝特
+    role: 梅的女儿，今夏满十岁
+    called: 乱发大眼的小女孩
+    look: 一头乱发，大眼睛，穿着粗布睡衣或旧裙子
+    personality: 机灵、害怕，在母亲面前不敢多说
+    voice: 压低嗓子说话，说完就跑开
+    goal: 让外来人在节日前逃走；她知道自己几年后也会被带走
+    location: ledbetter_house
+    portrait: ruth
+    knows:
+      - 节日又亮又热，到处是火（§9）
+      - 节日是明天（D2 晚问时），每年都有；他们带走了她爸爸（§145）
+      - 村里人从调查员一来就盯着他（§145）
+      - 节日里她是第三个舞者，会偷偷放松锁链（§10）
+    secrets:
+      - 节日上她扮作第三个舞者，偷偷放松了锁链（§10，只有外貌检定成功时才对调查员说）
+    clues: [c_ruth_warning, c_ruth_fire, c_ruth_truth]
+  - id: silas
+    name: 西拉斯
+    role: 拉赫曼与科斯特洛车行的长途车司机
+    called: 瘦削的长途车司机
+    look: 瘦削，五十多岁，衬衫上有车行的徽标和污渍，眼神锐利，常叼着烟卷
+    personality: 粗鲁、精明，被质疑就翻脸
+    voice: 说话短，带着讥讽，偶尔弹一下烟灰
+    goal: 把孤身乘客留在烬头村，天亮就开车离开
+    location: coach
+    portrait: silas
+    knows:
+      - 去奥西皮的路线；没听说过阿卡姆，只去过一次波士顿（§71）
+    secrets:
+      - 长途车的故障是他装的，他故意把调查员留在烬头村
+      - 他会出现在灯塔上的仪式里（§33）
+    lies:
+      - 车可能是油压出了问题，也可能摔坏了，要等气缸凉下来（§194）
+      - 让调查员“明天早上八点回来找我”（§194）
+    clues: []
+  - id: winters
+    name: 克莱德·文特斯
+    role: 村会堂的管理人，节日仪式的主持者
+    called: 戴眼镜的中年绅士
+    look: 头发稀薄却抹了油梳成背头，外套简朴、样式过时但做工精良，系蝴蝶领结，戴眼镜
+    personality: 斯文、客气、自负，自认是村子的拯救者
+    voice: 措辞讲究，爱请人喝咖啡，偶尔扶一扶眼镜
+    goal: 让节日照常举行，把外来人稳在村里
+    location: private_room
+    portrait: winters
+    important: true
+    knows:
+      - 村会堂的藏书属于全村；“私用”牌只是防集会时随便进出（§62）
+      - 他父亲以前维护这里，现在落到他身上（§49）
+      - 这几天能看到北落师门，从飞马座往右下找，贴近地平线（§88）
+      - 节日仪式的咒语（阿博加斯特说他只懂咒语，不懂召唤的是什么）
+    secrets:
+      - 他主持灯塔上的仪式，在高台上宣讲“您将代替我们被从天而降者带走”（§33）
+      - 书架后藏着暗室和火之卷典籍
+    lies:
+      - 电报线坏了两周，已经报修，希望后天有人来修；长途车大概三天后到（§56）
+    clues: [c_telegraph, c_winters_trade, c_astronomy]
+  - id: arbogast
+    name: 威拉德·阿博加斯特
+    role: 被逐出烬头村、住在崖下山洞里的老人
+    called: 用布裹着头的老人
+    look: 上了年纪，外套破烂，扯一块布当头巾裹着头；下颌到右眼眶苍白衰老，左半边脸满是伤疤，眼皮覆着熔化的血肉，半边鼻子被扯开
+    personality: 疯癫、愤恨、骄傲，情绪说变就变
+    voice: 时而低声密语，时而突然喊出“Iä！Cthugha！”
+    goal: 找一个能把咒语念出来的人，结束烬头村
+    location: arbogast_cave
+    portrait: arbogast
+    important: true
+    knows:
+      - 烬头村四十年前就死了，被火焰毁灭、被星星吞噬；阿布纳基人知道（§221）
+      - 火焰被送走了，必须的牺牲一年又一年地推迟（§221）
+      - 他以前是“中转者，也是解密者”，文特斯用花言巧语改变了一切；这是控制的仪式，不是人祭（§169）
+      - 旧日支配者：风行者、克苏鲁、伏行的混沌；在这里可以离活火焰最近（§237）
+      - 村民的父母知道真相；他被告知要么滚要么死，就把古老的咒语带走了（§245）
+      - 能让一切终结的咒语，他自己试过，失去了集中力（§169）
+    secrets:
+      - 咒语的念法（§175），只在晚上约定见面时才教
+    clues: [c_arbogast_story, c_abenaki, c_old_ones, c_villagers_truth, c_appointment]
+  - id: craftsman
+    name: 结实的工匠
+    role: 村里的工匠，守着上锁的工坊
+    called: 系深色围裙的大胡子
+    look: 结实，系深色围裙，留大胡子
+    personality: 粗野，护着工坊里的东西
+    voice: 嗓门粗，爱冷笑着反问
+    goal: 不让外人看到工坊里的尸体
+    location: workshops
+    portrait: craftsman
+    stats: {敏捷: 41, 格斗(斗殴): 35, 生命: 12}
+    attacks:
+      - 格斗(斗殴) 35%，伤害 1D3+1D4
+    knows:
+      - 红布下的三具尸体是村民，自然死亡，节日要用（§20）
+      - 工匠们让西拉斯偶尔捎包裹（§96）
+    clues: [c_craftsmen_nervous]
+    gates:
+      c_craftsmen_nervous: {skill: 心理学}
+  - id: store_keeper
+    name: 杂货店店主
+    role: 杂货店的女店主
+    called: 系浆硬围裙的胖妇人
+    look: 体形硕大，系着浆硬的围裙
+    voice: 说话慢吞吞，算账时手指敲柜台
+    location: general_store
+    portrait: store_keeper
+    knows:
+      - 每星期两辆长途车；隔周星期二有卡车送货，下星期才来（§16）
+    clues: [c_store_transport]
+    personality: 体形硕大但动作敏捷，警惕，对陌生面孔盯得很紧
+    goal: 守着杂货店，对外来人保持距离，不多帮忙
+  - id: old_gentleman
+    name: 拄手杖的老绅士
+    role: 在灯塔附近散步的老村民
+    called: 拄手杖的老绅士
+    look: 红肿的老眼，拄着手杖
+    voice: 说起灯塔就有点得意
+    location: beacon
+    portrait: old_gentleman
+    knows:
+      - 灯塔明天晚上点亮，二十里外都看得见（§57）
+    clues: [c_beacon_lighting]
+    personality: 和气、愉快，说起灯塔就有些得意
+    goal: 向路过的外来人介绍村里的灯塔和节日
+  - id: grey_woman
+    name: 灰衣女人
+    role: 上午在村会堂外的村妇
+    called: 穿灰衣的女人
+    look: 一身灰衣
+    voice: 回答简短，不愿多说
+    location: village_hall
+    portrait: grey_woman
+    knows:
+      - 文特斯上午不开门，下午再来（§84）
+    lies:
+      - 被问电报时说“不知道，我们要拍给谁？”（§84）
+    personality: 冷淡、寡言，不爱多说
+    goal: 打发外来人下午再来，不让他在会堂外多打听
+  - id: crone
+    name: 囚室的老妪
+    role: 给囚犯送水的村妇
+    called: 满脸皱纹的老妪
+    look: 满脸皱纹，眼神空洞
+    voice: 一言不发
+    location: cell
+    portrait: crone
+    personality: 麻木、沉默，眼神空洞，只照安排办事
+    goal: 给被关押的人送水，办完就走
+  - id: watchers
+    name: 盯梢的村民
+    role: D3 围拢调查员的四个村民
+    called: 光头缺耳的村民一伙
+    look: 一个光头缺了一只耳朵，一个机警的少年，一个凶神恶煞的中年主妇，一个扛着棍子的男人
+    voice: 不说话，只是慢慢逼近；被逼到教堂时持棍男人用棍子敲着手掌说“投降吧”
+    location: central_street
+    portrait: watchers
+    personality: 沉默、专注，彼此配合，不急不躁
+    goal: 盯住调查员，慢慢逼近并制服，带回村中心
+    knows:
+    - 他们比调查员熟悉村里的街巷，会从前方和两侧包抄（本地村民，熟悉地形）
+  - id: village_guards
+    name: 村口守卫
+    role: D3 把守南、西村口的村民
+    called: 持农具的村民
+    look: 四个一组，拿着农具和棍棒，其中一个长着猿猴般的眉骨
+    voice: 粗声粗气，“你和我们一起走”
+    location: east_road
+    portrait: village_guards
+    personality: 粗鲁，守久了有些厌烦，但对外人起疑
+    goal: 守住南、西村口，不让外人出村，也不放别人离开岗位
+    knows:
+    - 他们奉命拿着农具棍棒把守村口；对说“灯塔那边需要他们”的人起疑，要把人带在身边一起走（自己的岗位）
+  - id: assassins
+    name: 刺杀者
+    role: 村里派来刺杀阿博加斯特的人
+    called: 脸涂焦油的黑影
+    look: 脸上涂着焦油，眼里满是仇恨，一个持长刀，一个持钝器
+    portrait: assassins
+    personality: 凶狠、仇恨，下手利落
+    voice: 袭击时不开口，只在被火焰灼烧时尖叫
+    goal: 杀死阿博加斯特
+    knows:
+    - 阿博加斯特是村里要除掉的人，他正在学校后的壁凹向调查员传授咒语；他们按村里的安排摸黑赶来动手（受村里派遣前来刺杀，亲自执行）
+  - id: coachman
+    name: 年轻车夫
+    role: 驾马车出村追捕的村民
+    called: 举提灯的车夫
+    look: 面目憔悴紧张，举着提灯，带一根短棍
+    portrait: coachman
+    stats: {敏捷: 31, 格斗(斗殴): 30, 闪避: 15, 生命: 9}
+    attacks:
+      - 格斗(斗殴)（短棍）30%，伤害 1D6
+    personality: 憔悴、紧张，被发现后立刻动手
+    voice: 发现人时急促高喊“看！在那儿！”
+    goal: 驾车出村追拿逃走的人
+    knows:
+    - 有人逃出了烬头村，需要驾车追拿；他沿东去的林间路赶车，举着提灯搜索（受村里差遣，亲自驾车出村追人）
+  - id: old_coachman
+    name: 年长车夫
+    role: 和年轻车夫同车的上年纪男人
+    called: 上了年纪的车夫
+    look: 上了年纪，坐在马车上
+    voice: 疲惫，“你赢了。我估计现在也已经太晚了。”
+    portrait: old_coachman
+    personality: 年纪大，疲惫，见势不对就收手
+    goal: 带受伤的同伴离开，不再纠缠
+    knows:
+    - 逃走者被追上时他认为已经太晚了；年轻同伴受伤后他只想带人离开（与年轻车夫同车，亲眼所见）
+
+creatures:
+  - id: black_bear
+    name: 黑熊
+    called: 林间空地上的黑熊
+    description: 一头黑熊，用后腿站起来，对树上的果子很感兴趣
+    pursues: true
+    stats: {敏捷: 58, 生命: 20, 力量: 85, 体质: 70, 体型: 90, 移动: 12}
+    attacks:
+      - 爪击 35%，伤害 2D6
+      - 每轮 2 次
+      - 撕咬 25%，伤害 1D8
+    notes: 护甲 3（皮毛吸收每次伤害的前 3 点）。§173：第 1 轮双爪各一次；第 2 轮一爪加一次撕咬；第 3 轮双爪；三轮后熊没倒下就自己退走（§201）。重伤后体质检定，失败被撕碎（§193）。逃跑失败被追上时（§167）每爪伤害按原文 3D6，任一下达最大生命一半为重伤（§179 体质检定）。只有招惹它、或大失败惊动它才会冲来。
+  - id: burning_beasts
+    name: 燃烧的兽群
+    called: 荧光眼的矮小野兽
+    description: 一群矮小、黑暗的动物，长着又长又尖的耳朵，眼睛发着荧光，带着麝香味，从树上下来挡住去路
+    sanity: 1/1D3
+    notes: 成群。原文没有给出数值，也不当成战斗：它们动作急躁怪异，扑上来的一刻自己燃起红紫色的火焰；调查员随后昏倒（§5/§269→§13）。
+
+pregens:
+  - id: eleanor_hale
+    name: 埃莉诺·黑尔
+    occupation: 记者
+    age: 27
+    sex: 女
+    residence: 新罕布什尔州普利茅斯
+    birthplace: 新罕布什尔州普利茅斯
+    portrait: eleanor_hale
+    known_locations: [hometown_stop]
+    backstory:
+      来历: AutoKeeper 补充。普利茅斯本地报纸的特约撰稿人，刚被《阿卡姆公报》录用，这次独自南下赴任。
+      重要之人: 在纽约读书时的老编辑，是他写信推荐了她。
+      思想与信念: 只信亲眼看见、能写进报道的事。
+    characteristics: {力量: 50, 体质: 60, 体型: 50, 敏捷: 70, 外貌: 60, 智力: 80, 意志: 50, 教育: 40}
+    luck: 55
+    hp: 11
+    hp_max: 11
+    mp: 10
+    mp_max: 10
+    san: 50
+    skills: {艺术与手艺(摄影): 70, 历史: 60, 图书馆使用: 60, 母语(英语): 50, 心理学: 50, 话术: 50, 侦查: 40, 潜行: 40, 闪避: 55, 聆听: 40, 急救: 50, 骑术: 25, 信用评级: 20}
+    inventory: [长途车票, 一只旅行箱, 笔记本和铅笔, 少量现金]
+  - id: thomas_reed
+    name: 托马斯·里德
+    occupation: 医生
+    age: 31
+    sex: 男
+    residence: 新罕布什尔州普利茅斯
+    birthplace: 新罕布什尔州普利茅斯
+    portrait: thomas_reed
+    known_locations: [hometown_stop]
+    backstory:
+      来历: AutoKeeper 补充。在普利茅斯跟随父亲行医数年，这次去阿卡姆圣玛丽医院做实习医生。
+      宝贵之物: 父亲留给他的一只旧出诊包。
+      思想与信念: 凡事都有合乎医理的解释。
+    characteristics: {力量: 60, 体质: 70, 体型: 60, 敏捷: 50, 外貌: 50, 智力: 50, 意志: 60, 教育: 80}
+    luck: 50
+    hp: 13
+    hp_max: 13
+    mp: 12
+    mp_max: 12
+    san: 60
+    skills: {急救: 70, 医学: 60, 外语(拉丁文): 60, 心理学: 50, 科学(生物学): 50, 科学(药学): 50, 侦查: 40, 说服: 40, 博物学: 30, 攀爬: 40, 格斗(斗殴): 45, 汽车驾驶: 40, 信用评级: 30}
+    inventory: [长途车票, 一只旅行箱, 旧出诊包, 少量现金]

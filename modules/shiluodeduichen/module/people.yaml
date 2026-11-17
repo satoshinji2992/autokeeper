@@ -1,0 +1,167 @@
+npcs:
+  - id: hartman
+    name: 爱德华·哈特曼教授
+    role: 数学教授，詹姆斯的老师
+    look: 矮小，头发乱糟糟的，穿一身旧西装
+    personality: 严谨、冷淡，看不惯不守学术规矩的人，说话带刺
+    voice: 语调平和，从不寒暄，开口就直奔主题；不满时偶尔夹一句讽刺
+    goal: 把课讲完，让学生顺利考试
+    knows:
+      - 詹姆斯·布莱恩特很有潜力和才智，他对此表示尊重
+      - 他对詹姆斯不遵循学术程序很抵触
+      - 他对詹姆斯缺席最后一课感到惊讶，此外不知道任何事
+    location: classroom
+    portrait: hartman
+    called: 矮小乱发的教授
+  - id: bernard
+    name: 伯纳德·富勒
+    role: 詹姆斯隔壁的宿舍邻居
+    look: 头发蓬乱，眼睛浮肿，套着皱巴巴的睡衣，呼吸里有波旁威士忌的味道
+    personality: 宿醉未醒，脾气很坏，非常不愿配合
+    voice: 嗓音沙哑，不耐烦，常拿“这里没人”打发人
+    goal: 让走廊安静下来，回去睡觉
+    knows:
+      - 他已经好几天没见到詹姆斯，也不在乎他在哪
+      - 门卫在地下办公室里有各房间的备用钥匙
+    clues: [c_bernard_unseen, c_spare_key]
+    gates:
+      c_spare_key: {skill: 说服}
+    location: bernard_room
+    portrait: bernard
+    called: 满身酒气的邻居
+  - id: holcomb
+    name: 玛杰里·霍尔科姆
+    role: 大学图书馆的图书管理员
+    look: 腰板笔直，衣着一丝不苟，眼镜后面的目光严厉
+    personality: 迂腐、无所畏惧，以铁腕管理图书馆；讨厌凌乱、噪音和不敬
+    voice: 压低声音说话，语气冷硬；有人喧哗时会用目光或一声“嘘”制止
+    goal: 让图书馆安静整洁，把逾期的书讨回来
+    knows:
+      - 詹姆斯总是逾期不还书，她已经厌烦了往他房间送逾期通知
+      - 詹姆斯一直烦她找一些她从没听过的晦涩书籍，在本馆和其他图书馆的目录里都找不到
+      - 她不认识那份手稿，也不认识“你欠我的！C。”的便条
+      - 她的助手凯莱布·莫罗名字以 C 开头，常在后台办公室整理书籍
+    clues: [c_holcomb_overdue, c_holcomb_books, c_holcomb_c]
+    location: library
+    portrait: holcomb
+    called: 腰板笔直的图书管理员
+  - id: caleb
+    name: 凯莱布·莫罗
+    role: 图书管理员助理
+    look: 方脸，衣袖上沾着灰，手边总有一摞待整理的书
+    personality: 不信神秘学，认为都是老傻瓜编的无稽之谈；讨厌冲突，被逼急了就软下来
+    voice: 说话含糊，回避对方的眼睛，撒谎时会急着转移话题
+    goal: 保住偷卖藏书的生意，不惹麻烦
+    knows:
+      - 他家几代人都是摩尔家族在波士顿附近房产的看管人
+      - 那处房产的图书馆延伸进一个地下墓穴，已故的埃德加·摩尔在里面收藏了晦涩而令人厌恶的书籍和手稿
+      - 他靠复印、售卖那里的文本段落维生，价钱合适时整本卖掉
+      - 他先卖给詹姆斯欧几里得的手稿，后来又卖给他《缟玛瑙石板》的译本
+      - 交出《缟玛瑙石板》后他再也没见过詹姆斯
+      - 詹姆斯提过阿姨家足够隐私，可以学习书中一个图章的仪式绘制
+    secrets:
+      - 便条“你欠我的！C。”是他写的，手稿是他卖的
+      - 摩尔家族房产地下墓穴里的藏书和他的生意
+    lies:
+      - 他跟那份手稿和便条毫无关系
+    clues: [c_caleb_sale, c_caleb_aunt]
+    gates:
+      c_caleb_sale: {skill: 话术}
+    location: library_office
+    portrait: caleb
+    called: 整理书堆的方脸助理
+  - id: ruby
+    name: 鲁比·托伦斯
+    role: 大学行政办公室的秘书
+    look: 梳着整齐的发髻，手指停在打字机键上
+    personality: 看重个人隐私，但讲道理，也许会视情况破例一次；对恐吓毫不让步
+    voice: 客气而公事公办，常说“按规定……”
+    goal: 守住学生档案
+    knows:
+      - 詹姆斯的学生档案里登记着近亲属科拉·韦布和她在佛蒙特州勒德洛的地址
+    clues: [c_student_record]
+    gates:
+      c_student_record: {skill: 说服}
+    location: registrar
+    portrait: ruby
+    called: 打字机后的秘书
+  - id: cora
+    name: 科拉·韦布
+    role: 詹姆斯在佛蒙特州勒德洛的阿姨，已经死去
+    look: 一位老妇人的尸体，高度腐败，身上遍布对称形状的深切口
+    personality: 生前疼爱詹姆斯，常请他回家吃她拿手的烘肉卷
+    knows: []
+    location: cora_bedroom
+    portrait: cora
+    called: 毯子下的老妇人
+    looks:
+      - when: flag:guardian_risen
+        change: 腐烂的老妇人睁着浑浊的眼睛站了起来，身上的对称伤口裂开着
+    voice: 不会说话；出场时只有楼梯上窸窸窣窣的响动和笨拙响亮的脚步声，跌跌撞撞地一步步往下走
+    goal: （已不是科拉本人）被裂隙那边的饥饿之物当作与这个世界互动的工具，充当门之守卫者：下到地下室，袭击平视范围内的调查员；所有人都躲好时，攻击成功等级（或技能）最低的那个
+  - id: james
+    name: 詹姆斯·布莱恩特
+    role: 失踪的天才数学系学生，调查员的朋友
+    look: 赤裸、消瘦，悬浮在半空，胸口刻着血淋淋的图形
+    personality: 沉迷数学，不善交际，可靠忠实；仪式之后已无法言语行动
+    knows:
+      - 仪式与《缟玛瑙石板》的内容（他已无法说出任何话）
+    location: cora_basement
+    portrait: james
+    called: 悬在半空的赤裸青年
+    stats: {生命: 3, 力量: 45, 体质: 40, 体型: 55, 敏捷: 10}
+    looks:
+      - when: flag:gate_closed
+        change: 瘫倒在地，四肢扭曲，眼神空洞
+      - when: flag:james_dead
+        change: 一动不动地躺在血绘图案旁，胸口的图形被划开
+    voice: 无法言语，也无法行动；唯一的反应是眼神会聚焦到叫他名字的人身上；他似乎还在呼吸
+    goal: 原作没写他现在想要什么。仪式前他想在阿姨家这个足够隐秘的地方学习、完成《缟玛瑙石板》里一个图章的仪式绘制；现在他已无法动弹
+
+pregens:
+  - id: walter_price
+    name: 沃尔特·普赖斯
+    occupation: 学生（数学系）
+    age: 21
+    sex: 男
+    residence: 波士顿
+    birthplace: 马萨诸塞州伍斯特
+    portrait: walter_price
+    characteristics: {力量: 50, 体质: 55, 体型: 60, 敏捷: 55, 外貌: 50, 智力: 80, 意志: 60, 教育: 70}
+    luck: 55
+    skills: {科学(数学): 60, 图书馆使用: 50, 侦查: 45, 心理学: 30, 说服: 35, 外语(拉丁文): 30, 历史: 30, 潜行: 30, 信用评级: 20}
+    backstory:
+      描述: AutoKeeper 补充。数学系二年级学生，和詹姆斯同在哈特曼教授门下，常和他在图书馆一起刷题。
+      重要之人: 詹姆斯·布莱恩特——唯一跟得上他思路的朋友，帮他熬过不少难关。
+      思想与信念: 数学是世界上唯一不会说谎的东西。
+      宝贵之物: 父亲送的一支旧钢笔。
+    known_locations: [campus, classroom, library, dorm_yard]
+  - id: eleanor_shaw
+    name: 埃莉诺·肖
+    occupation: 学生（文学系，旁听数学课）
+    age: 20
+    sex: 女
+    residence: 波士顿
+    birthplace: 马萨诸塞州波士顿
+    portrait: eleanor_shaw
+    characteristics: {力量: 45, 体质: 60, 体型: 50, 敏捷: 65, 外貌: 70, 智力: 70, 意志: 65, 教育: 65}
+    luck: 60
+    skills: {话术: 50, 说服: 45, 取悦: 40, 心理学: 45, 侦查: 50, 潜行: 40, 锁匠: 20, 驾驶汽车: 30, 信用评级: 45}
+    backstory:
+      描述: AutoKeeper 补充。波士顿一户殷实人家的女儿，读文学，为拿学分旁听哈特曼的课。詹姆斯曾耐心帮她补了一整个学期的数学。
+      重要之人: 詹姆斯·布莱恩特——欠他一个大人情。
+      思想与信念: 朋友有难，不能袖手旁观。
+      宝贵之物: 母亲留下的一枚胸针。
+    known_locations: [campus, classroom, library]
+
+creatures:
+  - id: guardian
+    name: 门之守卫者
+    npc: cora
+    called: 跌跌撞撞下楼的腐尸
+    description: 科拉阿姨复活的遗体，是从裂缝中溜出的饥饿之物与这个世界互动的工具。非常强健的外壳，很难在战斗中打败。
+    sanity: 1/1D8
+    stats: {力量: 80, 体质: 80, 体型: 65, 敏捷: 30, 意志: 5, 生命: 14, 移动: 6, 闪避: 0}
+    attacks:
+      - 格斗 50%，伤害 1D4+DB
+    notes: 伤害加值 +1D4、体格 1、移动 6、魔法值 11；每轮 1 次攻击；没有闪避。护甲：无，但贯穿类武器每次只造成 1 点伤害，其他武器造成骰出伤害的一半。对身体的严重创伤会让它失去一条肢体。进入地下室后袭击平视范围内的调查员；所有人都躲好时，攻击躲藏成功等级（或技能）最低的调查员。

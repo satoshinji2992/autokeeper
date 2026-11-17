@@ -1,0 +1,18 @@
+[
+  {
+    "path": "source/images/p01_image01.png",
+    "pages": [
+      1
+    ],
+    "width": 1821,
+    "height": 2575
+  },
+  {
+    "path": "source/images/p15_image01.png",
+    "pages": [
+      15
+    ],
+    "width": 1280,
+    "height": 1693
+  }
+]

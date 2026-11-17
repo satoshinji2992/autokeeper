@@ -1,0 +1,172 @@
+prelude:
+- art: cover
+  text: 2009 年夏，闽南沿海小城石头屿。老城区的巷子窄得两边墙壁几乎贴在一起。
+- art: shipowei
+  text: 避风坞石坡尾的渔船一个月前被清退，挖掘机昼夜不停地抽着海底的淤泥。
+- art: ocean_park
+  text: 八月七日，台风要来了。阮施宁没有来秘密基地。
+conclusions:
+- id: k_ruan_crawled
+  text: 阮施宁昨夜来过乐园，又以爬行的样子离开，她已经不是平常的样子
+- id: k_drain
+  text: 阮施宁去了石坡尾工地的地下排水通道
+- id: k_gate
+  text: 排水通道里的旧闸门开了一道缝，海水和别的东西正从那里进来，必须封死
+- id: k_tide
+  text: 明天凌晨两点二十多分涨潮，台风风暴潮会倒灌，必须在那之前封住闸门
+- id: k_infection
+  text: 城里人喘不上气、耳朵流黏液的怪病，和排水通道里冒出的海水有关
+- id: k_hybrids
+  text: 城里有些人正在变得像鱼，他们之间对“回到海里”有分歧，阮施宁一家也是这样的人
+- id: k_seawater
+  text: 海水已经倒灌进了城市的下水道
+- id: k_city_below
+  text: 海底深处有一座庞大的城市
+events:
+- id: e_market_open
+  title: 夜市亮灯
+  when: D1 18:00
+  where: night_market
+  present:
+  - toy_vendor
+  - jianfu
+  - liying
+  text: 傍晚六点左右，夜市的摊位照明灯点亮，各摊摊主（塑料玩具摊主、建福、丽英）出摊；清晨为鱼市，白天空无一人。
+  read_aloud: 天色暗下来，一盏接一盏的摊灯亮了，烧烤摊的油烟和炸物的香气一起漫进巷子。
+- id: e_outbreak
+  title: 有人倒下了
+  when: flag:outbreak_ready & !flag:outbreak_seen
+  sanity: 1/1D4+1
+  sets:
+  - outbreak_seen
+  text: 调查员探索任意 2-3 个地点之后遭遇异变（时长 10 分钟）。按当时所在处选择：前方传来人群骚动；或夜市有摊主倒下；或工地一名工人众目睽睽下突然倒地。靠近后发现倒地者不是普通疾病。守秘人可推迟到第三个地点再演。
+  read_aloud: 前面的人群忽然骚动起来，有人倒在了地上。透明的、带着腥味的液体从那人的口鼻里流出来，颈部两侧裂开了两道一开一合的口子，像鳃。他已经失去了意识，瞳孔散开，指尖开始发紫，可那些鳃瓣还在翕动，在空气里徒劳地张合，像在找海水。
+- id: e_tunnel_chase
+  title: 身后的回声
+  when: at:players:drain_tunnel & !flag:chase_done
+  where: drain_tunnel
+  chase:
+  - deep_ones
+  chase_party: 逃
+  sanity: 0/1D6
+  sights:
+  - deep_ones
+  stakes:
+  - when: ended:fled
+    flags:
+    - chase_done
+    note: 调查员挤进点 10 的裂隙，深潜者放弃追击
+  - when: ended:lost
+    flags:
+    - pc_taken
+    - chase_done
+    note: 被抓住且逃脱机会失败的调查员被拖入海中
+  text: 调查员在通道里前进，回声一直跟在身后越来越近；拐过低矮弯道后，4 个巡查的深潜者出现，进入追逐。调查员起始于点 4，深潜者起始于点 1（规则见守秘人须知【追逐】）。在抵达点 10 前被抓住时，守秘人可给调查员一次逃脱机会，失败则被拖入冰冷漆黑的海中，迎来最终命运。
+  read_aloud: 拐过一处低矮的弯道，前方传来断断续续的扑腾声和拖曳声，夹着低沉含混的呱鸣。黑暗深处传来回应，然后是第二声、第三声，远处原本平静的积水里接连响起扑通声。手电光扫过去——那些东西正从水里站起来。
+- id: e_ruan_leaves
+  title: 闸门口的她
+  when: at:players:drain_gate & flag:chase_done & !flag:ruan_gone
+  where: drain_gate
+  present:
+  - ruan_shining
+  sanity: 1/1D6+1
+  sets:
+  - ruan_gone
+  text: 调查员在闸门口找到阮施宁。若已有调查员开始转变（flag:pc_transforming），她发出含混不清的呱叫，邀请他们一起离开，回到海中与“家人”一同归去；是否跟随由玩家自己决定。她最后看了他们一眼，便挤过闸门跃入海中。原地留下卡片和纸条（线索
+    c_ruan_note、物品 rare_cards）。
+  read_aloud: 她穿着阮施宁的衣服。那件浅色的短袖，那条裤子，那些属于人类孩童生活中微不足道的痕迹，依旧完整地覆盖在那个东西的身上。但她的脸，或者说原本应该属于脸的位置，已经被另一种生命取代。她有着鱼一样的头颅，一颗湿润、苍白而又令人作呕的鱼类头颅。巨大的眼睛凝视着你们，眼睛下方是一张宽阔的嘴，薄而苍白的嘴唇向两侧延伸，嘴角垂落着湿润的肉质褶皱，张开时能看见里面排列密集的细小尖齿。它最后看了你们一眼，便挤过闸门，纵身跃入了一直在等她、一直在呼唤她、一直在每一个无人知晓的夜晚从她的梦境底部向上涌动的海水之中。
+- id: e_home_all
+  title: 天快亮了
+  when: flag:gate_sealed & !flag:pc_taken
+  sets:
+  - end_all
+  text: 闸门缝隙封死，且无人被拖走：进入结局 sealed_all。
+  ending: sealed_all
+- id: e_home_loss
+  title: 少了一个人
+  when: flag:gate_sealed & flag:pc_taken
+  sets:
+  - end_loss
+  text: 闸门缝隙封死，但有调查员被深潜者拖走：进入结局 sealed_loss。
+  ending: sealed_loss
+- id: e_storm_surge
+  title: 凌晨两点二十四分
+  when: D2 02:24 & !flag:gate_sealed
+  text: 涨潮与台风风暴潮顶托，排水通道和闸门口被完全淹没；此时仍在通道内的调查员溺亡或被困窒息（守秘人据实结算）。闸门未封，进入失败结局。
+  ending: failed
+endings:
+- id: sealed_all
+  title: 一切都和以前一样
+  condition: flag:end_all
+  sanity_gain: 1D6
+  reward: 每位调查员恢复 1D6 点理智；克苏鲁神话技能 +3；稀有小浣熊卡片可以增加调查员在小学生中的威望
+  text: '你们爬出来的时候天已经快亮了。你们回到家的时候，妈妈已经起床了。她说：“昨晚去哪里了？”
+
+    一切都和以前一样。早餐的气味、窗帘的褶痕、桌上缺了口的瓷碗。
+
+    但有那么一个早晨，或许是一周之后，或许是更久，你们在上学的路上看见一个人蹲在路边的排水沟旁。他没有穿工作服，手里也没有握着工具，他蹲在那里，把手泡在沟里的水中。你们经过的时候，他抬起头对你们笑了一下。他的眼睛，那双眼睛尤其令人难以形容，很圆，很突出。
+
+    '
+- id: sealed_loss
+  title: 回家的路上少了一个人
+  condition: flag:end_loss
+  sanity_gain: 1D3
+  reward: 幸存的调查员恢复 1D3 点理智；克苏鲁神话技能 +3
+  text: '你们爬出来的时候天已经快亮了。你们回到家的时候，妈妈已经起床了。她说：“昨晚去哪里了？”
+
+    一切都和以前一样。早餐的气味、窗帘的褶痕、桌上缺了口的瓷碗。只是有一个人再也没有回来。
+
+    但有那么一个早晨，或许是一周之后，或许是更久，你们在上学的路上看见一个人蹲在路边的排水沟旁，把手泡在沟里的水中。你们经过的时候，他抬起头对你们笑了一下。他的眼睛很圆，很突出。
+
+    '
+- id: failed
+  title: 潮汐依旧涨落
+  condition: 以上都没有发生（D2 02:24 前未能封堵闸门）
+  text: '凌晨两点的特大风暴潮成了无法挽回的转折点。污染随着潮汐继续进入城市的地下排水系统，城市开始出现越来越多无法解释的死亡。最初只是零星的病例，随后人们接连病倒，医院的病房很快被那些胸腔积满液体、颈侧生出鳃状裂口的患者占满，而无论医生如何尝试治疗，这些人的病情都只会沿着相同的轨迹恶化，直到呼吸彻底停止。
+
+    在这片死寂之下，潮汐依旧按照亘古不变的规律涨落不息。而海水——咸涩的、沉重的、裹挟着无数腐朽与新生秘密的海水——它记得那些人类努力忘记的，也记得那些从未真正经历过的，它从某个缝隙中渗入，又从某个出口离去。而在那些人类从未踏足也许永远不会踏足的水道里，深潜者们来来去去。
+
+    '
+showcases:
+- id: sc_opening
+  kind: 开场
+  when: opening
+  title: 秘密基地
+  art: cover
+  prompt: 盛夏正午的废弃海洋乐园，褪色的海豚、八爪鱼和黄色小海马塑像爬满藤蔓，几个孩子坐在锈蚀的铁架下，手里捏着卡片，望着空荡荡的侧门
+- id: sc_outbreak
+  kind: 突发
+  when: event:e_outbreak
+  title: 有人倒下了
+  prompt: 闷热的老城街头，人群围成一圈，中间有人倒在地上，只看得见围观者的腿和地上一滩透明的水渍，孩子们从大人腿缝间往里看
+- id: sc_shipowei
+  kind: 重要场景
+  when: visit:shipowei
+  title: 退潮后的石坡尾
+  art: shipowei
+  prompt: 黄昏的避风坞，坞底黑色淤泥完全暴露，警戒线和临时围挡后面是排洪箱涵黑洞洞的入口，远处废弃船厂的烟囱
+- id: sc_chase
+  kind: 怪物
+  when: event:e_tunnel_chase
+  title: 积水里的扑通声
+  prompt: 古老的石砌排水通道，石缝里长满白色贝壳，手电光照亮脚下的积水，远处黑暗里几双反光的大眼睛和水花
+- id: sc_gate
+  kind: 危机
+  when: event:e_ruan_leaves
+  title: 闸门口
+  prompt: 手电光里一道锈蚀的旧闸门，闸板歪斜留出一道窄缝，海水从缝里渗出，缝前坐着一个穿浅色短袖的小小背影，看不见脸
+- id: sc_end_all
+  kind: 结局
+  when: ending:sealed_all
+  title: 天快亮了
+  prompt: 清晨的老城小巷，早餐摊的热气，路边排水沟旁蹲着一个背影，把手泡在水里
+- id: sc_end_loss
+  kind: 结局
+  when: ending:sealed_loss
+  title: 回家的路
+  prompt: 天刚亮的街道上几个孩子的影子，队伍里空着一个位置，地上一张湿透的卡片
+- id: sc_end_fail
+  kind: 结局
+  when: ending:failed
+  title: 潮汐依旧
+  prompt: 台风夜后的城市，医院走廊灯光惨白，远处海面涨落，黑色的水道口

@@ -1,0 +1,332 @@
+items:
+  - {id: i_ppk, name: 配发的瓦尔特 PPK, description: 一把瓦尔特 PPK 手枪，握柄两面刻着奇怪的花纹, where: sd_office, important: true, status: 原文：已激活熔铸之血}
+  - {id: i_dagger, name: 棺里的匕首, description: 一把做工精致的匕首，柄上的花纹与配枪握柄一面的花纹基本一致，有手工雕刻的痕迹, where: cemetery, hidden: true}
+  - {id: i_waldemont_pistol, name: 书桌下的手枪, description: 藏在书桌下方的一把手枪, where: waldemont_room, owner: waldemont, equipment: concealed, hidden: true}
+  - {id: i_transcript, name: 拉丁语打字转录本与图册, description: 厚厚一沓装订简陋的拉丁语打字稿，没有封面，满是德语批注；另有一本手绘图册，画着装置和符号，每张图都标了页码, where: segli_office, hidden: true}
+  - {id: i_safe_key, name: 保险柜钥匙, description: 一把银行保险柜的钥匙, where: eberhard_room, owner: eberhard, equipment: concealed, hidden: true}
+  - {id: i_tome, name: 马克西米利安的炼金指南, description: 一本 15 世纪的拉丁文古书, where: bank, hidden: true}
+  - {id: i_ppk_demo, name: 保险柜里的瓦尔特 PPK, description: 一把瓦尔特 PPK，握柄花纹和配枪一模一样，但手工雕刻痕迹明显, where: bank, hidden: true}
+  - {id: i_axe, name: 艾伯哈德的斧子, description: 一把沉重的斧子, where: lab, owner: eberhard, hidden: true}
+
+clues:
+  - id: c_coffin_bones
+    title: 棺材残骸里的骨架
+    where: cemetery
+    feature: 烧过的棺材残骸
+    requires: ["flag:coffin_burned"]
+    points_to: [k_jolan, k_guns]
+    text: 残骸上找不到汽油之类易燃物的痕迹。阿克塞尔的血肉化成了灰，只剩一副干净的骨架，骨头里夹着金属光泽，摸起来像金属。
+  - id: c_coffin_ashes
+    title: 棺底的骨灰
+    where: cemetery
+    feature: 棺底的骨灰
+    requires: ["flag:coffin_burned"]
+    points_to: [k_jolan]
+    text: 棺材底部有大量骨灰，不是阿克塞尔的。
+  - id: c_dagger
+    title: 棺里的匕首
+    where: cemetery
+    feature: 棺里的匕首
+    requires: ["flag:coffin_burned"]
+    core: true
+    points_to: [k_guns, k_jolan]
+    text: 棺里有一把做工精致的匕首，柄上的花纹与配枪握柄一面的花纹基本一致，但有手工雕刻的痕迹。
+  - id: c_waldemont_unwell
+    title: 沃德蒙特身体不适
+    where: cemetery
+    feature: 与沃德蒙特交谈
+    npc: waldemont
+    points_to: [k_guns]
+    text: 沃德蒙特面色不佳，偶尔说些奇怪的话，自己也承认身体不太舒服。
+  - id: c_staff_waldemont
+    title: 员工眼里的沃德蒙特
+    where: works_office
+    feature: 向员工打听
+    npc: works_staff
+    points_to: [k_waldemont_spy]
+    text: 沃德蒙特此前是财务部长，经常参与其他部门的事务，翻阅文档，把文件带回家，没人在意。
+  - id: c_desk_gun
+    title: 书桌下的手枪
+    where: waldemont_room
+    feature: 书桌下方
+    check: {skill: 侦查}
+    points_to: [k_waldemont_spy]
+    text: 书桌下方藏着一把手枪。
+  - id: c_mistress
+    title: 沃德蒙特的情人
+    where: manor_hall
+    feature: 向艾伯哈德打听沃德蒙特
+    npc: eberhard
+    core: true
+    points_to: [k_waldemont_spy]
+    text: 艾伯哈德说沃德蒙特有个情人，叫希尔德·莱费尔，给出了公寓地址；沃德蒙特每隔一周的周六下午去，第二天早上才回来。
+  - id: c_hilde_file
+    title: 希尔德的档案
+    where: sd_office
+    feature: 档案室
+    requires: [c_mistress]
+    points_to: [k_waldemont_spy]
+    text: 档案显示希尔德·莱费尔是外交官休布纳·莱费尔的妻子。
+  - id: c_calvin
+    title: 另一个情人
+    where: hilde_apartment
+    feature: 向休布纳问话
+    npc: huebner
+    core: true
+    points_to: [k_waldemont_spy]
+    text: 休布纳承认妻子的两个情人都是他介绍的。另一个是英国外交官加尔文·考克斯，军情六处的人，同时是苏联间谍；约两年前调来德国，约半年前在一次工业贸易会议上发展沃德蒙特为下线，把希尔德当作不知情的中间人。
+  - id: c_floor_hide
+    title: 床底的藏物处
+    where: hilde_apartment
+    feature: 床底的地板
+    check: {skill: 侦查, difficulty: 极难}
+    points_to: [k_waldemont_spy]
+    text: 床底有一块被撬开过的地板，下面能放巴掌大的薄物，里面什么也没有。
+  - id: c_lamp_hide
+    title: 台灯灯座
+    where: hilde_apartment
+    feature: 黄铜台灯
+    check: {skill: 侦查, difficulty: 极难}
+    points_to: [k_waldemont_spy]
+    text: 台灯的灯座是空心的，能放巴掌大的薄物，里面什么也没有。
+  - id: c_jolan_ashes
+    title: 管家的坦白
+    where: manor_hall
+    feature: 与麦克斯纳搭话
+    npc: meisner
+    requires: ["flag:waldemont_dead"]
+    core: true
+    points_to: [k_jolan]
+    text: 麦克斯纳说，阿克塞尔的犹太亡妻约兰的骨灰被挖出来了。约兰才是沃德蒙特的生母，当局帮忙掩盖，档案里写成了洛特；阿克塞尔当年立场摇摆，这段婚姻和沃德蒙特的安全成了纳粹和他谈判的筹码，后来约兰的坟被迁到了别处。沃德蒙特死后他想去看看约兰，才发现骨灰没了。
+  - id: c_wake_sneak
+    title: 守灵夜偷跑
+    where: manor_hall
+    feature: 向仆人打听
+    npc: servants
+    points_to: [k_eberhard, k_jolan]
+    text: 有仆人抱怨艾伯哈德守灵那天夜里偷跑了出去，支支吾吾地暗示是些见不得人的癖好。
+  - id: c_open_grave
+    title: 被挖开的坟
+    where: jolan_grave
+    feature: 被挖开的坟墓
+    points_to: [k_jolan]
+    text: 约兰的坟被挖开了，骨灰罐里几乎是空的。
+  - id: c_nail
+    title: 断掉的红指甲
+    where: jolan_grave
+    feature: 坟土里
+    check: {skill: 侦查}
+    points_to: [k_eberhard, k_jolan]
+    text: 坟土里有一小片断裂的红色延长甲。
+  - id: c_waldemar_file
+    title: 瓦尔德玛案卷
+    where: sd_office
+    feature: 档案室
+    points_to: [k_eberhard, k_guns]
+    text: 两年前希特勒青年团的瓦尔德玛自燃身亡的卷宗，附有他家人和朋友的联络方式，住址在韦伯旧居一带。
+  - id: c_waldemar_friends
+    title: 瓦尔德玛的朋友
+    where: weber_street
+    feature: 向青年团少年问话
+    npc: waldemar_friends
+    points_to: [k_eberhard, k_guns]
+    text: 瓦尔德玛体弱多病，总被他们欺负。大约 37 年初他和一个“个子很高的公鸭嗓骚货大姐”混在一起，还给他们看过一把“刻着奇怪花纹的手枪”；后来他炫耀说杀了韦伯，韦伯也确实失踪了，没人理他，过了几天他就烧死了。
+  - id: c_weber_burned
+    title: 老太太的话
+    where: weber_street
+    feature: 向老太太问话
+    npc: old_woman
+    points_to: [k_guns]
+    text: 老太太说韦伯失踪后她找了两天，在小树林里发现了他被枪击的尸体；她想帮他埋了，结果尸体烧了起来，时间和瓦尔德玛烧死时一样。她告诉调查员埋在哪，也愿意带路去现场。
+  - id: c_shell
+    title: 林中的弹壳
+    where: weber_woods
+    feature: 发现尸体的地方
+    check: {skill: 侦查, difficulty: 困难}
+    points_to: [k_guns]
+    text: 落叶下面有一枚当时留下的弹壳。
+  - id: c_lambert_file
+    title: 兰伯特失踪记录
+    where: sd_office
+    feature: 档案室
+    points_to: [k_eberhard]
+    text: 36 年年末保安处上尉兰伯特失踪，最后一次有人见到他就是在本办事处。他当时在调查医生安森与律师雷纳德的失踪案；记录显示两人的妻子都说，失踪前有个“妓女扮相的高个子女人”明目张胆地上门向她们的丈夫示爱。三人都是金发碧眼的高大帅哥。
+  - id: c_jewish_registry
+    title: 犹太人登记
+    where: sd_office
+    feature: 档案室
+    points_to: [k_eberhard]
+    text: 去年埃森犹太人重新登记，有几个人没有登记，也找不到出逃或躲藏的痕迹；档案里有他们原来登记的姓名和住址。
+  - id: c_strange_woman
+    title: 奇怪的女人
+    where: jewish_quarter
+    feature: 向邻居问话
+    npc: jewish_neighbors
+    requires: [c_jewish_registry]
+    points_to: [k_eberhard]
+    text: 邻居说有个“奇怪的女人”曾在这一带出现，时间和金发男人失踪案对得上。
+  - id: c_uniform
+    title: 改版的上尉制服
+    where: manor_hall
+    feature: 艾伯哈德穿着改版制服迎接调查员
+    points_to: [k_eberhard]
+    text: 艾伯哈德穿着一身改过的保安处制服，保留了上尉肩章和勋章，下身是吊带袜和黑丝。被问起肩章勋章，他暧昧地说是情人分别前送的；追问情人是谁，他含糊其辞，反倒试探调查员愿不愿意当下一个。
+  - id: c_medal_match
+    title: 勋章对得上
+    where: sd_office
+    feature: 档案室
+    requires: [c_uniform, c_lambert_file]
+    points_to: [k_eberhard]
+    text: 兰伯特档案里的勋章与艾伯哈德制服上的一致，不过都是常见款。
+  - id: c_gun_serial
+    title: 配枪的来历
+    where: sd_office
+    feature: 电话
+    points_to: [k_guns]
+    text: 柏林回复：这把枪是回收后重新分配的，前主人是集中营军官谢尔曼，已经死了。
+  - id: c_scherman_autopsy
+    title: 谢尔曼的尸检
+    where: sd_office
+    feature: 档案室
+    requires: [c_gun_serial]
+    points_to: [k_guns]
+    text: 谢尔曼的资料和尸检记录显示，他的死状和老董事长的棺材、沃德蒙特一样是烧死的；资料里有他任职的集中营地点。
+  - id: c_camp_report
+    title: 集中营工作日报
+    where: sd_office
+    feature: 电话
+    requires: [c_scherman_autopsy]
+    points_to: [k_guns]
+    text: 谢尔曼死亡当天的集中营工作日报记载：尸体掩埋地点意外失火，原因不明。
+  - id: c_supply_records
+    title: 供应链记录
+    where: works_office
+    feature: 档案室的供应链记录
+    points_to: [k_guns]
+    text: 记录里有这批武器的生产和交付时间。顺着对接人追查全部去向是一场行政地狱。
+  - id: c_pattern_reason
+    title: 花纹的说法
+    where: works_office
+    feature: 向员工打听
+    npc: works_staff
+    points_to: [k_guns]
+    text: 员工说握柄上的花纹是为了防滑和美观，是总工程师塞格利提出来的。
+  - id: c_stamp_lines
+    title: 冲压模具
+    where: segli_office
+    feature: 塞格利领着参观车间
+    npc: segli
+    core: true
+    points_to: [k_guns]
+    text: 塞格利坦诚地说，许多产线（包括坦克）都装了刻这种花纹的冲压模具，当作钢铁厂的特色标识。
+  - id: c_farm_history
+    title: 艾伯哈德的农场
+    where: manor_hall
+    feature: 打听艾伯哈德的异常行为
+    npc: servants
+    points_to: [k_eberhard]
+    text: 三年前艾伯哈德要钱买地开农场，不到一年就卖了。农场在埃森郊区，仆人知道现在的农场主是谁。
+  - id: c_farm_owner
+    title: 现农场主的话
+    where: farm
+    feature: 向农场主问话
+    npc: farmer
+    points_to: [k_eberhard]
+    text: 农场主说收购时对方很爽快，农场里只有两个金属板搭的结实畜棚和一个大炉子，特别干净。
+  - id: c_farm_neighbors
+    title: 农户的话
+    where: farm
+    feature: 向周边农户问话
+    npc: farm_neighbor
+    points_to: [k_eberhard]
+    text: 农户说那家人神出鬼没，只见过往里运牲畜，没见过他们卖农产品。
+  - id: c_transcript
+    title: 拉丁语打字转录本
+    where: segli_office
+    feature: 书柜里的打字稿与图册
+    handout: h_transcript
+    points_to: [k_guns]
+    text: 一沓厚厚的、装订简陋的拉丁语打字转录本，没有封面，有频繁翻看的痕迹，满是德语批注；还有一本塞格利手绘的图册，画着各种装置和符号，每张图都标了页码。
+  - id: c_spell_meaning
+    title: 枪上的两条咒文
+    where: segli_office
+    feature: 书柜里的打字稿与图册
+    requires: [c_transcript]
+    check: {skill: 图书馆使用}
+    core: true
+    points_to: [k_guns]
+    text: 花几个小时研究转录本和图册后，调查员看懂了枪上的两条咒文：一条吸取被命中者的生命力，另一条会把使用者和被命中者都烧死。
+  - id: c_wardrobe
+    title: 艾伯哈德的衣柜
+    where: eberhard_room
+    feature: 衣柜
+    points_to: [k_eberhard]
+    text: 衣柜里是黑丝、紧身胸衣、高跟皮靴、各种假发、化妆品和假胸，其中有和失踪案、自燃案目击证人描述相符的衣服。
+  - id: c_safe_key
+    title: 银行保险柜
+    where: manor_hall
+    feature: 坚持向麦克斯纳打探艾伯哈德的秘密
+    npc: meisner
+    points_to: [k_eberhard]
+    text: 麦克斯纳吓得半死，想起艾伯哈德在银行有个保险柜——这很少见，他平时的财产都交给管家管。钥匙在艾伯哈德房间里。
+  - id: c_key_found
+    title: 保险柜钥匙
+    where: eberhard_room
+    feature: 梳妆台
+    requires: [c_safe_key]
+    text: 艾伯哈德房间里有一把银行保险柜的钥匙。
+  - id: c_vault
+    title: 保险柜里的东西
+    where: bank
+    feature: 保险柜库房
+    requires: [c_safe_key]
+    core: true
+    points_to: [k_guns, k_eberhard]
+    text: 保险柜里是《马克西米利安的炼金指南》的拉丁文原件，和一把瓦尔特 PPK；握柄上的咒文和调查员的配枪一模一样，不过手工雕刻的痕迹很明显。
+  - id: c_last_deposit
+    title: 上次存东西
+    where: bank
+    feature: 向职员问话
+    npc: bank_clerk
+    points_to: [k_eberhard]
+    text: 职员说艾伯哈德上一次来存东西是 6 个月前。
+  - id: c_lab_rumor
+    title: 地下的实验室
+    where: works_office
+    feature: 向员工打听
+    npc: works_staff
+    core: true
+    points_to: [k_lab]
+    text: 员工说塞格利在地下层有个实验室，只有他和艾伯哈德有钥匙；有人记得前年艾伯哈德帮塞格利“搬了一批设备”。
+  - id: c_welded_lock
+    title: 焊死的锁
+    where: lab_corridor
+    feature: 沉重的铁门
+    points_to: [k_lab]
+    text: 铁门的锁是焊死的，这扇门根本没法用钥匙打开。
+  - id: c_lab_heads
+    title: 柜子里的头罐
+    where: lab
+    feature: 存放赤钢的柜子
+    requires: ["flag:finale_reached"]
+    points_to: [k_eberhard, k_lab]
+    text: 一个柜子里放着银白色的金属；另一个柜子里是三个泡在福尔马林里的金发男人头颅，和一块块烧炼出来的金属放在一起，贴着花体字写的姓名标签，其中一个是兰伯特。
+
+handouts:
+  - id: h_transcript
+    title: 打字转录本里的德语批注
+    kind: 典籍抄本
+    paper: book
+    text: |
+      重点在于精炼金属和制造足够深度或面积的伤口，必须有明显流血。似乎只对哺乳动物生效，用鸡进行的测试全部是失败的。幸运的是，克图格亚可以判定子弹是枪支的一部分，这让事情简单许多，不然我们就只能在子弹上下功夫了。枪托造成的钝击伤害同样有效，但转化效率非常一般。以武器为媒介释放的可造成物理伤害的法术都是有效的。
+      -A.H.
+
+      必须满足的条件是哺乳动物的血肉与骨头接触。血液因该法术燃烧的过程中可使浸泡在其中的骨头转化为至多与所燃烧的血液等质量的赤钢，因此，若骨头的质量大于血液，余下的骨头将成为杂质。我们推测原文如此描述的原因是，以当时的技术水平难以对产物提纯，也无法使赤钢塑形。克图格亚的火焰温度可满足加工条件，但成本过高，因此不得不在转化前将骨头加工为所需形状并使血液过量。
+      该法术在人血人骨和在其他哺乳动物上得到的材料并没有本质的差别，且在实用角度上，将赤钢用于工业生产的效益极低，即便以常见牲畜为原料进行提炼也难以跟上产量。更何况对于武器而言，常规钢材料的强度已经足够优秀了。但这么和艾比说他会不高兴，他觉得这样太不艺术太不像话。既然艾比喜欢，那又有什么关系呢？
+      -S.P.
+
+      我们需要发展指挥层的好先生来说服亲爱的元首回收战场上的尸体，我们的英雄，还有那些混血渣滓。可是该怎么办呢，难道要我去勾引政府那群老东西吗？如果能钓到好男人也可以。
+      -A.H.
+
+      是的，马克西米利安先生在 15 世纪时便实现了类似于现代电焊的技术手段，虽然现在这条法术对于现在来说就价值有限了。
+      -S.P.

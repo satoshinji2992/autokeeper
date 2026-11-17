@@ -1,0 +1,431 @@
+items:
+  - {id: lantern, name: 沉重的提灯, description: 一盏沉甸甸的煤油提灯, where: ledbetter_house, owner: may, art: lantern}
+  - {id: hunting_knife, name: 狩猎小刀, description: 积着灰的狩猎小刀，杂货店里唯一能买到的武器（伤害 1D4+DB）, where: general_store, owner: store_keeper}
+  - {id: derby_poems, name: 《阿撒托斯及其他》, description: 黑封面的诗集，爱德华·德比著，1919 年波士顿出版, where: hidden_alcove, hidden: true}
+  - {id: fire_tome, name: 暗红三角书套的典籍, description: 一部厚重的旧书，书套上有暗红色的三角形，太大，藏不到身上, where: hidden_alcove, hidden: true}
+  - {id: bicycle, name: 自行车, description: 靠在杂货店墙边的一辆自行车, where: general_store, status: D3 晚上才无人看管}
+  - {id: iron_bar, name: 弯曲的木柱, description: 教堂里撑着屋顶的一根弯曲木柱，已经朽坏, where: old_church, important: false}
+  - {id: pitchfork, name: 干草叉, description: 村口守卫手里的干草叉, where: east_road, owner: village_guards, important: false}
+
+clues:
+  - id: c_village_overview
+    title: 烬头村村貌
+    where: central_street
+    feature: 通向灯塔的大街
+    handout: h_village_map
+    points_to: [k_beacon]
+    text: 五分钟就能走完的小村，四面悬崖。中央大街笔直地指向东北角三条路交汇处的黑色金属建筑；西南草地上有坍圮的教堂和悬崖边的墓地；西边有盘山路，南边的路转向东下坡。
+  - id: c_silas_stay
+    title: 西拉斯的安排
+    where: village_edge
+    feature: 熄火的长途车发动机舱
+    points_to: [k_silas]
+    text: 西拉斯说车得等气缸凉下来，今晚只能在这里过夜；梅·莱德贝特有空房，顺着巷子右转左边第一间；让调查员明早八点回来找他。
+  - id: c_breakdown_trick
+    title: 故障像是假的
+    where: village_edge
+    feature: 熄火的长途车发动机舱
+    check: {skill: 汽车驾驶}
+    points_to: [k_silas]
+    text: 那种噪声像是选错了档位或离合器出了问题，老司机不会犯这种错。
+  - id: c_silas_acting
+    title: 西拉斯在演戏
+    where: village_edge
+    feature: 熄火的长途车发动机舱
+    check: {skill: 心理学, difficulty: 困难}
+    points_to: [k_silas]
+    text: 西拉斯的焦急是装出来的，这次故障可能是假的。
+  - id: c_may_silas
+    title: 梅谈西拉斯
+    where: ledbetter_house
+    feature: 厨房餐桌
+    npc: may
+    points_to: [k_silas]
+    text: 梅说西拉斯开车太快，撞死过一匹母马；他是村子唯一的对外联系，同一条路跑了十五年。
+  - id: c_may_festival
+    title: 梅谈节日
+    where: ledbetter_house
+    feature: 厨房餐桌
+    npc: may
+    core: true
+    points_to: [k_beacon]
+    text: 梅说节日在后天晚上：村里有座灯塔，每年火把游行，点燃悬崖上的灯塔，保佑全年平安。
+  - id: c_may_life
+    title: 梅谈生活
+    where: ledbetter_house
+    feature: 厨房餐桌
+    npc: may
+    points_to: [k_may]
+    text: 梅说自己是寡妇，有点积蓄，欢迎旅客，说自己不可能再嫁；“我们不排斥任何人，要刨掉的是那些自己选择离开群体的人。”
+  - id: c_may_troy
+    title: 西拉斯的朋友
+    where: ledbetter_house
+    feature: 厨房餐桌
+    npc: may
+    points_to: [k_silas]
+    text: 梅说西拉斯认识村那头的特洛伊，两人是欢喜冤家，昨晚他可能在特洛伊家过夜。
+  - id: c_may_drug_claim
+    title: 梅对粉末的说法
+    where: guest_room
+    feature: 壁炉
+    check: {skill: 恐吓}
+    requires: [flag:powder_burned]
+    points_to: [k_may]
+    text: 被堵住时梅说那是帮助睡眠的东西，“明天对于你很重要”，“我还要照顾女儿，我没有丈夫”。
+  - id: c_ruth_warning
+    title: 露丝的耳语
+    where: central_street
+    feature: 跟在梅身边
+    npc: ruth
+    core: true
+    points_to: [k_trap]
+    text: 露丝小声说：“节日开始之前就走吧。走吧！”
+  - id: c_ruth_fire
+    title: 露丝说节日
+    where: central_street
+    feature: 跟在梅身边
+    npc: ruth
+    points_to: [k_beacon]
+    text: 露丝说节日很可怕，又亮又热，到处都是火。
+  - id: c_ruth_truth
+    title: 露丝的实话
+    where: ledbetter_house
+    feature: 门缝后
+    npc: ruth
+    requires: [flag:ruth_alone]
+    core: true
+    points_to: [k_trap]
+    text: “是明天，每年都会有的。他们带走了我爸。如果他们得手了，也会带走你的。所有人。每个人。你刚一来他们就在看着你。你被盯上了。过几年等我再大一些……他们也会带走我。”
+  - id: c_store_transport
+    title: 杂货店的交通消息
+    where: general_store
+    feature: 柜台
+    npc: store_keeper
+    points_to: [k_trap]
+    text: 每星期只有两班长途车；隔周星期二有卡车送货，下一趟要下星期才来。
+  - id: c_board
+    title: 布告板
+    where: village_hall
+    feature: 布告板
+    points_to: [k_beacon]
+    text: 大人那边贴着日用品广告和泛黄的电报价目表；孩子那边是托儿所的时间和图画：焰火、约瑟的故事，还有一张倒吊着的画，画着一只巨鸟攻击烬头村。
+  - id: c_window_floor
+    title: 砖窗下的地板
+    where: village_hall
+    feature: 被砖砌死的窗下地板
+    check: {skill: 侦查}
+    points_to: [k_hidden_room]
+    text: 被砖砌死的窗下，地板比大厅中央的新，窗框也是最近才换的，像是被雨水泡坏过。
+  - id: c_telegraph
+    title: 电报与长途车
+    where: private_room
+    feature: 电报机
+    npc: winters
+    points_to: [k_trap]
+    text: 文特斯说电报线坏了两周，已经报修，希望后天有人来修；长途车大概三天后才来，往西走；维修队来了可以让他们捎调查员一程，给一两美元车马费。
+  - id: c_winters_trade
+    title: 文特斯谈村子
+    where: private_room
+    feature: 文史书架
+    npc: winters
+    points_to: [k_beacon]
+    text: 文特斯说住在这里是一种交易；他想要一座真正的图书馆，城里人太多；这里原来由他父亲维护，现在落到他身上。“今晚夕阳落山时出去看看……我们正处在群星之路的中途。”
+  - id: c_local_history
+    title: 本地历史
+    where: private_room
+    feature: 文史书架
+    points_to: [k_fire]
+    text: 阿布纳基人曾把这座山头当作祭祀场所，他们被称为“黎明之地的人民”，每年树叶变成日落最浓的颜色时上山举行仪式；没有可信证据表明那是太阳崇拜。1746 年乔治王战争中英军在此屠杀，土著被驱离；独立战争后不久才有人定居。
+  - id: c_manuscript
+    title: 阿尼奥洛夫斯基博士手稿
+    where: private_room
+    feature: 阿尼奥洛夫斯基博士手稿
+    handout: h_manuscript
+    points_to: [k_beacon]
+    text: 文特斯父亲的熟人阿尼奥洛夫斯基博士的手稿，把烬头村的节日和凯尔特移民的原始节令（五朔节、萨温节、圣布里吉德节、秋收节）相比，引文提到与烬头村“校准”有关；写到第 28 页末戛然而止，后面的页丢了。
+  - id: c_astronomy
+    title: 北落师门
+    where: private_room
+    feature: 天文书
+    handout: h_fomalhaut
+    points_to: [k_fire]
+    text: 一本天文书里夹着宣传火星生命的传单。文特斯说这几天能看到北落师门：从飞马座往右下方找，贴近地平线。
+  - id: c_walpole
+    title: 黏在墙上的书
+    where: private_room
+    feature: 墙上黏着的书
+    check: {skill: 侦查}
+    points_to: [k_hidden_room]
+    text: 三卷本的《沃波尔简明安第斯人语法》黏在一起，贴在墙上，取不下来。
+  - id: c_area_map
+    title: 周边地图
+    where: private_room
+    feature: 书间夹着的地图
+    points_to: [k_trap]
+    text: 两本书之间夹着一张烬头村周边的详尽地图：森林、等高线、东西两条盘山路，方圆之内没有别的村庄。
+  - id: c_secret_shelf
+    title: 书架机关
+    where: private_room
+    feature: 靠砖窗的书架
+    check: {skill: 侦查}
+    points_to: [k_hidden_room]
+    text: 这排书架正好挡住被砖砌死的窗；把一只书套向左拉，一段书架就敞开了。
+  - id: c_fire_tome
+    title: 火之卷
+    where: hidden_alcove
+    feature: 暗红三角书套的典籍
+    check: {skill: 图书馆使用}
+    handout: h_fire_tome
+    points_to: [k_fire]
+    text: 一套七卷的元素之书（地、水、风、火、盐、硫、汞）中的火之卷，满是天文图表、炼金符号和但丁写天罚的诗句。书末是火焰祭祀，记着“召唤天之火”“号令天之火”两个仪式，时间只够抄记其中一篇。
+  - id: c_derby_poems
+    title: 德比诗集
+    where: hidden_alcove
+    feature: 黑封面诗集
+    points_to: []
+    text: 黑封面的诗集《阿撒托斯及其他》，爱德华·德比著，1919 年波士顿出版，可以带在身上；读懂要花一个星期。
+  - id: c_alcove_books
+    title: 壁龛里的旧书
+    where: hidden_alcove
+    feature: 手写抄本
+    points_to: [k_hidden_room]
+    text: 两三本看不懂文字的书、一本埃及符号写的书、一本细长的手写《翡翠石板》抄本。
+  - id: c_church_horses
+    title: 教堂里的马
+    where: old_church
+    feature: 教堂里的地面
+    check: {skill: 骑术, bonus: 1}
+    points_to: [k_trap]
+    text: 教堂里有马的气味、蹄印和干马粪，不久前这里被当作马棚。村外的低地里却看不到一匹马。
+  - id: c_church_street
+    title: 正对灯塔的大街
+    where: old_church
+    feature: 墓碑和杂草
+    points_to: [k_beacon]
+    text: 从教堂望去，中央大街笔直地指向灯塔，看上去不是巧合。
+  - id: c_beacon_lighting
+    title: 老绅士说灯塔
+    where: beacon
+    feature: 熟铁灯塔与高台
+    npc: old_gentleman
+    points_to: [k_beacon]
+    text: 老绅士说灯塔明天晚上点亮，二十里外都看得见。
+  - id: c_beacon_houses
+    title: 村子从灯塔向西扩张
+    where: beacon
+    feature: 四周房屋
+    check: {skill: 侦查}
+    points_to: [k_fire]
+    text: 木屋集中在村西和西南；靠近灯塔的村东、东北多是深色的砖房和土房。村子像是从灯塔向西扩张出去的。
+  - id: c_beacon_prep
+    title: 搭建篝火
+    where: beacon
+    feature: 熟铁灯塔与高台
+    check: {skill: 敏捷}
+    points_to: [k_trap]
+    text: 村民成捆地往灯塔搬木柴，两个人在上层平台搭起三角形的木架；他们的神情顺从、冷漠，有的带着恐惧。
+  - id: c_beacon_line
+    title: 夏至的晨光
+    where: hilltop
+    feature: 回望烬头村
+    check: {skill: 考古学}
+    points_to: [k_beacon]
+    text: 让人想起巨石阵：中央大街的走向，也许能让夏至的晨光照过金属建筑，投在大街正中（这只是调查员的推测）。
+  - id: c_naturalist
+    title: 林中的呼啸
+    where: forest_road
+    feature: 北面的呼啸声
+    check: {skill: 博物学}
+    points_to: []
+    text: 那是郊狼的嗥叫，这一带很常见，它们会躲着人。
+  - id: c_craftsmen_nervous
+    title: 工匠们的不安
+    where: workshops
+    feature: 关着门的工坊
+    npc: craftsman
+    points_to: [k_trap]
+    text: 有一间工坊关着门，调查员走近时，工匠们紧张不安。
+  - id: c_corpses
+    title: 红布下的尸体
+    where: locked_workshop
+    feature: 红布下的三具人体
+    sanity: 0/1D2
+    core: true
+    points_to: [k_trap]
+    text: 三具枯瘦、用绷带裹着的防腐尸体，脚趾上挂着标签：本杰明·克拉默 1927.1.19；亚伯拉罕·霍林斯沃思 1927.4.22；玛利安·菲普斯 1927.8.6。
+  - id: c_slab
+    title: 带坡度的石板
+    where: locked_workshop
+    feature: 带坡度的石板
+    points_to: [k_trap]
+    text: 屋子正中垫高的石板略带坡度，下方的豁口里放着一个盆样的东西。
+  - id: c_craftsman_confession
+    title: 工匠的供词
+    where: locked_workshop
+    feature: 被打倒在地
+    requires: [flag:craftsman_beaten]
+    points_to: [k_trap]
+    text: 工匠说那些只是村民，自然死亡，节日要用。
+  - id: c_trapdoor
+    title: 床下的活板门
+    where: may_bedroom
+    feature: 床下地毯
+    check: {skill: 侦查}
+    points_to: [k_may]
+    text: 地板上有床被拖动过的痕迹；床下地毯掀开，是一扇通往地窖的活板门。
+  - id: c_wedding_photo
+    title: 结婚照
+    where: may_bedroom
+    feature: 抽屉
+    points_to: [k_may]
+    text: 梅的抽屉里有一张结婚照，她身边的丈夫瘦高，长方脸。
+  - id: c_luggage
+    title: 地窖里的行李
+    where: cellar
+    feature: 旅行箱和公文包
+    core: true
+    points_to: [k_trap, k_may]
+    text: 约二十个旅行箱和公文包，挂着八九个不同名字的行李标签。
+  - id: c_powder
+    title: 黑色粉末
+    where: guest_room
+    feature: 壁炉
+    check: {skill: 科学(植物学), difficulty: 困难}
+    requires: [flag:powder_burned]
+    points_to: [k_may]
+    text: 壁炉里顶针大小的一撮黑色粉末，烟气令人陶醉；里面有莨菪，能催眠、致幻。
+  - id: c_watcher_face
+    title: 黑影的脸
+    where: central_street
+    feature: 尘土院子
+    check: {skill: 追踪}
+    requires: [flag:watcher_seen]
+    sanity: 0/1D2
+    points_to: [k_trap]
+    text: 黑影穿过尘土院子和铁栅栏，被逼到悬崖边；它的脸有哪里不对劲。随后它跳下了悬崖。
+  - id: c_hidden_ladder
+    title: 崖壁上的梯子
+    where: central_street
+    feature: 尘土院子
+    check: {skill: 侦查}
+    requires: [c_watcher_face]
+    points_to: [k_escape]
+    text: 崖壁上突出的岩石和人工凿出的豁口连成一道隐蔽的梯子，昨晚的黑影就是从这里下去的；崖下右手边稍远处有一间土褐色的小棚屋。
+  - id: c_cave_entrance
+    title: 岩缝
+    where: east_road
+    feature: 两块岩石间的窄道
+    check: {skill: 侦查, difficulty: 困难}
+    points_to: [k_fire]
+    text: 两块岩石之间有一条窄道，通向悬崖下的一个天然小山洞。
+  - id: c_arbogast_face
+    title: 头巾下的脸
+    where: arbogast_cave
+    feature: 洞里的阴影
+    npc: arbogast
+    sanity: 0/1
+    points_to: [k_fire]
+    text: 他的下颌到右眼眶苍白衰老；左半边脸全是伤疤，眼皮覆着熔化的血肉，半边鼻子被扯开。
+  - id: c_arbogast_story
+    title: 烬头村四十年前就死了
+    where: arbogast_cave
+    feature: 洞里的阴影
+    npc: arbogast
+    core: true
+    points_to: [k_fire]
+    text: “烬头村四十年以前就死了。被火焰毁灭，被星星吞噬……阿布纳基人知道。火焰被送走了。必须的牺牲推迟了一年又一年。上面那些家伙觉得自己是村庄的拯救者，妄想打败旧日支配者！Iä！Cthugha！”
+  - id: c_abenaki
+    title: 阿布纳基人
+    where: arbogast_cave
+    feature: 洞里的阴影
+    npc: arbogast
+    points_to: [k_fire]
+    text: 阿布纳基人了解、爱护这片土地，懂得空气、大地、水流和火焰；“我们来了，结果了他们……现在我们的也要结束了。”
+  - id: c_old_ones
+    title: 旧日支配者
+    where: arbogast_cave
+    feature: 洞里的阴影
+    npc: arbogast
+    mythos: 2
+    points_to: [k_fire]
+    text: 风行者、克苏鲁、伏行的混沌……“在这里你可以离活火焰最近。它比地球上所有活物都早，开天辟地时点燃了虚空。”
+  - id: c_villagers_truth
+    title: 村民的父母知道真相
+    where: arbogast_cave
+    feature: 洞里的阴影
+    npc: arbogast
+    points_to: [k_fire]
+    text: “他们的父母知道真相……现在的人像小孩一样狂妄自大。他们说我要么滚要么死，所以我把古老的咒语也带走了。站得越高，摔得越狠。”
+  - id: c_appointment
+    title: 九点钟的约定
+    where: arbogast_cave
+    feature: 洞里的阴影
+    npc: arbogast
+    points_to: [k_fire]
+    text: “你有以前那些人没有过的东西……今天晚上再来找我，九点钟，在另一边的坟地。不要被人跟踪……别想着逃走。”
+  - id: c_control_ritual
+    title: 控制的仪式
+    where: school_alcove
+    feature: 崖边
+    requires: [flag:arbogast_night_met]
+    core: true
+    points_to: [k_fire]
+    text: “灯塔明天就会复活。以前我是中转者，也是解密者，文特斯这蠢材用花言巧语改变了一切。来烬头村的东西不理睬语言。那些白痴以为是人祭！这是控制的仪式。他们只懂咒语，不懂召唤的是什么力量。”他可以教调查员让这一切终结，“把这山丘还给大地，送回四十年前造访过这里的死亡”。
+  - id: c_chant
+    title: 阿博加斯特的咒语
+    where: school_alcove
+    feature: 崖边
+    requires: [flag:arbogast_night_met]
+    points_to: [k_fire]
+    text: 咒语的核心要连念三遍：“Ph'nglui mglw'nafh Cthugha Fomalhaut n'ghaghaa naf 'l thagn! Iä! Cthugha!”他说：“只要你在这地上还有活路，就千万不要念出它。它会让你变成和活——”
+  - id: c_school_scorch
+    title: 草地上的焦痕
+    where: school_alcove
+    feature: 草地上的黑斑
+    requires: [flag:arbogast_dead]
+    points_to: [k_trap]
+    text: 遇袭的地方只剩凝固发黏的斑块和草丛里熏黑的线条，没有尸体。
+
+handouts:
+  - id: h_bus_ticket
+    title: 长途车票
+    kind: 车票
+    paper: card
+    text: 拉赫曼与科斯特洛长途车行，普利茅斯至奥西皮。
+    images: [bus_ticket]
+  - id: h_village_map
+    title: 烬头村地图
+    kind: 地图
+    paper: card
+    text: 烬头村的布局：灯塔、村会堂、工坊、学校、杂货店、莱德贝特住宿和几条道路。
+    images: [village_map]
+  - id: h_fomalhaut
+    title: 北落师门星图
+    kind: 星图
+    paper: card
+    text: 从飞马座往右下方找，贴近地平线的那颗亮星就是北落师门。
+    images: [fomalhaut_chart]
+  - id: h_manuscript
+    title: 阿尼奥洛夫斯基博士手稿（残）
+    kind: 手稿
+    paper: diary
+    text: |
+      论及凯尔特移民的原始节令——五朔节、萨温节、圣布里吉德节、秋收节——与烬头村之“校准”的关联……
+      （第 28 页末句子戛然而止，后面的页丢失了。）
+  - id: h_fire_tome
+    title: 火之卷·书末注释
+    kind: 典籍
+    paper: book
+    text: |
+      召唤天之火：唯于群星归位之时可成；须依图表推算其日。
+      号令天之火：当其热中取水之时，万不可直视其火。欲行其道则务须身心俱入，以免自误于审判之中。
+
+sketches:
+  - id: sk_beacon
+    ask: 把你看到的那座黑色铁塔画出来
+    target: 一座熟铁灯塔，顶上是巨大的弧形平台，几根撑架像蛇一样弯曲着汇向中心，下面堆着成捆的木柴
+    threshold: 0.5
+  - id: sk_mark
+    ask: 把村民脸上的妆画出来
+    target: 整张脸涂黑，左眼周围画着一个红色三角形
+    threshold: 0.5

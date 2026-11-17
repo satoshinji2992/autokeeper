@@ -1,0 +1,954 @@
+locations:
+  - id: hometown_stop
+    name: 家乡汽车站
+    art: hometown_stop
+    aliases: [奥斯本药店, 普利茅斯车站]
+    public: true
+    read_aloud: 奥斯本药店门口的车站，对面是一家烟草店。山坡顶上是你看厌了的教堂尖顶。灰色的小长途车停在路边，车顶有行李架。
+    keeper: |
+      §1/§263/§8/§23/§38/§233：司机（西拉斯）从烟草店回来，搓着烟卷问“去哪儿？”，看过车票后说“行李架在上边”。调查员要把箱子搬上车顶：体型 40 的由司机帮忙（“小不点，包可够大的”），体型更高的自己举上去。司机弹掉烟卷上车，调查员是唯一的乘客。
+      奥西皮之后的路线：罗切斯特、朴次茅斯，再沿海岸到纽伯里波特，最后到阿卡姆；调查员也许买得起部分火车票。原作这几段同时引导建卡。
+    features: [随身的车票, 车顶行李架, 烟草店]
+    scene_root: true
+    outdoors: true
+    ground: street
+    views:
+    - key: stop_roof_rack
+      label: 车顶行李架
+      features:
+      - 车顶行李架
+      prompt: 灰色小长途车的车顶,铁条行李架高高架在车身上,一只沉重的旧皮箱靠在车尾,路边尘土,烟草店的招牌在背景里
+  - id: coach
+    name: 长途车上
+    art: bus
+    read_aloud: 车厢窄小，座椅硬邦邦的，发动机一路咳嗽。窗外是溪流、白山和果园，偶尔有一头白尾鹿从林边抬起头。
+    keeper: |
+      §128/§134：一路窒闷、晕车，中途有体格粗壮的女人上下车。§71：司机自称西拉斯，没听说过阿卡姆，只去过一次波士顿；问起调查员的职业时各有不同反应（文物学家§102、医生§226“医生，哈？人们总是需要这些家伙”、记者§239“写文的？给报纸？”、私家侦探§249 眯眼不语、教授§265“我小时候就把书读够了”）。
+      §261/§59 拖拉机事件见 events。傍晚到烬头村见 e_breakdown。调查员没上车，西拉斯照常开走，模组就此无从展开，由守秘人按原作把调查员带回车上的开局。
+    features: [司机座位, 窗外风景]
+    scene_root: true
+    outdoors: false
+    ground: building
+    views:
+    - key: coach_window
+      label: 窗外风景
+      features:
+      - 窗外风景
+      prompt: 长途车窗外掠过的深秋景色:溪流、白色山脉的轮廓、黄红相间的果园,林边一头白尾鹿抬起头,车窗玻璃有灰尘和震动的痕迹
+  - id: village_edge
+    name: 村口空地
+    art: village_edge
+    aliases: [长途车停车处, 红石住宅旁]
+    public: true
+    read_aloud: 坡顶的小村，第一座粗糙的红石低矮住宅旁有一片空地，长途车就停在路边。四周的建筑阴郁沉默，小巷里没有灯。
+    keeper: |
+      §144：车在这里熄火，西拉斯打开发动机舱查看。调查员只能选一项、只试一次：汽车驾驶（常规）成功看出噪声像选错档或离合问题，老司机不会搞错，是诡计（§174，打勾）；困难心理学成功看出西拉斯在演戏（§162，打勾）；失败或不试则直接听他解释（§194）。
+      §194：西拉斯说可能是油压，也可能摔坏了，得等两个气缸凉下来，今晚只能在这儿过夜：“这里叫烬头村，别的村子要走好几里，我每星期来两次。梅·莱德贝特有空房，顺着这条巷子右转左边第一间。明天早上八点回来找我。”问他住哪（§251）：村里有熟人，有地方睡、管早饭；调查员取下行李。当面质疑故障（§257）：西拉斯大怒，扯下包裹摔在调查员脚边，走进黑暗。
+      §192：D2 早上调查员带行李来时（还早二十分钟），长途车已经不见；过路村民说“他天刚亮就走了，三四天后才回来，梅·莱德贝特那有房间”。§212：知道崖壁梯子也来不及在开车前用。
+    features: [熄火的长途车发动机舱, 停车的空地]
+    outdoors: true
+    ground: street
+    looks:
+    - when: at:silas:village_edge
+      change: 空地上停着一辆灰色小长途车，发动机舱盖掀开，车头前扔着一块擦手的油布
+    views:
+    - key: edge_engine
+      label: 掀开的发动机舱
+      features:
+      - 熄火的长途车发动机舱
+      prompt: 傍晚的光里,长途车的引擎盖掀开,发动机舱里油污斑斑,黑色的机器静止着,旁边是第一座粗糙红石头砌成的低矮住宅
+  - id: central_street
+    name: 中央大街
+    art: central_street
+    aliases: [锡尔伯里街, 大街, 村子]
+    public: true
+    read_aloud: 烬头村五分钟就能走完。中央大街笔直地指向村子东北角三条路交汇处那座黑色的金属建筑。锡尔伯里街从这里分出去，西边是西盘山路，南边的路转向东下坡，四面都是悬崖。
+    keeper: |
+      §6 村貌：西南草地上有坍圮的教堂和悬崖边的墓地；东北角是灯塔。§75：夜里散步时梅会借给调查员一盏沉重的提灯；窄巷右边是锡尔伯里街，左边篱笆桩后面是黑暗的悬崖。
+      §86（D1 夜）：身后二十码有个漆黑的身影，被发现后冲进小道。回梅家（§100）或直面（§121）：它退进两屋之间的小巷，追踪检定成功见线索 c_watcher_face，失败它在尘土院子里悄无声息地消失（§130）。
+      §131（D2 夜看星空）：一个漆黑身影贴在房后，一块石头飞过调查员身后，另一个黑影在小巷里盯着；直面也追不上（§163）。
+      §3（D2 中午）：调查员饿了，梅带着露丝在街上碰见他，邀他回家吃饭。
+      §98：D3 暗中调查过三处后，光头缺一只耳朵的村民、机警的少年、凶神恶煞的中年主妇和扛棍的男人四人逐渐围拢。绕建筑甩掉（§158 潜行，成功打勾→试出村§7，失败§170被扳倒制服）；直接逃（§164）：东盘山路口有四个守卫，逃进教堂。
+    features: [通向灯塔的大街, 锡尔伯里街, 两屋之间的小巷, 尘土院子]
+    scene_root: true
+    outdoors: true
+    ground: street
+    views:
+    - key: street_to_beacon
+      label: 笔直指向灯塔的大街
+      features:
+      - 通向灯塔的大街
+      prompt: 一条笔直的土路穿过阴郁的低矮房屋,尽头是村东北角一座漆黑的熟铁建筑,孤零零直指天空
+    looks:
+    - when: flag:sign_fs_street_windows_2
+      change: 大街上多了许多抱着柴捆的村民，排成一线，朝大街尽头走去。
+  - id: ledbetter_house
+    name: 莱德贝特家
+    art: ledbetter_house
+    aliases: [梅家, 莱德贝特住宿, 住宿]
+    public: true
+    read_aloud: 一座朴素的石板色房顶小楼，房前挂着“莱德贝特”的名牌，下面一块洁净的铜牌写着“住宿”。屋里厨房兼作起居室，炉火上烧着水。
+    keeper: |
+      §4/§267：梅爱尔兰口音、卷发、穿粗糙便服，收留调查员过夜，请他喝茶。可谈西拉斯（§14）、节日（§21）、她的生活（§31 取悦检定：成功§39，失败§51 她转而像导游一样介绍村子）。§63：撞门声，露丝在偷听，“很高兴见到你”；露丝今夏十岁，梅说她是“既快乐又痛苦的孩子”，跟梅睡一间。
+      §138（D2 晚洗碗时）：问西拉斯在村里的朋友，梅说他认识村那头的特洛伊，两人是欢喜冤家，昨晚可能在特洛伊家过夜。说服梅出门去问：按调查员的方式选取悦、说服或话术之一，成功梅出门（设 ruth_alone，§145），失败梅说明早再找、要管教露丝（§151）。
+      §64（早晨）：厨房空着，有面包鸡蛋，梅留纸条说带露丝出门几个小时。§166：D2 早餐后七点半付钱打点行李；§218：发现车已走，梅在洗衣服，让调查员寄存行李，说村里没人有汽车，可以问村会堂的文特斯或工匠（工坊在锡尔伯里街左边第一个门），“不管你有没有钱，我都不会让你睡在马路上的。”
+      §107：知道崖壁梯子的，可在独处时顺小巷溜到屋后，从二十英尺高的悬崖爬下去（通往 cliff_foot）。
+      §13：在林中昏倒的调查员被农夫后半夜在路上发现，送回这里，醒来回复 1 点生命。
+    features: [厨房餐桌, 壁炉, 屋后的小巷, 屋后北面崖边]
+    scene_root: true
+    outdoors: false
+    ground: building
+    views:
+    - key: kitchen_table
+      label: 厨房餐桌
+      features:
+      - 厨房餐桌
+      prompt: 低矮厨房里的木餐桌,桌上有茶壶和杯子,旁边炉火上烧着水,小窗外望得见群山
+  - id: guest_room
+    name: 客房
+    within: ledbetter_house
+    art: guest_room
+    read_aloud: 客房很冷，一张床、一个壁炉、一扇门。门没有锁闩。
+    keeper: |
+      §154（D1 夜）：梦见炉火蔓延，醒来壁炉是冷的；受过伤回 1 点生命。§58：被脚步声吵醒，受过伤回 1 点生命。
+      §157（D2 夜）：客房像牢房。睡下（§224）：又梦见壁炉里悬浮的、没有燃料的火焰，蓝黄红紫，火舌刷过皮肉→§26 醒来腹痛、空气芳香馥郁，当天技能检定带惩罚骰。不睡（§230）：门把手慢慢转动，见事件 e_may_night。
+      §52：彻夜不眠，日出是病态的橙色，梅在厨房，前门开开关关；体质检定，失败当天技能检定带一颗惩罚骰。
+      §248：拉开门后可搬厨房椅子顶住房门安心小睡（§58）。
+    features: [壁炉, 床, 房门]
+    outdoors: false
+    ground: building
+    views:
+    - key: guest_fireplace
+      label: 客房壁炉
+      features:
+      - 壁炉
+      prompt: 冷清客房里的石砌壁炉,炉膛里是冰冷的灰烬,旁边是一张铺着洁净床单的床
+    looks:
+    - when: knows:players:clue:c_powder
+      change: 壁炉角落里多了顶针大小的一撮黑色粉末,带着一缕细烟
+      'on': guest_fireplace
+  - id: may_bedroom
+    name: 梅的卧室
+    within: ledbetter_house
+    art: may_bedroom
+    read_aloud: 卧室里堆着脏衣服、露丝的课本和廉价小说，床下露出一个旧洋娃娃。
+    keeper: |
+      §83：侦查。成功（§95）见活板门；失败（§89）只在抽屉里找到结婚照，可孤注一掷重掷侦查，成功§95，失败§101：梅回来了，“那么，你明白的。”一大群村民从她身后涌出制服调查员（设 captured）。大失败不能孤注一掷。
+    features: [抽屉, 床下地毯, 脏衣和课本]
+    outdoors: false
+    ground: building
+    views:
+    - key: bedroom_rug
+      label: 床下的地毯
+      features:
+      - 床下地毯
+      prompt: 凌乱的卧室,脏衣服堆在地上,课本和廉价小说散落在被褥上,床下露出一个旧洋娃娃和一角地毯,地板上有一道浅浅的拖痕
+    looks:
+    - when: knows:players:clue:c_trapdoor
+      change: 床被拉开,地毯掀起,露出一扇通向黑暗的木活板门
+      'on': bedroom_rug
+  - id: cellar
+    name: 地窖
+    within: ledbetter_house
+    art: cellar
+    read_aloud: 活板门下是阴冷的地窖，靠墙摞着一大堆旅行箱和公文包。
+    keeper: §114：看完后退回去，把床推回原位（§120）。
+    features: [旅行箱和公文包]
+    outdoors: false
+    ground: building
+    views:
+    - key: cellar_luggage
+      label: 摞起的行李箱
+      features:
+      - 旅行箱和公文包
+      prompt: 阴冷昏暗的地窖,靠墙摞着一大堆各种尺寸的旅行箱和公文包,落满灰尘
+    looks:
+    - when: knows:players:clue:c_luggage
+      change: 许多箱子的提手上挂着行李标签,写着各不相同的名字
+      'on': cellar_luggage
+  - id: general_store
+    name: 杂货店
+    art: general_store
+    public: true
+    read_aloud: 大街拐角、南边下坡前的杂货店，货架上是日用品，柜台后站着一个体形硕大、系着浆硬围裙的女人。
+    keeper: |
+      §16：每星期两辆长途车；隔周星期二有卡车送货，下星期才来。可以买日用品；能买到的武器只有一把积着灰的狩猎小刀。徒步出村前可在这里或梅家备好钱、水和三明治（§28）。
+      §156（D3 晚）：村民都聚到灯塔，路上空了，南路杂货店墙边靠着一辆自行车（调查员在普罗维登斯学过骑车）。
+    features: [柜台, 货架, 墙边]
+    scene_root: true
+    outdoors: false
+    ground: building
+    views:
+    - key: store_counter
+      label: 杂货店柜台
+      features:
+      - 柜台
+      prompt: 杂货店的木柜台,后面货架上摆着日用品,柜台上有一把积着灰的旧狩猎小刀,浆硬围裙的人影站在后方
+  - id: village_hall
+    name: 村会堂
+    art: village_hall
+    public: true
+    aliases: [会堂]
+    read_aloud: 村会堂在北面较低的山脊上，锡尔伯里街东头，背靠悬崖，是村里最大的建筑。大厅连着配楼，东边面朝灯塔的一扇窗被砖砌死了。右边一扇门上写着“私用”，左边房间里摆着长凳和一块布告板。
+    keeper: |
+      §84：上午锁门，灰衣女人说文特斯上午不开门，下午再来；问电报，她说“不知道，我们要拍给谁？”。§11/§24/§37：下午敲“私用”门，或看布告板时，克莱德·文特斯出来请调查员喝咖啡。
+      §126（D3 白天潜入）：绕北边崖壁从后面接近，最西边一扇窗的百叶松弛可以钻进去，进的是集会室，外面村民正兴奋地议论；推开“私用”门进 private_room。§207/§213/§190：在暗室逗留后听到大门钥匙声，冲向窗户做敏捷检定，成功跳窗未被发现，失败村民涌入，文特斯说“原来您在这里”（设 captured）。
+    features: [布告板, 被砖砌死的窗下地板, “私用”门]
+    scene_root: true
+    outdoors: false
+    ground: building
+    views:
+    - key: hall_board
+      label: 布告板
+      features:
+      - 布告板
+      prompt: 明亮的集会室墙上并排挂着两块布告板,一块贴着旧广告和泛黄的价目表,另一块钉满孩子们五颜六色的涂鸦
+    looks:
+    - when: knows:players:clue:c_board
+      change: 孩子那块板上有一张少了图钉、倒吊着的画,画着一只巨鸟扑向一个小村
+      'on': hall_board
+  - id: private_room
+    name: “私用”房间
+    within: village_hall
+    art: private_room
+    read_aloud: 房间里有书架和文件柜，一角堆着食品，桌上放着一台电报机。书架上分门别类：数学科学、文史、文学、通俗小说，还有一摞破烂的《幻丽诡谭》。
+    keeper: |
+      §62：文特斯说牌子只是防集会时有人随便进出，书其实属于全村。§68：一个下午只够读一类书，选一条（本地历史/节日/科学/怪诞小说）。§99：下午流逝，文特斯看窗外起身，信用评级检定：成功（§111）再留半小时，“没有借书卡不要带走书”，可做侦查（§118）；失败（§105）他说天黑前有差事，请明天下午再来，一同离开。
+      §133（D3 潜入）：屋里昏暗；侦查（已检查过书架的给一颗奖励骰），成功见 c_secret_shelf，失败只找到书间夹着的地图（§140）。
+    features: [文史书架, 阿尼奥洛夫斯基博士手稿, 天文书, 《幻丽诡谭》, 墙上黏着的书, 靠砖窗的书架, 书间夹着的地图, 电报机]
+    outdoors: false
+    ground: building
+    views:
+    - key: room_manuscript
+      label: 手写的手稿
+      features:
+      - 阿尼奥洛夫斯基博士手稿
+      prompt: 桌上摊着一盒泛黄的手写稿纸,字迹密密麻麻,纸边卷曲发脆
+    - key: room_shelf_window
+      label: 靠砖窗的书架
+      features:
+      - 靠砖窗的书架
+      prompt: 昏暗房间里一排挨着北墙的高书架,书脊整齐,有些书套看着像是粘在架子上的
+    looks:
+    - when: knows:players:clue:c_manuscript
+      change: 手稿读到末页戛然中断,最后一页的句子只写了一半
+      'on': room_manuscript
+    - when: knows:players:clue:c_secret_shelf
+      change: 一只书套被向左拉开,一段书架向外敞开,后面露出黑暗的缝隙
+      'on': room_shelf_window
+  - id: hidden_alcove
+    name: 书架后的壁龛
+    within: village_hall
+    art: hidden_alcove
+    read_aloud: 书架后面是一个仅容一人的壁龛，两边是隐蔽的书架，黑得几乎看不清。
+    keeper: |
+      §153/§165：打开面向悬崖的窗才看得清，书都很旧，有手写本和奇特文字，浏览一遍要一星期。图书馆使用检定，可孤注一掷；孤注一掷失败即§190 被村民发现；大失败不能孤注，只得到德比诗集（§184）。
+      §159：不开窗直接抓几本出去，到工坊后面阴影里看，只能带走德比诗集。
+      §207：火之卷太大，无法藏在身上带走。
+    features: [暗红三角书套的典籍, 黑封面诗集, 手写抄本, 面向悬崖的窗]
+    outdoors: false
+    ground: building
+    views:
+    - key: alcove_fire_tome
+      label: 红三角书套的典籍
+      features:
+      - 暗红三角书套的典籍
+      prompt: 狭窄壁龛里的旧书架上,一部厚重巨大的旧书,书套上有暗红色的三角形,周围是些手写本
+    looks:
+    - when: knows:players:clue:c_fire_tome
+      change: 书页翻开,满是星图、炼金符号和排列整齐的诗句
+      'on': alcove_fire_tome
+  - id: workshops
+    name: 工匠大院
+    art: workshops
+    public: true
+    aliases: [工坊]
+    read_aloud: 锡尔伯特街北边、离梅家不远的大院，一圈工坊：铁匠、织布工、陶工、雕工、木匠。工作台、铁砧和窑炉围着院子。其中一间工坊关着门。
+    keeper: |
+      §96（D2 白天）：工匠们说西拉斯偶尔替他们捎包裹，没有别的交通消息。心理学成功见 c_craftsmen_nervous（§106，打勾）。
+      §219（D3 早上）：在村西北角房后，工坊里一个人都没有，只有墙壁反射脚步的回声。上锁的那间门缝里看不见东西。撬锁（§225）：锁匠检定，技能值加倍，成功打勾；暴力闯入（§232）：力量检定。失败（§238）：有人影投到墙上，调查员换个方向溜走。
+    features: [工作台和铁砧, 关着门的工坊, 挂锁]
+    scene_root: true
+    outdoors: true
+    ground: building
+    views:
+    - key: workshop_padlock
+      label: 上锁的工坊门
+      features:
+      - 关着门的工坊
+      - 挂锁
+      prompt: 一圈工坊中唯一紧闭的木门,上面挂着一把老旧的挂锁,门缝漆黑,旁边是空着的工作台和铁砧
+  - id: locked_workshop
+    name: 上锁的工坊
+    within: workshops
+    art: locked_workshop
+    read_aloud: 凉风拂面，屋檐漏进几道光。屋子正中有一块垫高的石板，略带坡度，石板下面的豁口里放着什么东西，也许是盆。对面墙边平放着一排盖着红布的东西，看上去……像是人。
+    keeper: |
+      §250/§256：查看红布后，一个结实的工匠堵住门，“哟！我看你怎么偷偷摸摸的啊？喜不喜欢你的发现啊？”不战而降（§108，设 captured）或搏斗（§262，见工匠 NPC）。打倒他（§268）后可盘问尸体（§20）或离开。被他打倒（§2）就被拖走关押。三轮后可困难闪避绕过他逃跑，失败他再攻击一次；逃脱（§12）时把门板甩在他脸上，闪避打勾。
+    features: [带坡度的石板, 红布下的三具人体]
+    outdoors: false
+    ground: building
+    views:
+    - key: workshop_red_cloth
+      label: 红布下的人形
+      features:
+      - 红布下的三具人体
+      prompt: 昏暗工坊对面墙边,一排平放着的东西盖着红布,轮廓分明像是人形,屋檐漏进几道光
+    - key: workshop_slab
+      label: 带坡度的石板
+      features:
+      - 带坡度的石板
+      prompt: 屋子正中垫高的一块略带坡度的石板,下方的豁口里放着一个盆样的东西
+    looks:
+    - when: knows:players:clue:c_corpses
+      change: 红布掀开,是三具枯瘦、缠着绷带的干尸,脚趾上挂着标签
+      'on': workshop_red_cloth
+    - when: knows:players:clue:c_slab
+      change: 石板下的豁口里能看清是个盆形容器
+      'on': workshop_slab
+  - id: beacon
+    name: 灯塔
+    art: beacon
+    public: true
+    read_aloud: 村子东北角三条路交汇处立着一座熟铁铸成的灯塔，外面烤着黑漆。头顶高处是一个巨大的弧形平台，撑架像蛇一样蜿蜒汇聚到中心，上面的雕刻都熔化变形了。旁边堆着成捆的木头。
+    keeper: |
+      §57（D2）：一个红肿老眼、拄手杖的老绅士在附近。侦查成功见 c_beacon_houses。
+      §78/§61（D3 早上）：村民把木柴搬到灯塔，两个人在上层平台搭建三角形的篝火结构；村民的表情顺从、冷漠，也有恐惧。§29：从房子背面往村东潜行观察灯塔，右侧是断崖，窄处要扶墙；敏捷高于体型直接到达（§42），否则敏捷检定（相等也要检定），失败断崖崩落（§36）：攀爬成功爬上约二十英尺断崖（§48，打勾），失败摔下岩地受 2D6 伤害（§55）；伤害达最大生命一半以上为重伤，过体质检定，失败或生命归零即坠崖失血而死（§67/§73/§92），否则被两个村民扶回、处理伤口后锁门关押（§82）。
+      灯塔仪式见 e_procession、e_ignite。
+    features:
+    - 成捆的木头
+    - 四周房屋
+    - 通往高台的黝黑铁阶梯
+    scene_root: true
+    outdoors: true
+    ground: street
+    looks:
+      - when: flag:beacon_lit
+        change: 灯塔高台上燃起冲天大火，橘黄的火光照亮整片夜空，浓烟里火星四溅
+      - when: at:winters:beacon
+        change: 灯塔脚下的空地被黑脸村民和成排的火把围满，人人左眼画着红三角，铁阶梯两侧站着披黑长袍的高大身影
+      - when: flag:sign_fs_beacon_warmth_1
+        change: 灯塔脚下的草地多出一圈枯黄卷曲的草叶，都朝塔身倒伏。
+    views:
+    - key: beacon_wood
+      label: 成捆的木柴
+      features:
+      - 成捆的木头
+      prompt: 漆黑的熟铁灯塔脚下堆着一捆捆整齐的木柴,头顶的弧形平台和蛇形撑架在天空下轮廓粗重
+  - id: old_church
+    name: 坍圮教堂与墓地
+    art: old_church
+    public: true
+    aliases: [教堂, 墓地, 坟地]
+    read_aloud: 西南边草地上是一座坍圮的教堂，尖塔已经没了，前半截塌了，后半截还完整。长椅上长着霉斑，看样子废弃了二十年左右。教堂外的悬崖边是墓地，墓碑埋在茂盛的杂草里。
+    keeper: |
+      §34：中央大街笔直地指向灯塔，似乎不是巧合。教堂另一侧的门长着青苔、锁着。
+      §164/§176：被追进教堂时，两人爬窗、两人走正门，男人用棍子敲着手掌说“投降吧”。可以投降（§108）或抓住一根弯曲的木柱弄塌屋顶：困难力量，失败被压制夺棍（§183，关押）；成功屋顶坠落，再过幸运检定：成功屋顶砸倒追兵，从石墙裂口挤出，在墓碑和杂草间爬到路口，从东盘山路逃走（§204，设 escaped_village）；失败被屋顶砸死（§196）。
+      §259：阿博加斯特约的“另一边的坟地”就是这里（原文只说“另一边的坟地”，AutoKeeper 按原书地图上唯一的墓地对应）。
+    features: [教堂里的地面, 弯曲的木柱, 墓碑和杂草, 生青苔的侧门]
+    scene_root: true
+    outdoors: true
+    ground: graveyard
+    views:
+    - key: church_post
+      label: 弯曲的木柱
+      features:
+      - 弯曲的木柱
+      prompt: 坍塌教堂后半截里,一根弯曲发朽的木柱撑着残破的屋顶,长椅长满霉斑,窗户破碎
+  - id: school_alcove
+    name: 学校后的壁凹
+    art: school_alcove
+    aliases: [村学校, 学校]
+    read_aloud: 村学校后面，悬崖顶上一处壁凹，草地一直伸到崖边。
+    keeper: |
+      §169/§175/§182：阿博加斯特在这里讲“控制的仪式”，并愿意教咒语。学咒时天色已晚，云挡住了星星，“现在没有用”。拒绝的话，他憎恨地说“记得我曾经给过你触碰永恒的机会”，往东盘山路离去；调查员回梅家路上听到模糊、虚弱、绝望的男人叫声（§182）。
+      刺杀见 e_assassination。§70（D3 早上）：回到这里只看见凝固发黏的斑块和草丛里熏黑的线条。
+    features: [草地上的黑斑, 崖边]
+    scene_root: true
+    outdoors: true
+    ground: building
+    views:
+    - key: alcove_scorch
+      label: 草地上的黑斑
+      features:
+      - 草地上的黑斑
+      prompt: 悬崖顶的壁凹,草地一直铺到崖边,边缘是夜晚般的黑暗
+    looks:
+    - when: knows:players:clue:c_school_scorch
+      change: 草地上有凝固发黏的暗色斑块,和草丛里一道道熏黑的线条
+      'on': alcove_scorch
+  - id: cell
+    name: 囚室
+    art: cell
+    read_aloud: 一间小牢房，只有一扇窄窗和一张床。你的手被反绑在背后。
+    keeper: |
+      原文没有写囚室在村里哪栋房子里。§108：满脸皱纹、眼神空洞的老妪把一杯水递到调查员嘴边：接受（§104）是清凉的水，呐喊无人理睬；拒绝（§113）撞翻杯子，老妪耸肩离开，很快口渴。§205：天黑，橘黄的光掠过小窗，挣脱束缚明显不可能；他们用了一整天架起巨大篝火。
+    features: [窄窗, 床]
+    scene_root: true
+    outdoors: false
+    ground: building
+    views:
+    - key: cell_window
+      label: 囚室窄窗
+      features:
+      - 窄窗
+      - 床
+      prompt: 小牢房里一张粗糙的床,一扇窄窗透进暗淡的光,墙面斑驳
+  - id: cliff_foot
+    name: 崖下
+    art: cliff_foot
+    read_aloud: 北面悬崖下是一片岩盘，崖壁上突出的岩石和人工凿出的豁口连成一道隐蔽的梯子。右手边稍远处有一间土褐色的小棚屋。
+    keeper: §107：棚屋已经全毁，附近有巡逻的人；从这里可以走向东盘山路逃出村（§152）。§178：D2 早上循脚印来到崖顶时，下面约二十码的岩盘上没有尸体，也没有血迹。
+    features: [崖壁上的豁口, 土褐色的小棚屋]
+    scene_root: true
+    outdoors: true
+    ground: woods
+    views:
+    - key: cliff_notches
+      label: 崖壁上的豁口
+      features:
+      - 崖壁上的豁口
+      prompt: 北面悬崖壁上,突出的岩石和几处像人工凿出的豁口连成一线,下方是岩盘,右边远处有一间土褐色的小棚屋
+  - id: east_road
+    name: 东盘山路
+    art: east_road
+    public: true
+    read_aloud: 南边的路转向东，一路下坡。低地里是庄稼和牲畜，却看不到一匹马。越过一道山脊，坡下散落着几间棚屋。
+    keeper: |
+      §115（D2）：一个上了年纪、穿破烂外套、扯块布当头巾裹着头的男人看见调查员，愣住了。幸运检定：成功（§127）他仰望村子的悬崖顶，转身走远，慢慢招手示意，跟上去（§142）见他在两块岩石间消失；失败（§135）他一瘸一拐、发狂般地逃跑，追（§150）是对抗敏捷，他的敏捷 38，胜（§172）他说“你这混账……你能离开我吗？……我们不能在这里说话，跟我来”，负（§87）跟丢，困难侦查成功找到岩缝（§181）。
+      §7（D3）：南边和西边村口各有四个村民持农具和棍棒把守。话术（§119）：说灯塔需要他们，伸手去拿干草叉，猿猴眉的村民说“你和我们一起走”，极难话术成功（§132）拿着干草叉站哨，等他们去灯塔后扔掉草叉下山（设 escaped_village）；化装（§125）：拿梅家晾衣绳上的旧衣，弓腰驼背拖着脚，困难乔装，成功（§146，打勾）守卫点头放行；失败（§139）被抓回村中心关押。知道崖壁梯子的可改走崖下（§107）。
+      §152：逃出村时落日，东行入林，约两小时后天黑，身后传来两匹马的蹄声（见 e_carts）。§160：去奥西皮至少六七英里，沿途没有村庄和车马，需要补给。
+    features: [两块岩石间的窄道, 坡下的棚屋, 村口守卫]
+    scene_root: true
+    outdoors: true
+    ground: fields
+    views:
+    - key: road_narrow_gap
+      label: 两块岩石间的窄道
+      features:
+      - 两块岩石间的窄道
+      prompt: 山脊边两块大岩石紧紧挨在一起,中间的缝隙很暗,杂草丛生,一旁是通往下坡的路
+    looks:
+    - when: knows:players:clue:c_cave_entrance
+      change: 窄道向悬崖下延伸,尽头隐约可见一个天然小山洞
+      'on': road_narrow_gap
+  - id: arbogast_cave
+    name: 崖下山洞
+    art: arbogast_cave
+    read_aloud: 两块岩石间的狭窄通道通向悬崖下的一个天然小山洞。洞里很暗，崖壁上有松脱的岩石。
+    keeper: |
+      §191/§199：男人拉下头巾（理智检定，见 c_arbogast_face），自称威拉德·阿博加斯特，“猜我不用问你是怎么来的烬头村”。坚称来参加节日（§206）或承认被西拉斯撂下（§214）后，他开始说（§221）。可问阿布纳基人（§227）、旧日支配者（§237）、村民（§245），或趁早离开（§253）。他疯得不轻，情绪一变就可能抓起松脱的岩石砸碎调查员的脑壳（守秘人临场判断，原作没有写成战斗）。
+    features: [洞里的阴影, 松脱的岩石]
+    outdoors: false
+    ground: woods
+    views:
+    - key: cave_loose_rocks
+      label: 松脱的岩石
+      features:
+      - 松脱的岩石
+      - 洞里的阴影
+      prompt: 狭小昏暗的天然山洞,洞壁上岩石松松垮垮,地面铺着杂乱的破布和稻草,光线只从窄缝漏入
+  - id: forest_road
+    name: 东去林间路
+    art: forest_road
+    read_aloud: 出村的路钻进秋天的树林，黄、绿、橙红的树叶层层叠叠，前面有一片林间空地，道路绕着山麓蜿蜒。
+    keeper: |
+      §28（D2 徒步出村）：带上钱、水、三明治，给梅留字条，走南路转东；一小时后进入第一片树林，北面传来怪异的呼啸（博物学，见 c_naturalist；失败§41 犹豫，可前行或回村§47）。§54：半小时后走出树林，可上山（hilltop）、走青苔树桩标出的小径（§85 踩空，幸运成功绊倒无伤，失败枯枝划开前臂，失 1D3 生命，急救成功回 1 点）、或沿路走（§103 遇熊）。
+      §79：继续东行，天黑前到不了下一个村子；困难聆听成功（§240，打勾）听见身后沉闷的喀嚓声。§234：嗥叫声混着刺耳的低音逼近：爬树过夜（§208，攀爬检定，96 以上大失败、技能 50 以上只有 100 才算大失败：跌落受 1 点伤害后可再爬，设 in_tree）或继续走（§215，见 e_beasts）。
+      §211/§216/§229/§235/§241/§247：逃出村后的马车遭遇见 e_carts。
+    features: [北面的呼啸声, 林间空地, 青苔树桩标出的小径, 能爬的树]
+    scene_root: true
+    outdoors: true
+    ground: woods
+    looks:
+    - when: at:coachman:forest_road
+      change: 夜色里的林间路上停着一辆双马马车，车头挂着一盏提灯，光把树影晃成迷宫
+    views:
+    - key: forest_mossy_trail
+      label: 青苔树桩标出的小径
+      features:
+      - 青苔树桩标出的小径
+      prompt: 秋天的树林里,几个爬满青苔的树桩标出一条窄小径,枝条越往前越密
+  - id: hilltop
+    name: 山顶
+    art: hilltop
+    read_aloud: 一片小山的山顶。往东望是山谷和树林，一道细窄的水流；回头能看见几里外烬头村所在的高地。
+    keeper: §60（D2 白天）：往东要走八九个小时，回望烬头村一片漆黑。考古学检定：成功§66（打勾），失败§72 自我怀疑，也感到危险而自由的快乐。§223：逃出村的夜里来到这里，见 e_hilltop。
+    features: [东面山谷, 回望烬头村]
+    scene_root: true
+    outdoors: true
+    ground: woods
+    views:
+    - key: hilltop_view
+      label: 山顶回望
+      features:
+      - 回望烬头村
+      prompt: 一座小山的山顶,远处高地上是黑漆漆的村庄剪影,金属建筑的轮廓直指天空,落日余晖映着树林
+  - id: beacon_platform
+    name: 灯塔高台
+    read_aloud: 黝黑的铁阶梯通到头顶一个巨大的弧形平台，中央的撑架像蛇一样蜿蜒汇聚，上面的雕刻早已熔化变形。
+    within: beacon
+    art: beacon_platform
+    keeper: §18/§33：D3 晚调查员在此被铁链拴在撑架上，三具红布人体摆成三角形；文特斯在高台上宣讲，村民聚在下方。D3 早上有两人在上层平台搭建三角形木架（§78/§61）。点火、挣脱、咒语见
+      e_ignite 与规则清单；挣脱后从灯塔另一边跳下，离悬崖只有几寸（§137）。
+    features:
+    - 中央的撑架与铁链
+    - 三角形的篝火木架
+    outdoors: true
+    ground: street
+    views:
+    - key: platform_frame
+      label: 高台撑架与铁链
+      features:
+      - 中央的撑架与铁链
+      prompt: 高处的弧形铁平台,中央蛇形撑架上的雕刻早已熔化变形,撑架上系着沉重的黑铁链
+
+passages:
+  - {id: hometown_stop__coach, a: hometown_stop, b: coach, kind: door, minutes: 0}
+  - {id: village_edge__central_street, a: village_edge, b: central_street, kind: road, minutes: 2}
+  - {id: central_street__ledbetter_house, a: central_street, b: ledbetter_house, kind: door, minutes: 2}
+  - {id: ledbetter_house__guest_room, a: ledbetter_house, b: guest_room, kind: door, minutes: 0, gate: {open: false}}
+  - {id: ledbetter_house__may_bedroom, a: ledbetter_house, b: may_bedroom, kind: door, minutes: 0, gate: {open: false}}
+  - {id: may_bedroom__cellar, a: may_bedroom, b: cellar, kind: stairs, minutes: 0, secret: true, found: "clue:c_trapdoor"}
+  - {id: ledbetter_house__cliff_foot, a: ledbetter_house, b: cliff_foot, kind: stairs, minutes: 5, secret: true, found: "clue:c_hidden_ladder"}
+  - {id: central_street__general_store, a: central_street, b: general_store, kind: door, minutes: 2}
+  - {id: central_street__village_hall, a: central_street, b: village_hall, kind: road, minutes: 3}
+  - {id: village_hall__private_room, a: village_hall, b: private_room, kind: door, minutes: 0, gate: {open: false}}
+  - {id: private_room__hidden_alcove, a: private_room, b: hidden_alcove, kind: door, minutes: 0, secret: true, found: "clue:c_secret_shelf"}
+  - {id: central_street__workshops, a: central_street, b: workshops, kind: road, minutes: 2}
+  - {id: workshops__locked_workshop, a: workshops, b: locked_workshop, kind: door, minutes: 0, gate: {locked: true}}
+  - {id: central_street__beacon, a: central_street, b: beacon, kind: road, minutes: 3}
+  - {id: central_street__old_church, a: central_street, b: old_church, kind: road, minutes: 3}
+  - {id: central_street__school_alcove, a: central_street, b: school_alcove, kind: road, minutes: 3}
+  - {id: central_street__cell, a: central_street, b: cell, kind: door, minutes: 2, gate: {locked: true}}
+  - {id: central_street__east_road, a: central_street, b: east_road, kind: road, minutes: 15}
+  - {id: cliff_foot__east_road, a: cliff_foot, b: east_road, kind: road, minutes: 20}
+  - {id: east_road__arbogast_cave, a: east_road, b: arbogast_cave, kind: opening, minutes: 5, secret: true, found: "clue:c_cave_entrance"}
+  - {id: east_road__forest_road, a: east_road, b: forest_road, kind: road, minutes: 60}
+  - {id: forest_road__hilltop, a: forest_road, b: hilltop, kind: road, minutes: 30}
+  - id: beacon__beacon_platform
+    a: beacon
+    b: beacon_platform
+    kind: stairs
+    minutes: 1
+    perception: 高台上的话语和歌声下方都听得见
+plans:
+- building: ledbetter_house
+  floors:
+  - name: 一层
+    rooms:
+    - place: ledbetter_house
+      label: 厨房兼起居室
+    - place: guest_room
+    - place: may_bedroom
+  - name: 地下室
+    level: -1
+    rooms:
+    - place: cellar
+      size: small
+  basis: 原文：客房、梅的卧室同在低矮小楼内（§4/§63/§83），卧室床下活板门通地窖（§95/§114），地窖在地板下；同层相对位置为 AutoKeeper 补充。现有通路已覆盖，不增房间。
+  layout:
+    rooms:
+    - {place: ledbetter_house, x: 20, y: 30, w: 8, h: 5}
+    - {place: guest_room, x: 20, y: 35, w: 4, h: 4}
+    - {place: may_bedroom, x: 24, y: 35, w: 4, h: 4}
+    - {place: cellar, x: 24, y: 35, w: 4, h: 4}
+    doors:
+    - {passage: central_street__ledbetter_house, at: [28, 32.5], main: true}
+    - {passage: ledbetter_house__cliff_foot, at: [24, 30]}
+    - {passage: ledbetter_house__guest_room, at: [22, 35]}
+    - {passage: ledbetter_house__may_bedroom, at: [26, 35]}
+    windows:
+    - {room: ledbetter_house, at: [22, 30]}
+    - {room: ledbetter_house, at: [28, 34]}
+    - {room: guest_room, at: [20, 37.5]}
+    - {room: may_bedroom, at: [28, 37.5]}
+    stairs:
+    - {passage: may_bedroom__cellar, form: trapdoor, x: 25.6, y: 37.9, w: 1, h: 1}
+    fixtures:
+    - {room: ledbetter_house, feature: 厨房餐桌, label: 厨房餐桌, sketch: longtable, x: 22, y: 31.5, w: 2, h: 1.2}
+    - {room: ledbetter_house, feature: 壁炉, label: 壁炉, sketch: fireplace, x: 20.1, y: 32, w: 0.5, h: 1.5}
+    - {room: ledbetter_house, feature: 屋后的小巷, label: 屋后小巷, sketch: path, outside: true, x: 22, y: 28,
+      w: 3, h: 1.5}
+    - {room: ledbetter_house, feature: 屋后北面崖边, label: 崖边, sketch: mark, outside: true, x: 26, y: 27.5,
+      w: 2, h: 1.5}
+    - {room: guest_room, feature: 壁炉, label: 壁炉, sketch: fireplace, x: 20.1, y: 36.5, w: 0.5, h: 1.5}
+    - {room: guest_room, feature: 床, label: 床, sketch: bed, x: 22.8, y: 36.5, w: 1, h: 2}
+    - {room: guest_room, feature: 房门, label: 房门, sketch: door, x: 21.5, y: 35.1, w: 1, h: 0.4}
+    - {room: may_bedroom, feature: 抽屉, label: 抽屉, sketch: wardrobe, x: 24.2, y: 36.5, w: 0.6, h: 1.5}
+    - {room: may_bedroom, feature: 床下地毯, label: 床下地毯, sketch: rug, x: 25.2, y: 36.2, w: 1.3, h: 1.2}
+    - {room: may_bedroom, feature: 脏衣和课本, label: 脏衣课本, sketch: clutter, x: 24.2, y: 38.2, w: 1.2, h: 0.7}
+    - {room: may_bedroom, sketch: bed, x: 26.8, y: 35.8, w: 1.2, h: 2.2}
+    - {room: cellar, feature: 旅行箱和公文包, label: 旅行箱, sketch: boxes, x: 24.3, y: 35.3, w: 3.4, h: 1}
+    sides:
+    - {side: n, faces: 屋后小巷与崖边, place: cliff_foot}
+    - {side: e, faces: 通往中央大街的小路, way: ledbetter_lane, place: central_street}
+    - {side: s, faces: 村口空地方向, place: village_edge}
+    - {side: w, faces: 空地}
+    basis: 原文无平面图：厨房在北、客房与梅卧室并排在南，地窖在卧室下；方位按全镇地图和常理补，已把梅卧室的床移开活板门。
+- building: beacon
+  floors:
+  - name: 高台
+    level: 1
+    rooms:
+    - place: beacon_platform
+  - name: 一层
+    rooms:
+    - place: beacon
+      label: 灯塔脚下
+      size: large
+  basis: 原文 §57、§18 写明平台与铁阶梯；通路时长为 AutoKeeper 补充。
+  layout:
+    rooms:
+    - {place: beacon, x: 40, y: 40, w: 12, h: 10}
+    - {place: beacon_platform, x: 42, y: 42, w: 8, h: 6}
+    doors:
+    - {passage: central_street__beacon, at: [44, 50], main: true}
+    stairs:
+    - {passage: beacon__beacon_platform, x: 48.5, y: 42.5, w: 1, h: 4}
+    fixtures:
+    - {room: beacon, feature: 成捆的木头, label: 成捆的木头, sketch: boxes, x: 41, y: 46, w: 2.5, h: 2}
+    - {room: beacon, feature: 四周房屋, label: 四周房屋, sketch: area, x: 40.5, y: 41, w: 2, h: 3}
+    - {room: beacon, feature: 通往高台的黝黑铁阶梯, label: 铁阶梯, sketch: stairs, x: 47.5, y: 42.5, w: 0.8, h: 3}
+    - {room: beacon_platform, feature: 中央的撑架与铁链, label: 撑架与铁链, sketch: machine, x: 44, y: 43.5, w: 2,
+      h: 2}
+    - {room: beacon_platform, feature: 三角形的篝火木架, label: 三角木架, x: 43, y: 46, w: 3, h: 1.5}
+    sides:
+    - {side: n, faces: 村东北的断崖小路, way: under_cliff_path}
+    - {side: e, faces: 断崖}
+    - {side: s, faces: 来路，通向中央大街, way: beacon_road}
+    - {side: w, faces: 村会堂方向的房屋, place: village_hall}
+    basis: 原书无平面图；照原文铁阶梯与高台、右侧断崖描述定，尺寸、门位为补充。
+interior_reviews:
+  ledbetter_house:
+    fingerprint: 4b1796a4a238f7876c266aa3542af6d890e832a1a9d6d0cb1d228ee5bfb4faaf
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 原文：客房、梅的卧室同在低矮小楼内（§4/§63/§83），卧室床下活板门通地窖（§95/§114），地窖在地板下；同层相对位置为 AutoKeeper 补充。现有通路已覆盖，不增房间。
+  beacon:
+    fingerprint: a0952d8c94a8e9a8f9ec1ea149ae6c039144dd14d599c389e1323d9ec3e6ef7d
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 原文 §57、§18 写明平台与铁阶梯；通路时长为 AutoKeeper 补充。
+  hometown_stop:
+    fingerprint: 7752c6b7e9a01b4c656f0371bc6c68b4df27318ac5d26259a4325942affd772e
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 户外车站，没有内部房间。
+  coach:
+    fingerprint: e6dba4e8a0c5203862db944b456959ae0c8752f095f909f9b32e1903c228b3fe
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 车厢本身是单一窄小空间。
+  village_edge:
+    fingerprint: 72dd3582eb6fa8778dcbc4312ea4a63eaec55baed770c4fefa9b9ad8c6fc9942
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 户外空地。
+  central_street:
+    fingerprint: 72f00b571e5b989f766972f12f02044a4c004975769580670821ea01aff23739
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 户外街道。
+  general_store:
+    fingerprint: a3bbda000afe607d673cf11ece5f99a22d38cde14c4390c6def0ca87837c3e59
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 单间店铺，柜台与墙边同在一处。
+  village_hall:
+    fingerprint: 7016badc2f540880a5cbc5f65052b989150b2cb81f1fffb61bb4f588169a6972
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 现有图已含集会室（主厅）、私用房间、暗室；暗门均照原文，无需增补。
+  private_room:
+    fingerprint: 1673f47afc7ab7d55fb4e7bf17a8db85040385324c378a15ba37eb2bb5ee4a63
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 单间，书架与电报机同室；暗室已分出。
+  hidden_alcove:
+    fingerprint: c83678de728d55ba57b0b88147cfe22b600c312f025396f711dd014bafbcdbc6
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 仅容一人的壁龛。
+  workshops:
+    fingerprint: 5d36ad5f2994010ee2f6609a74d463db63c70b3a09d2ffc78b34f515d541f29d
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 露天大院，上锁工坊已独立。
+  locked_workshop:
+    fingerprint: 0a232a7e4bb3704750c2b66b1abdb1b45d353d11237400d05af698ed8d6bbd08
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 单间，原文无内部分隔。
+  old_church:
+    fingerprint: f370d6418152afa327fa49a1b1c85c30ebea3417838aeba02198c141733cf2b7
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 原文只写前半塌、后半完好，墓地在外；追捕、线索都在同一片区域，不拆。
+  cell:
+    fingerprint: b2fda3eec1ae9651a8030f7c85bacd444a2580a3002fd8e052ce8fcfd7745b25
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 单间囚室。
+  cliff_foot:
+    fingerprint: 4bb5c8d32b9eb24d1f81e0f3f6cdf711732c00bd7c37c0aa6cbd9543c249a2b0
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 户外崖下岩盘。
+  east_road:
+    fingerprint: 0fb45e7d4b3b95ff6c613b2cacb2e7f6edb05ae867a6ee2c59258a0b3a6ed691
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 户外道路。
+  arbogast_cave:
+    fingerprint: 400f364820dceee3463826f2b14a3626144eeb73a57d46ff7f47e819796aadeb
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 狭小的单室天然山洞。
+  hilltop:
+    fingerprint: b4de54dea33a703da9abd331397736fb9ac8b769b169e66cc8d4fe88cabaad4c
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 户外山顶。
+  school_alcove:
+    fingerprint: 76f5a89712a75f4474435d2eee5f48a124b242bc956aab0b59ac4fbbd6b564d2
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 原文（§169/§175/§182/§188/§70）写的是村学校后面、悬崖顶上的一处户外壁凹，草地一直伸到崖边。整个壁凹是一个连在一起的户外空间：讲“控制的仪式”、传授咒语、刺杀和事后留下的焦痕，都发生在这一处。学校建筑本身原文没有写进去的情节，没有房间可分，也没有门锁和暗门。所以保持为单一地点，“草地上的黑斑”和“崖边”留作可调查项。
+  forest_road:
+    fingerprint: 08dc643136ef224176807aefea8780430d0b8fb7aee446f60da1997313c61123
+    source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+    reason: 这是出村后东去的户外林间路，不是建筑、船舱或洞穴。原文的树林、林间空地、青苔树桩标出的小径、能爬的树，都是同一段路上的分支或陈设（§28/§54/§79/§234），按可调查项和事件处理就行。山顶已经是独立地点
+      hilltop，用现有通路相连。这里没有室内结构，也没有上锁或隐藏的通行，不拆分。
+
+geography:
+  title: 烬头村
+  subtitle: 美国新罕布什尔州北部 · 1927
+  minutes_across: 22
+  places:
+  - place: hometown_stop
+    at: [0.07, 0.88]
+    glyph: street
+  - place: coach
+    at: [0.06, 0.7]
+    glyph: other
+  - place: village_edge
+    at: [0.22, 0.57]
+    glyph: street
+  - place: central_street
+    at: [0.5, 0.43]
+    glyph: street
+  - place: ledbetter_house
+    at: [0.216, 0.43]
+    glyph: house
+  - place: general_store
+    at: [0.52, 0.699]
+    glyph: shop
+  - place: village_hall
+    at: [0.483, 0.23]
+    glyph: public
+  - place: workshops
+    at: [0.37, 0.236]
+    glyph: shop
+  - place: beacon
+    at: [0.626, 0.265]
+    glyph: other
+  - place: old_church
+    at: [0.357, 0.73]
+    glyph: graveyard
+  - place: school_alcove
+    at: [0.607, 0.567]
+    glyph: public
+  - place: cell
+    at: [0.56, 0.36]
+    glyph: house
+  - place: cliff_foot
+    at: [0.17, 0.22]
+    glyph: woods
+  - place: east_road
+    at: [0.7, 0.86]
+    glyph: street
+  - place: arbogast_cave
+    at: [0.68, 0.72]
+    glyph: other
+  - place: forest_road
+    at: [0.86, 0.74]
+    glyph: woods
+  - place: hilltop
+    at: [0.93, 0.48]
+    glyph: hill
+  ways:
+  - id: central_street
+    kind: main
+    points:
+    - [0.41, 0.56]
+    - [0.5, 0.43]
+    - [0.62, 0.28]
+    street: central_street
+  - id: west_road
+    kind: main
+    points:
+    - [-0.05, 0.66]
+    - [0.1, 0.63]
+    - [0.22, 0.57]
+    - [0.374, 0.543]
+    - [0.41, 0.56]
+    passage: village_edge__central_street
+  - id: east_downhill_road
+    kind: main
+    points:
+    - [0.41, 0.56]
+    - [0.478, 0.7]
+    - [0.562, 0.824]
+    - [0.7, 0.86]
+    passage: central_street__east_road
+  - id: forest_road
+    kind: main
+    points:
+    - [0.7, 0.86]
+    - [0.8, 0.83]
+    - [0.86, 0.74]
+    passage: east_road__forest_road
+  - id: hill_path
+    kind: path
+    points:
+    - [0.86, 0.74]
+    - [0.91, 0.6]
+    - [0.93, 0.48]
+    passage: forest_road__hilltop
+  - id: cave_path
+    kind: path
+    points:
+    - [0.7, 0.86]
+    - [0.7, 0.79]
+    - [0.68, 0.72]
+    passage: east_road__arbogast_cave
+  - id: under_cliff_path
+    kind: path
+    points:
+    - [0.17, 0.22]
+    - [0.3, 0.13]
+    - [0.55, 0.12]
+    - [0.73, 0.16]
+    - [0.79, 0.4]
+    - [0.76, 0.68]
+    - [0.7, 0.86]
+    passage: cliff_foot__east_road
+  - id: cellar_stairs
+    kind: path
+    points:
+    - [0.216, 0.43]
+    - [0.19, 0.32]
+    - [0.17, 0.22]
+    passage: ledbetter_house__cliff_foot
+  - id: ledbetter_lane
+    kind: lane
+    points:
+    - [0.41, 0.56]
+    - [0.3, 0.48]
+    - [0.216, 0.43]
+    passage: central_street__ledbetter_house
+  - id: silbury_street
+    kind: lane
+    points:
+    - [0.45, 0.5]
+    - [0.38, 0.32]
+    - [0.483, 0.23]
+    passage: central_street__village_hall
+  - id: workshop_lane
+    kind: lane
+    points:
+    - [0.47, 0.45]
+    - [0.38, 0.32]
+    - [0.37, 0.236]
+    passage: central_street__workshops
+  - id: beacon_road
+    kind: main
+    points:
+    - [0.55, 0.36]
+    - [0.626, 0.265]
+    passage: central_street__beacon
+  - id: church_lane
+    kind: lane
+    points:
+    - [0.41, 0.56]
+    - [0.36, 0.63]
+    - [0.357, 0.73]
+    passage: central_street__old_church
+  - id: avebury_street
+    kind: lane
+    points:
+    - [0.47, 0.5]
+    - [0.55, 0.55]
+    - [0.607, 0.567]
+    passage: central_street__school_alcove
+  - id: cell_lane
+    kind: lane
+    points:
+    - [0.52, 0.4]
+    - [0.56, 0.36]
+    passage: central_street__cell
+  - id: store_lane
+    kind: lane
+    points:
+    - [0.47, 0.5]
+    - [0.5, 0.6]
+    - [0.52, 0.699]
+    passage: central_street__general_store
+  - id: coach_route
+    kind: main
+    points:
+    - [0.07, 0.88]
+    - [0.06, 0.7]
+    passage: hometown_stop__coach
+  regions:
+  - kind: fields
+    shape:
+    - [0.58, 0.9]
+    - [0.66, 0.94]
+    - [0.8, 0.95]
+    - [0.82, 0.88]
+    - [0.74, 0.9]
+    - [0.62, 0.87]
+    near: east_road
+  - kind: woods
+    shape:
+    - [0.8, 0.7]
+    - [0.9, 0.66]
+    - [0.97, 0.72]
+    - [0.95, 0.86]
+    - [0.86, 0.9]
+    - [0.83, 0.8]
+    near: forest_road
+  - kind: hills
+    shape:
+    - [0.87, 0.42]
+    - [0.93, 0.38]
+    - [0.98, 0.44]
+    - [0.96, 0.56]
+    - [0.89, 0.56]
+    near: hilltop
+  - kind: water
+    shape:
+    - [0.965, 0.28]
+    - [0.99, 0.28]
+    - [0.99, 0.66]
+    - [0.97, 0.66]
+    near: hilltop
+  - kind: woods
+    shape:
+    - [0.04, 0.14]
+    - [0.14, 0.1]
+    - [0.24, 0.14]
+    - [0.22, 0.17]
+    - [0.1, 0.3]
+    - [0.04, 0.28]
+    near: cliff_foot
+  - kind: fields
+    shape:
+    - [0.15, 0.75]
+    - [0.26, 0.72]
+    - [0.3, 0.82]
+    - [0.2, 0.9]
+    - [0.13, 0.85]
+  houses:
+  - along: central_street
+    span: [0.05, 0.95]
+    density: dense
+  - along: silbury_street
+    span: [0.2, 1.0]
+    density: dense
+  - along: avebury_street
+    span: [0.1, 0.9]
+    density: dense
+  - along: ledbetter_lane
+    span: [0.3, 1.0]
+    density: dense
+  - along: east_downhill_road
+    span: [0.5, 1.0]
+  landmarks:
+  - name: 埃夫伯里街
+    at: [0.55, 0.52]
+    glyph: street
+  basis: 原书「烬头村地图」（指北针指向右上，已转成上北）：莱德贝特家在西北、工坊和村会堂在北、灯塔在东北、教堂墓地在西南、杂货店在南边下坡路口、学校在东南；囚室原文没写位置，放在村内；村外的崖下、山洞、林间路、山顶按原文方位和通路分钟数推算，汽车站和长途车放在西南角示意。

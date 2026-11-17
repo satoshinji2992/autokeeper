@@ -1,0 +1,1997 @@
+locations:
+- id: agent_home
+  name: 特工的家
+  art: agent_home
+  read_aloud: 楼下的客厅连着门廊，门上有猫眼。客厅一角立着书架，茶几上放着家里的座机电话。楼梯通往二楼的卧室，客厅一侧是书房的门。
+  keeper: 特工与丈夫阿尔伯特、6 岁女儿爱丽丝的家（原文只写“特工的家”，具体陈设为 AutoKeeper 补充）。它是被腐蚀的地点之一，是地图上黄印的一个转折点，原文未给环境腐化值。家人会被深夜出门吵醒；多次目睹特工的怪异举动会偷偷联络心理医生（附录C）。剧院中无明确去处时主动离开，会回到这里或亚当森家。书架上可能找到《纸牌大学（第一卷）》。
+  features:
+  - 门廊与猫眼
+  - 书架
+  - 客厅的电话
+  scene_root: true
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:kandi:agent_home
+    change: 门廊外的路边停着一辆熄了引擎和车灯的深色轿车
+  views:
+  - key: home_door_peephole
+    label: 门廊的门与猫眼
+    features:
+    - 门廊与猫眼
+    prompt: 深夜，客厅通往门廊的木门紧闭，门上一枚小小的猫眼，门缝底下透进一线路灯的冷光，门边挂着外套和钥匙。
+  - key: home_living_phone
+    label: 茶几上的座机
+    features:
+    - 客厅的电话
+    prompt: 客厅茶几上一部家用座机电话，听筒搁在机座上，旁边有遥控器和几本杂志，台灯光线昏黄。
+- id: adamson_home
+  name: 亚当森的住所
+  art: adamson_home
+  read_aloud: 北奥克兰林登街 2441 号，一栋灰黑屋瓦、亮白墙面的两层临街小楼，夹在两条单行道之间。屋里的灯全关着，一进门就是通往二楼的楼梯。屋子有打扫过的痕迹，很多房间却像很久没人用，空气里有一股略带腐败的潮味。
+  keeper: '房子现归亚当森的妻子温妮名下。亚当森牺牲后温妮搬离奥克兰，临走托特工照看并交了钥匙，特工一直把这里当安全屋（特工不记得）。特工会不假思索从包里拿出考克斯家的钥匙；被指出时答：“由于你和亚当森关系不错，不久前，温妮搬离这里的时候就拜托了你帮忙照看这栋屋子。”特工若执意去自己的安全屋，会发现那里已经有一段时间没用了；打算回家休息时，也可能不由自主走到这里。
+
+    环境腐化 3，白天也能看见部分幻象。腐化>30：天空中两条巨大的光带在这里形成折角。腐化>25：桌上那摞书里有一本幻视为《瓦普内克剧院》。
+
+    房子背面是一个小公园，有旧秋千和滑梯。
+
+    可选：撞见温妮（建议放在后期）：她惊人地包容，“这不是你的错。你应该早点放下这件事”；特工上二楼她也不惊讶；问亚当森在做什么：“我不知道。我想他应该在做自己真正喜欢的事情。”
+
+    '
+  features:
+  - 桌上一摞书
+  - 门厅楼梯
+  - 背面的小公园
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: adamson_book_stack
+    label: 桌上的一摞书
+    features:
+    - 桌上一摞书
+    prompt: 昏暗屋里的桌面上摞着几本书，最上面是一本小说集和一本纸牌魔术书的第二卷，桌面有擦拭过的痕迹，四周空气潮闷。
+  - key: adamson_back_park
+    label: 屋后的小公园
+    features:
+    - 背面的小公园
+    prompt: 房子背面的小公园，一架掉漆的旧秋千和一座小滑梯，草地上没有人，灰白的天光。
+  looks:
+  - when: knows:players:clue:c_warpneck
+    change: 那摞书里多出一本棉线装订的正方形手绘小画册，封面是黑色涂鸦字体，书页边缘露出狂躁的批注。
+    'on': adamson_book_stack
+- id: adamson_bedroom
+  name: 亚当森的卧室
+  within: adamson_home
+  art: adamson_bedroom
+  read_aloud: 二楼卧室。开灯后，纸张乱扔一地，一支笔尖歪掉的钢笔躺在四散的墨水里，快餐盒散发着恶臭。电脑歪斜地放在书桌上，电源线被粗暴地拔了出来。床被移到窗边，掀起来挡住了窗户。书桌上压着两张纸。
+  keeper: '床是特工自己挪去挡窗的。书桌上的座机与电脑都能用。
+
+    幻象“他仍在这里”（阈值 7）：亚当森坐在椅子上（见 NPC 亚当森）。示例：白天个体 1＋环境 3＝4，看得见邀请函，看不见亚当森，只听见不连续的呢喃；看过黄印后达到 8，亚当森悄无声息出现在角落。
+
+    再会，亚当森：亚当森“死”后无人报案。特工离开后再回卧室时腐化<7：尸体不翼而飞，准备的材料变成潦草的图画，房间仍然混乱；否则与离开时无异，亚当森平静地品味着死亡。
+
+    从这里进入剧院（阈值 30）：窗户变成木门，整面墙变成木质，推开是行驶中的火车走廊。
+
+    '
+  features:
+  - 书桌上的第一张纸条
+  - 书桌上的第二张纸条
+  - 电脑
+  - 座机
+  - 挡住窗户的床
+  outdoors: false
+  ground: building
+  views:
+  - key: adamson_desk_notes
+    label: 书桌上的两张纸
+    features:
+    - 书桌上的第一张纸条
+    - 书桌上的第二张纸条
+    prompt: 凌乱的书桌上压着一张皱巴巴的打印纸，上面是工整的手写乱码；旁边一支笔尖歪掉的钢笔躺在四散的墨水里，桌角堆着发臭的快餐盒。
+  - key: adamson_unplugged_pc
+    label: 拔了电源的电脑
+    features:
+    - 电脑
+    prompt: 书桌上一台台式电脑歪斜地放着，电源线被粗暴地从插口扯出来垂在桌边，屏幕漆黑，旁边是一部座机。
+  - key: adamson_bed_window
+    label: 挡住窗户的床
+    features:
+    - 挡住窗户的床
+    prompt: 一张床被拖到窗边竖着掀起，床板和床垫把整扇窗户挡得严严实实，地上散落着纸张，只有缝隙里漏进一点外面的光。
+  looks:
+  - when: knows:players:clue:c_invitation
+    change: 打印纸旁边多了一张崭新精致的米色卡片，印着花卉卷草纹、一行网址和花体英文，结尾印着一个黑色的符号。
+    'on': adamson_desk_notes
+- id: nppd_office
+  name: NPPD 第九区办公室
+  art: nppd_office
+  read_aloud: 国土安全部国家保护与计划局第九区的加州办公室。大厅里电话声此起彼伏，靠墙一排独立办公室隔着玻璃和百叶窗，其中一间的百叶窗拉着，门牌还没换。
+  keeper: '用于塑造特工前期平静的日常。两个月前亚当森的大部分材料已被三角洲处理，前任负责人也被调走。调查需要现任负责人伯莎·史密斯许可。
+
+    若特工也在第九区工作（预设调查员诺拉即是）：前任负责人交接时说过特工可能在和亚当森的共同任务中受了精神冲击，需要照顾；特工是老员工，受伯莎尊敬；问起亚当森时伯莎表示遗憾并明显回避；她注意到特工从
+    9 号起没按要求出勤，但不会主动提（或特工已请假）。
+
+    幻象“音容宛在”（阈值 16）：检查亚当森办公室时闪过混杂幻象的过去——椅子上埋头办公的“亚当森”，耳边一句“我来收拾你的东西了”，“亚当森”点头。（真实记忆与虚假认知杂糅：收拾东西的是特工自己，那时亚当森已死。）
+
+    '
+  features:
+  - 大厅
+  - 伯莎的办公室
+  - 前任负责人的电话
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: adamson_office
+  name: 亚当森的办公室
+  within: nppd_office
+  art: adamson_office
+  read_aloud: 独立办公室，与大厅隔着隔音很好的玻璃和百叶窗。桌上有一台个人电脑、一架飞机模型、一本日历、一堆散乱的文件，还有一张亚当森和温妮的合照。一切都摆在原处，却干净得过分。
+  keeper: 原文前后矛盾：既列出这些物品又说“清理一空”。照录为物品都在，电脑已被格式化，文件里找不到任何有用材料。
+  features:
+  - 格式化的电脑
+  - 散乱的文件
+  - 和温妮的合照
+  - 飞机模型与日历
+  outdoors: false
+  ground: building
+  views:
+  - key: adamson_office_desk
+    label: 干净得过分的办公桌
+    features:
+    - 散乱的文件
+    - 和温妮的合照
+    - 飞机模型与日历
+    - 格式化的电脑
+    prompt: 玻璃隔间里的办公桌：一台个人电脑、一架飞机模型、一本台历、一堆散乱摊开的文件，还有一张一对夫妇的相框合照；桌面一尘不染，像是有人刻意清理过。
+- id: horn_media
+  name: 加州鹿角传媒公司
+  art: horn_media
+  read_aloud: 新地大厦第九层。办公区清爽明亮，小大厅里有四个客服卡座，两侧是独立办公室。进门的走廊挂着在职员工的照片墙。刚进门，就听见一个中年男人在打电话：“好的，我们会尽快派人员处理。嗯，是的。”电话一挂，他怒吼了一声：“该死的，他在哪里！”
+  keeper: '2005 年在奥克兰成立的小型广告公司，业务是商圈电子屏广告位出租，不足 10 名员工；每块屏幕有专门的技术顾问，皮特是中央广场的技术顾问（网上可查）。照片墙上有皮特。
+
+    腐化>30：天空的两条光带在这里形成折角。
+
+    '
+  features:
+  - 员工照片墙
+  - 客服卡座
+  - 奥斯丁的办公室
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: horn_photo_wall
+    label: 员工照片墙
+    features:
+    - 员工照片墙
+    prompt: 写字楼进门走廊上一排装框的员工照片，每张下面贴着姓名和职务的小标签，背景是清爽明亮的办公区。
+- id: peter_office
+  name: 皮特的办公室
+  within: horn_media
+  art: peter_office
+  read_aloud: 写字楼的一角，一面落地窗对着街景。靠窗的磁带架倒了，磁带散落一地。办公桌空荡得反常。
+  keeper: '奥斯丁以私人空间为由婉拒特工进入；特工亮出警方等官方身份，他立刻同意，难掩担忧。据奥斯丁说，皮特的电脑不翼而飞。环境腐化 3。
+
+    从这里进入剧院（阈值 30）：落地窗变成木质推拉门，推开直接进入剧院走廊。
+
+    '
+  features:
+  - 办公桌抽屉
+  - 散落的磁带
+  - 落地窗
+  outdoors: false
+  ground: building
+  views:
+  - key: peter_empty_desk
+    label: 空荡的办公桌
+    features:
+    - 办公桌抽屉
+    prompt: 办公桌上空空荡荡，只剩显示器底座留下的印子和一截空的电源线，抽屉合着。
+  - key: peter_fallen_tapes
+    label: 倒下的磁带架
+    features:
+    - 散落的磁带
+    - 落地窗
+    prompt: 落地窗边一只磁带架翻倒在地，上百盒磁带散落一地，窗外是白天的街景。
+  looks:
+  - when: knows:players:clue:c_drawer_photos_b
+    change: 拉开的抽屉里露出一沓照片，其中几张是夜里隔着窗户远远偷拍的、噪点很重，一张角落拍到了一块路牌。
+    'on': peter_empty_desk
+- id: central_plaza
+  name: 奥克兰中央广场
+  art: central_plaza
+  read_aloud: 两条宽大的商业街在这里交汇，四角各立着一座体量不小的商城，每座大厦的腰部都挂着一块巨大的电子屏。这里曾是奥克兰最繁华的地方，如今势头不如当年。
+  keeper: '四块屏幕是鹿角传媒最重要的资产，由皮特负责。白天播无趣的商业广告；夜晚大量行人休闲，各式小型歌舞演出，屏幕转播——是最热闹的时刻。这里将成为 SI 正式演出的转播主场地，是最可怕的威胁。2
+    月 18 日前屏幕一切正常。
+
+    统一的中控室平时上锁，商场管理人员、皮特、奥斯丁有钥匙。向商场管理人员出示相关材料，他们同意带特工进中控室检查，但站在一旁阻止修改广告内容（会造成合约损失）；一切正常时，除非官方勒令，要说服他们关屏难如登天。向奥斯丁展示官方材料也可拿到钥匙。闯入：锁匠检定开锁；内外监控毫无疏漏，未经允许须隐藏身份，否则会被起诉。
+
+    皮特每天远程检查一次屏幕，发现端倪会立刻离开酒吧前来维修；演出当天白天他也在这里做最后检查。
+
+    停止转播（终幕当日）：破坏四块巨幕，或闯入中控室破坏电脑、解除皮特的控制。那时管理人员不知发生了什么，一边照节奏敲电话按键一边慌乱地拨电话找皮特；说服检定成功（出示文件后的交涉）可让他们打开中控室的门。终止广场转播只能缓解燃眉之急，真正的演出在海滨公园继续，并顺着互联网蚕食现实（在
+    YouTube 搜关键词即可发现）。
+
+    '
+  features:
+  - 四块大屏
+  - 广场人群
+  - 商场管理处
+  scene_root: true
+  outdoors: true
+  ground: street
+  looks:
+  - when: at:players:central_plaza & hour:18-24
+    change: 广场上挤满散步休闲的行人，几处空地上有小型歌舞演出，四块大屏都在转播现场表演
+  - when: flag:sign_fs_plaza_water_1
+    change: 广场地面泛着一层反光的积水，倒映着四块大屏。
+  views:
+  - key: plaza_big_screens
+    label: 商城腰部的巨幕
+    features:
+    - 四块大屏
+    prompt: 两条商业街交汇的广场，四角的商城大厦腰部各挂着一块巨大的电子屏，正在播放乏味的商品广告，楼下行人匆匆。
+- id: plaza_control
+  name: 中控室
+  within: central_plaza
+  art: plaza_control
+  read_aloud: 一间上锁的小房间，一台电脑控制着广场四块大屏，机柜的指示灯一闪一闪。
+  keeper: 电脑要密码：计算机使用（困难）检定并花 1D4 小时破解，奥斯丁知道密码。这台电脑正常不能联网，现在已被皮特动了手脚。
+  features:
+  - 控制电脑
+  - 机柜与线路
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:peter:plaza_control
+    change: 控制电脑屏幕亮着，开了好几个代码窗口，机柜门敞开，桌上摊着一只打开的工具包
+  views:
+  - key: plaza_control_pc
+    label: 中控电脑与机柜
+    features:
+    - 控制电脑
+    - 机柜与线路
+    prompt: 狭小的中控室里，一台电脑屏幕停在密码输入框，旁边的机柜指示灯一闪一闪，后面是捆扎好的线缆。
+- id: simpton_building
+  name: 辛普敦大厦
+  art: simpton_building
+  read_aloud: 一栋建于 1985 年的旧大楼，临街一层是报刊亭、汉堡店和花店。通往负一楼的台阶下面，是一扇积着厚灰的临街玻璃门。
+  keeper: '皮特电脑的 IP 指向这里；预告片提示酒吧在地下。
+
+    腐化≤20（BAR NOT FOUND）：负一楼看上去是一家正在转让的老玩具店铺，存在感微妙，装潢俗套过时，临街玻璃积着厚灰。靠近能听见里面的架子鼓声和对话声，透过玻璃却空无一人、久未营业。凝视太久会注意到灰上被擦去的痕迹组成黄印（第一次目击黄印的腐化
+    +4）。执意进入：一瞬间来到“热闹非凡”的酒吧，因无力感 SAN 0/1D3，腐化 +2。
+
+    腐化>20：酒吧正在营业，透出温馨的气息；负一楼门面上一块有坏点的霓虹灯写着“12:00 a.m. Alarm”，下方的高脚杯霓虹灯条光线不均；正门是两扇对开木门，钉着刻有“1996”的金属铭牌；门内有交谈声和玻璃杯碰撞声。腐化>30：天空的光带在这里形成折角。
+
+    问街道商户和行人：“有这么一个店吧？但是不是很早以前就倒闭了？”模棱两可。
+
+    '
+  features:
+  - 负一楼的门面
+  - 大厦管理处
+  - 街边商户
+  scene_root: true
+  outdoors: true
+  ground: street
+  views:
+  - key: simpton_dusty_door
+    label: 负一楼积灰的玻璃门
+    features:
+    - 负一楼的门面
+    prompt: 通往地下一层的台阶下面，一间像是正在转让的老玩具店，装潢俗套过时，临街玻璃门积着厚厚的灰，透过玻璃看进去空无一人。
+  looks:
+  - when: knows:players:clue:c_dust_mark
+    change: 玻璃积灰上一些被擦去的痕迹连在一起，组成一个图案。
+    'on': simpton_dusty_door
+- id: bar
+  name: 凌晨十二点闹钟酒吧
+  art: bar
+  read_aloud: 一间长方形的大房间。木桌、沙发和隔断随意摆着，中间一小块舞池正对着贯穿整个酒吧的吧台，舞池旁有一套架子鼓。天花板上挂着几台电视，承重柱上的灯向下投出紫色和绿色的柔光。四面是光滑的水泥墙，低处贴着蓝黑相间的瓷砖，高处镶着颜色各异的金属块，不规律地挂着几幅笔触粗粝的油画肖像。
+  keeper: '前身罗伯特书店，荷尔蒙与腐败的气息吸引着片区里的颓丧人士。它与剧院深刻相连，像从世界上割下来的一块碎片：纸质记录忠实，却从附近居民的认知中被抹除。2 月 12 日演出后保留了黄衣之王的影响，成为剧院的一部分，低腐化时看来尚算正常。环境腐化
+    5；进入时个体腐化 +1。
+
+    进门所见“热闹非凡”：老板在柜台后托着下巴懒散地看着闯入的客人，酒保在桌椅间穿梭，零星几个客人。连着员工办公室、后厨、卫生间和地窖（通往地窖的门隐藏在幻象中）。员工是老板加三名长期员工和一名临时员工。顾客连特工共
+    13 人（吉姆、皮特、马蒂亚、托马斯、巴特每少一人减一）。
+
+    人物分三类：悖论成员、SI 预演观众、经剧院来的乘客。预演观众占多数：个体腐化 12，白天 17、夜晚 27；可以离开但下意识会回来，直到成为剧院居民；白天保留现实思维，忘了演出，有人隐约记得见过特工却想不起时间；晚上混乱，言语神经质，掺着“邀请函”“舞会”之类卡尔克萨用语。剧院来客是其他时空的被腐蚀者（精神病院病人、三角洲行动中失踪的特工、出演黄衣之王舞台剧的演员，甚至未来的特工自己），要一定腐化才看得见。酒吧中死亡的人在腐化>20
+    时都以诡异的姿态复活。
+
+    可以塞进违和元素：不属于这个世界的人头钞票、泡着巨型甲虫的果汁。
+
+    监视酒吧：白天没有顾客，日落后零星有客人进入，次日日出才稀稀拉拉离开（数量比进去的少）。夜晚腐化>20 时灯光渐亮，窗户映出移动的人影，尽管没看见任何人进入。监视中看不到约瑟芬、皮特、吉姆离开（他们都经剧院移动）。
+
+    幻象“他/我造访过这里”（阈值 10）：幻视第一次进入酒吧（2 月 12 日）；进门一瞬，门上玻璃的倒影是亚当森的脸，嘴一张一合，SAN 0/1，随即消失。灵感成功能理解镜中亚当森在说什么，守秘人可借此放出暗示记忆的信息。
+
+    幻象“他/我闯了进去”（阈值 15）：约黄昏时，监视中看到一个很像亚当森的人小心翼翼、左顾右盼地进入酒吧——那是当时自己进入的情形。
+
+    示例“雨中交合”（腐化≥30）：无云的天空下着雨，街道积水，腐坏的贝壳和死鱼虾流过靴边；有人从后面拍肩，是幻象亚当森，在耳边说：“你不能从那个夜晚逃脱自己的命运，如果没有我。你欠我很多东西。”不反抗则缠绵合二为一；反抗须过意志检定（加一个惩罚骰，原文意志*5-20），失败则像被固定在泥潭里动弹不得。次日醒来赤身裸体躺在随便什么地方，带着特殊的疼痛和性器官被粗暴使用的痕迹（沾血的树枝、刮着血的墙缝、井盖的洞眼）。SAN
+    1/1D6，腐化 +2。
+
+    可选“皮特的舞会”：夜里皮特更活跃，进舞池找舞伴、高唱、跳滑稽的舞步，预告片的节奏回响，引来其他客人加入；腐化 +1；可诱发失真症发作，作为第一次进入剧院的契机。
+
+    前往剧院（阈值 30）：一扇时不时有人进出的铁门，偶尔有顾客端着酒杯直接走进去。腐化<30 时试图开门，它只是钉在墙上的一幅画，SAN 0/1D3，腐化 +2。
+
+    '
+  features:
+  - 吧台
+  - 前台电脑
+  - 舞池
+  - 角落杂物堆
+  - 墙上的装饰画
+  - 铁门
+  - 靠窗的台子
+  - 皮特的角落
+  outdoors: false
+  ground: building
+  scene_root: true
+  looks:
+  - when: at:players:bar & hour:18-24
+    change: 夜里客人多了，舞池里有人踩着同一种节奏起舞，桌上摆满酒杯，紫绿灯光显得更亮
+  - when: knows:players:clue:c_si_poster
+    change: 墙上多了一张海报：海底火车的横截面，轨道挂着海带和贝类在水里飘动，远处有鲸鱼的阴影，两个戴灰色方盒的赤裸身体缠绕着站在车厢小桌上，角落标着日期。
+    'on': bar_wall_paintings
+  - when: knows:players:clue:c_bar_camera
+    change: 杂物里露出一台摄像机，一根藏起来的数据线顺着墙通到一幅装饰画后面。
+    'on': bar_corner_junk
+  views:
+  - key: bar_dance_floor_blood
+    label: 舞池的血迹
+    features:
+    - 舞池
+    prompt: 酒吧中间的小舞池，地上一大摊新鲜血迹，溅到墙上的装饰画上；旁边是一张坏掉的凳子和一张破沙发，紫绿色灯光照着一旁的架子鼓。
+  - key: bar_wall_paintings
+    label: 墙上的装饰画
+    features:
+    - 墙上的装饰画
+    prompt: 光滑的水泥墙上不规律地挂着几幅笔触粗粝的油画肖像，墙脚贴着蓝黑相间的瓷砖，高处镶着各色金属块。
+  - key: bar_corner_junk
+    label: 角落的杂物堆
+    features:
+    - 角落杂物堆
+    prompt: 酒吧角落堆着旧纸箱、折叠椅和缠成一团的电线，上面落了灰。
+  - key: bar_peter_corner
+    label: 角落的小桌
+    features:
+    - 皮特的角落
+    prompt: 昏暗角落的小桌上放着一摞磁带和一杯苏打水，椅背上搭着一条咖啡色毛毯，桌面有被指节反复敲打的旧痕。
+- id: bar_cellar
+  name: 酒吧地窖
+  within: bar
+  art: bar_cellar
+  read_aloud: 储存饮料的地窖。中间是两人宽的通道，两侧的架子上摆满瓶瓶罐罐，临街的墙上有一个窄小的通风口，透进街上的声音。到处是频繁使用的痕迹。
+  keeper: '门没锁。向约瑟芬申请，她干脆地同意；被悖论发现进入也不阻止。但只要悖论发现特工进了地窖，就在特工进入后偷偷锁上门（事件：被困在地窖）。进入时个体腐化 +1。
+
+    幻象“地窖”（阈值 25）：腐化<25 时地窖门只是一幅画着门的装饰画；掀开这幅画，它变成木门，SAN 0/1D3，腐化 +2。
+
+    '
+  features:
+  - 两侧的架子
+  - 通风口
+  - 木门
+  outdoors: false
+  ground: building
+  views:
+  - key: cellar_shelves
+    label: 地窖两侧的架子
+    features:
+    - 两侧的架子
+    - 通风口
+    prompt: 窄长的地窖，中间两人宽的通道，两侧架子上摆满瓶瓶罐罐和酒箱，临街墙高处一个窄小的通风口透进街上的声音和光。
+  looks:
+  - when: knows:players:clue:c_peter_laptop
+    change: 架子后面藏着一台手提电脑，接着一根数据线和一根网线。
+    'on': cellar_shelves
+- id: greenwood_mansion
+  name: 格林伍德宅邸
+  art: greenwood_mansion
+  read_aloud: 奥克兰东南部的罗伯勒多大道，紧邻一条穿过市中心的铁道。一栋三层楼的宅子，带独立车库和不太大的庭前花园。花园里不对称地立着两座大理石喷泉，杂草歪倒；米白的墙面喷了漆，正面门廊和对着花园的窗户雕花复杂，却久未打理。门窗紧闭，窗帘拉得死死的。
+  keeper: '在都市里格格不入却无人注意。找到这里的途径：皮特办公室的偷拍照片（路牌）或调查约瑟芬的信息。腐化>30：光带在此形成折角。
+
+    监视：昼夜门窗紧闭；白天没有人车进出；接近半夜灯亮了（悖论进入宅邸）；午夜后二楼主卧方向传来鞭打声和一女两男隐约的喊叫（和约瑟芬、皮特、吉姆交谈过就能分辨），持续约两小时。
+
+    进入宅邸：环境腐化 10，进入时个体腐化 +1。一层门廊左侧是独立车库，门廊进去是一体式的厨房、餐厅和客厅；储物间在通往二楼的楼梯转角，卫生间隔壁。二楼有主卧、马里亚诺的书房、客卧、卫生间和与门廊同面的阳台。三楼有儿童卧室、娱乐室和露台。宅中死亡的人腐化>20
+    时以诡异姿态复活。
+
+    宅邸前往剧院（阈值 30）：吉姆卧室和书房的窗外不是街景，而是离地半米高的门；一层储物间的柜门也连着剧院。
+
+    '
+  features:
+  - 客厅中央的血迹
+  - 厨房
+  - 一楼卫生间
+  - 门廊与花园
+  - 邻居家门口
+  scene_root: true
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:josephine:greenwood_mansion
+    change: 紧闭的窗帘后面亮起了灯，几扇窗透出昏黄的光
+  views:
+  - key: mansion_living_blood
+    label: 客厅中央的血迹
+    features:
+    - 客厅中央的血迹
+    prompt: 沙发和桌子被胡乱堆到客厅角落，空出来的地板正中是新鲜的、像被剐蹭过的深褐色血迹，窗帘拉得死死的。
+  - key: mansion_garden_fountains
+    label: 庭前花园
+    features:
+    - 门廊与花园
+    prompt: 不太大的庭前花园里，两座大理石喷泉不对称地立着，被歪倒的杂草围住；后面是米白墙面和雕花复杂却久未打理的门廊与窗户。
+- id: mansion_storage
+  name: 宅邸储物间
+  within: greenwood_mansion
+  art: mansion_storage
+  read_aloud: 楼梯转角的储物间，门被木条钉死了。
+  keeper: 撬开木条后是浓烈的尸臭，不足十平米的空房，地面正中一圈人形的黄色污渍。腐化≥30 可接入剧院事件“婴儿床”。
+  features:
+  - 钉死的门
+  - 地上的人形污渍
+  - 柜门
+  outdoors: false
+  ground: building
+  views:
+  - key: storage_stain
+    label: 地上的人形污渍
+    features:
+    - 地上的人形污渍
+    - 钉死的门
+    prompt: 撬开木条的门后是不足十平米的空房间，地面正中一圈人形的黄色污渍，门框上还挂着拔出钉子的木条。
+- id: mansion_study
+  name: 马里亚诺的书房
+  within: greenwood_mansion
+  art: mansion_study
+  read_aloud: 二楼的书房，气派的书桌背靠窗户。曾经的奇珍异宝都卖光了，地上只留下一些说不出用途的底座，墙面光秃秃的。
+  keeper: 马里亚诺被杀的房间。可安排特殊幻象：卷心菜国王与吉姆同时出现，还原杀父的一幕；或巴特从窗户跳出，推开特工，消失在走廊。
+  features:
+  - 书桌
+  - 窗户
+  - 空底座
+  outdoors: false
+  ground: building
+  views:
+  - key: study_desk_pedestals
+    label: 背窗的书桌
+    features:
+    - 书桌
+    - 空底座
+    - 窗户
+    prompt: 气派的书桌背靠窗户，地上散着几个说不出用途的空底座，墙面光秃秃的，只留下挂过东西的印子。
+- id: mansion_playroom
+  name: 宅邸娱乐室
+  within: greenwood_mansion
+  art: mansion_playroom
+  read_aloud: 三楼的娱乐室，弥漫着血、精液和汗的腥臊味。正中一张标准台球桌，几把靠椅，台球杆靠在角落。门把手上挂着一条沾血的鞭子，原本放球杆的架子上挂满奇形怪状、刑具般的金属制品和粗细不一的绑带。
+  keeper: 吉姆和约瑟芬举行“爱之仪式”的地方。午夜时分特工会在这里撞见正在举行仪式的吉姆和约瑟芬，转入剧院事件“通往愉悦之路”。
+  features:
+  - 台球桌
+  - 门把手上的鞭子
+  - 挂满刑具的架子
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:jim:mansion_playroom
+    change: 娱乐室灯火通明，门把手上的鞭子不见了，台球桌上散着绑带和金属器具，桌面的血迹还是湿的
+  - when: knows:players:clue:c_playroom_table
+    change: 血迹一组一组排开，每一组都构成同一个图案。
+    'on': playroom_billiard
+  views:
+  - key: playroom_billiard
+    label: 斑驳的台球桌
+    features:
+    - 台球桌
+    prompt: 标准大小的台球桌，绿色台呢上布满斑驳的褐色血迹，有些还很新鲜，几把靠椅围在旁边。
+  - key: playroom_whip_rack
+    label: 鞭子与刑具架
+    features:
+    - 门把手上的鞭子
+    - 挂满刑具的架子
+    prompt: 门把手上挂着一条沾血的鞭子；原本放球杆的架子上挂满奇形怪状、像刑具一样的金属制品和粗细不一的绑带，几根台球杆靠在角落。
+- id: jim_bedroom
+  name: 吉姆的卧室
+  within: greenwood_mansion
+  art: jim_bedroom
+  read_aloud: 顶楼的儿童卧室，倾斜的屋顶压得很低。正对道路的一侧是一面巨大的落地窗，其余墙面漆成海蓝色，画着海草和水母，离地不高处有几笔突兀的水粉笔触。倾斜的天花板上吊着一盏浅蓝灯罩的白炽灯，灯罩上的鲸鱼装饰在墙上投下摇晃的影子。一张约一米五的床在角落，斜对面的书桌靠着书柜，桌上被一大堆揉皱的纸团盖住，工具盒里是水粉笔和干掉的颜料。
+  keeper: 环境腐化 15，是现实与剧院连接最紧密的地方。门正对二楼上来的楼梯，能听清二楼的动静。夜里这里是皮特、吉姆、约瑟芬进入宅邸的通道。可经剧院事件“吉姆的幼年”抵达这里，或从这里进入该事件（阈值
+    30）。
+  features:
+  - 书桌上的家庭照片
+  - 书桌上的纸团
+  - 书柜
+  - 落地窗
+  - 床
+  outdoors: false
+  ground: building
+  views:
+  - key: jim_desk
+    label: 堆满纸团的书桌
+    features:
+    - 书桌上的家庭照片
+    - 书桌上的纸团
+    prompt: 书桌上满是水粉笔触，被一大堆揉皱的纸团覆盖，工具盒里是水粉笔和干掉的颜料；一张家庭照片被撕掉了三分之一，剩下的人站在有水上游乐设施的地方，背景是半截招牌。
+  - key: jim_bookcase
+    label: 靠桌的书柜
+    features:
+    - 书柜
+    prompt: 书桌边的书柜塞满书，从百科全书到爱情读物，书脊新旧不一，有的翻得破烂，海蓝色墙上的鲸鱼灯影在书脊上晃动。
+- id: oakland_pd
+  name: 奥克兰警署档案室
+  art: oakland_pd
+  read_aloud: 警署的档案室，一排排灰色铁柜，日光灯嗡嗡作响，值班警员在柜台后翻着登记簿。
+  keeper: AutoKeeper 补充的地点：原文写马里亚诺自杀案、吉姆失踪案“警署可查”，并有“说服市警协助找到照片中人”。调阅旧案需出示官方身份并交涉。
+  features:
+  - 马里亚诺自杀案卷宗
+  - 吉姆失踪案卷宗
+  - 值班柜台
+  scene_root: true
+  outdoors: false
+  ground: building
+- id: seaside_park
+  name: 海滨公园
+  art: seaside_park
+  read_aloud: 奥克兰东部市区边缘的公园。水滑梯零件改成的长椅沿着步道排开，草坪上立着章鱼、鲸鱼之类的巨型橡胶玩偶。公园中心，一扇旧的公园大门作为纪念品立在那里，被一圈现代喷泉环绕。夜幕降临时，橡胶玩偶里的灯亮起柔光，家人们在草坪上散步运动，孩子们嬉笑着跑来跑去。
+  keeper: '前身是夜间水上公园（Nocte Waterpark），热门的家庭娱乐场所，1995 年关停，2003 年改建重开，受新一代家庭青睐，保留了大量旧设施作景观。腐化>30：光带在此形成折角。演出前这里未被腐蚀，悖论必须经现实世界前往，跟踪他们不容易。
+
+    终演：如往日平静。悖论晚 8 点抵达，8 点 18 分开演，熟悉的节奏辐射影响心智。
+
+    '
+  features:
+  - 公园大门
+  - 草坪上的橡胶玩偶
+  - 喷泉
+  - 步道长椅
+  scene_root: true
+  outdoors: true
+  ground: street
+  looks:
+  - when: at:jim:seaside_park & hour:20-24
+    change: 公园中心的旧大门前，人群围成一个大圈，圈外架着一台亮着红灯的直播摄像机
+  views:
+  - key: seaside_old_gate
+    label: 喷泉围着的旧大门
+    features:
+    - 公园大门
+    - 喷泉
+    prompt: 公园中心一扇旧的游乐园大门作为纪念品立着，被一圈现代喷泉环绕，水声哗哗。
+  - key: seaside_rubber_toys
+    label: 草坪上的巨型玩偶
+    features:
+    - 草坪上的橡胶玩偶
+    - 步道长椅
+    prompt: 草坪上立着章鱼、鲸鱼形状的巨型橡胶玩偶，内部的灯透出柔光；步道边排着用水滑梯零件改成的长椅。
+- id: theatre
+  name: 剧院
+  art: theatre
+  read_aloud: 一列维多利亚式的豪华火车。靠窗是走廊，另一侧是一扇扇带小门的隔间，小门上绘着海底动植物的工笔画。红白图案的厚地毯铺满走廊。窗外是迟钝的液体，前方不知何处喷出蒸汽状的东西，在水里漂着，拖出模糊的黑色轨迹；车轴摩擦的“哐当”声在液体里规律地回荡。
+  keeper: '永远穿梭于哈利湖底的蒸汽火车，无头无尾，车厢随意连接，围绕卡尔克萨王宫徒劳旋转。只有“受邀者”能发现通道。第一次进入 SAN 0/1D6，腐化 +6。轨道越往前越不规则，最终脱离地面在液体中自由飘动，车内却始终稳定。读过《卡尔克萨王族食谱》能认出门上的生物。
+
+    对被腐蚀者而言剧院稳固：不再支离破碎，没有耳语，不疑神疑鬼，自洽而宁静；不饿不累，该有食物的地方总堆满食物。它禁锢乘客，又受乘客思想影响：被腐蚀者可以“心想事成”，总以意想不到的形式实现；改造剧院是更深一步。
+
+    离开剧院：剧院事件后被动离开（如“吉姆的幼年”后进入现实中的吉姆卧室）；主动离开时，下一个打开的包厢映出扭曲的现实光景，穿过即回到“现实”——想离开时须过腐化值检定，失败则是“虚假的离场”。抵达希望去的现实地点；没有明确去处就回自己家、亚当森家或进入时的位置；只能回到造访过且被腐蚀的现实地点。个体腐化>25
+    可经剧院进入彼岸。
+
+    可选：时间的把戏（出入时间不一致，向特工希望的方向偏移）；老套平行时空（花店老板反复说“你这件衣服真好看，新买的吗？”，“啊，这样的吗？可能我忘记了。”），谨慎使用。
+
+    乘客：来自诸多时空，是理性的残渣，带着无尽的空虚；不能真正被杀死（只是信息），被破坏的部分以难解的形式恢复，裸露的伤口下是棉花和齿轮（之外黑洞洞）。尚与现实有关的人（特工、悖论）在剧院或其他严重腐蚀地之外死亡，会成为永远徘徊的乘客。乘客在走廊走动、靠窗发呆、在包厢里满足欲望。找人：推荐去餐车或问“卷心菜国王”，并神秘地建议考虑好措辞。想离开：奇怪地说“因为世界除了‘这里’没有‘那里’了”。悖论成员各处可遇，应对同酒吧；酒吧的其他角色也可能出现。剧院中可遇到任何进入过或将要进入的角色。
+
+    虚假的离场：想离开剧院时腐化值检定失败，并没有真的离开；来到与现实无异的地方，失真症消失，可以和亲友愉快地吃晚饭，甚至继续调查——直到一声鲸鱼的叫声贯穿天空，铁路从天边浮现，四周景象像画布一样投射到车厢墙面上，然后失色失声：一直没离开剧院。SAN
+    0/1D4。
+
+    '
+  features:
+  - 包厢小门
+  - 窗外的湖水
+  - 走廊地毯
+  scene_root: true
+  outdoors: false
+  ground: building
+  views:
+  - key: theatre_cabin_doors
+    label: 画着海底生物的包厢门
+    features:
+    - 包厢小门
+    - 走廊地毯
+    prompt: 维多利亚式列车走廊，一扇扇包厢小门上绘着海底动植物的工笔画，红白图案的厚地毯铺满地面，铜质壁灯泛着暖光。
+  - key: theatre_window_lake
+    label: 窗外的湖水
+    features:
+    - 窗外的湖水
+    prompt: 车窗外是迟钝的液体，不知何处喷出的蒸汽状物质在水中漂动，拖出模糊的黑色轨迹。
+- id: theatre_dining
+  name: 餐车
+  within: theatre
+  art: theatre_dining
+  read_aloud: 一节和维多利亚餐车别无二致的车厢。L 形的吧台在一端，一个动作机械的侍者在吧台后摇晃着调酒杯，两排长方形的桌子分列两侧。
+  keeper: 《火车的历史》介绍东方快车的部分有和这里几乎一致的图片。可遇到任何可能出现在剧院中的人物。
+  features:
+  - L 形吧台
+  - 机械侍者
+  - 长桌
+  outdoors: false
+  ground: building
+  views:
+  - key: dining_bar_waiter
+    label: L 形吧台与侍者
+    features:
+    - L 形吧台
+    - 机械侍者
+    - 长桌
+    prompt: 维多利亚餐车一端的 L 形吧台后，一个动作机械的侍者摇晃着调酒杯，两排铺着白桌布的长方形桌子分列两侧。
+- id: theatre_scar
+  name: 渐淡的伤疤
+  within: theatre
+  art: theatre_scar
+  read_aloud: 门外是无边无尽的海床，一片废弃的工业园区坐落其上，围着这扇打开的门。视线正中是一座倒塌了一半的工厂，风压卷着沙石从闪烁的爆炸中心扑出来——一切都像被暂停了一样停在原处。只有水还在流动，却不涌进门里。从水底往上看，水面的波光组成一张飘动的网。
+  keeper: '特工自己的思想与剧院融合的产物，是亚当森死亡的现场。爆炸中心附近，亚当森被炸得腾在空中；朝园区外走，园区门口有持枪待命的特工“自己”。二人被定在原处但能交流，可从他们口中得知大部分黑线行动的事实，交互逻辑同“迷途羔羊”。附录B：巴特也可能在这里出现。
+
+    不久，远处传来朦胧模糊的救护车和消防车声，声音突然逼近，一阵眩晕后特工回到剧院。可借此回扣开头的梦境，重现救护人员把特工运出爆炸现场的真实场景。
+
+    '
+  features:
+  - 爆炸中心
+  - 园区门口
+  - 倒塌的工厂
+  outdoors: true
+  ground: street
+  weather:
+  - dust
+  - flicker
+  views:
+  - key: scar_blast_center
+    label: 暂停的爆炸中心
+    features:
+    - 爆炸中心
+    - 倒塌的工厂
+    prompt: 海床上的废弃工业园区，一座倒塌一半的工厂，爆炸中心闪烁着，卷起的沙石凝固在半空，一个男人被炸得腾在空中一动不动；头顶水面的波光组成飘动的网。
+  - key: scar_park_gate
+    label: 园区门口
+    features:
+    - 园区门口
+    prompt: 工业园区门口，一个持枪待命的人影被定在原处，身后是凝固的烟尘与倒塌的厂房。
+- id: theatre_childhood
+  name: 吉姆的幼年
+  within: theatre
+  art: theatre_childhood
+  read_aloud: 你推开门，视线忽然变得低矮。你坐在一张狭小卧室的床上，怀里抱着一个玩偶，耳边是门刚被摔上的回响。你光着身子，衣服被丢在床的另一角。深蓝色的窗帘遮住整扇窗，月光透进来，把房间照成一种幽暗而宁静的蓝。楼下传来玻璃砸碎的声音，一个女人啜泣着咒骂，一个男人在哼哼。
+  keeper: '特工进入 1995 年失踪前吉姆的视角，在夜间的格林伍德宅邸。引语：“我喜欢火车。它有自己的轨道，它的乘客都将抵达最开始的那个目的地——无论他们多么意见不合。乘客不能跳下火车，观看窗户外的景色直到终点是他们登上火车时就决定好了的事实。”
+
+    特工打算离开床走向门时，怀里的玩具“达夫”突然开口（见 NPC 达夫玩偶）。若特工在现实中来过这间屋子，离开房间时可能离开剧院、进入现实中的吉姆卧室；也可借这个事件从现实进入剧院。
+
+    '
+  features:
+  - 怀里的玩偶
+  - 卧室门
+  - 深蓝窗帘
+  outdoors: false
+  ground: building
+  views:
+  - key: childhood_lion_doll
+    label: 怀里的狮子玩偶
+    features:
+    - 怀里的玩偶
+    - 深蓝窗帘
+    prompt: 低矮的视角，怀里抱着一个棕褐色的狮子毛绒玩偶；深蓝色窗帘遮住整扇窗，月光透进来，把小卧室照成幽暗的蓝。
+- id: theatre_crib
+  name: 婴儿床
+  within: theatre
+  art: theatre_crib
+  read_aloud: 除了一扇门，四面都是光秃秃的墙。地板正中孤零零地摆着一张婴儿床，黄褐色的液体顺着床栏流下，滴在周围的地上。床里蜷缩着一具已经腐坏的男性尸体，满脸酒疮的头上戴着一对硕大的鹿角头冠，头颅上一个子弹钻出的大孔清晰可见。
+  keeper: 对应格林伍德宅邸的储物间。见过马里亚诺照片的特工能认出这具尸体。尸体的肚子上有一条巨大的缝，连着子宫一样的器官，本该躺着婴儿的地方塞着狮子玩偶达夫——这是达夫·格林伍德从马里亚诺·格林伍德的子宫中诞生之处。尸体会主动交流（见
+    NPC 马里亚诺的尸体）。
+  features:
+  - 婴儿床
+  - 尸体腹部的裂缝
+  outdoors: false
+  ground: building
+  views:
+  - key: crib_corpse
+    label: 婴儿床里的尸体
+    features:
+    - 婴儿床
+    - 尸体腹部的裂缝
+    prompt: 光秃秃的房间正中一张婴儿床，黄褐色液体顺床栏滴下；床里蜷着一具腐坏的男尸，头戴硕大的鹿角头冠，头颅上一个弹孔；肚子上一条巨大的裂缝里塞着一个狮子玩偶。
+- id: theatre_dream
+  name: 造梦机车厢
+  within: theatre
+  art: theatre_dream
+  read_aloud: 车厢里立着一台蒸汽时代风格的机械：中央是一块古旧的二色曲面显示器，下方两个喇叭和一个投币口，右侧装着一根带圆球的扳手，上方一道窄缝里伸出一条很长的纸带，左侧挂着一副可以摘下来的、像望远镜一样笨重的眼镜。旁边放着一只箩筐。
+  keeper: '尝试理解它的构造和功能 SAN 0/1。它运行一个微型世界（不一定是特工所处的那个），纸带影响运算，带遗传物质的胶囊决定模拟对象，戴上眼镜能以对象的身份体验并影响它；不能逆算，遗传物质耗尽自动暂停。使用一次腐化
+    +4。
+
+    运行：拉右侧拉杆，它以不稳定的频率摇晃，喇叭报“已匹配”后开始运作：吐出更多纸带，显示器图像变清晰，伴随刺耳音效。戴上眼镜会被强制拉回“现实”继续行动，并做意志检定（加一个惩罚骰，原文意志*5-20）：成功则在现实中清楚知道自己“正在使用某机械观察”，可以主动回到车厢。无论如何，现实剧情只前进半天就被强行拉回这间车厢，合成音说：“请植入一枚新的胶囊。”
+
+    新胶囊：箩筐里有空白纸带和圆形透明小盒，各自标注某个对象的姓名、样貌和起始随机值编码，多为特工的重要之人或模组角色；科学检验可知是对应人物的染色体溶液。投入后模拟这些人在现实中的生活（被腐蚀的好友插科打诨、伴侣因亲密度下降而不忠等），大多是真的；戴眼镜以其视角进入（同样过意志检定），最多两小时就被强行拉回：“警告。胶囊匹配度过低，已弹出。”
+
+    '
+  features:
+  - 造梦机的纸带
+  - 造梦机的拉杆
+  - 笨重的眼镜
+  - 箩筐里的胶囊
+  outdoors: false
+  ground: building
+  views:
+  - key: dream_machine_front
+    label: 造梦机
+    features:
+    - 造梦机的纸带
+    - 造梦机的拉杆
+    - 笨重的眼镜
+    prompt: 一台蒸汽时代风格的机械：中央古旧的二色曲面显示器，下方两个喇叭和一个投币口，右侧一根带圆球的扳手，上方窄缝伸出一条很长的纸带，左侧挂着一副望远镜似的笨重眼镜。
+  - key: dream_capsule_basket
+    label: 箩筐里的胶囊
+    features:
+    - 箩筐里的胶囊
+    prompt: 机器旁的箩筐里堆着卷起的空白纸带和一个个圆形透明小盒，每个小盒上贴着手写标签。
+- id: theatre_king
+  name: 国王的车厢
+  within: theatre
+  art: theatre_king
+  read_aloud: 一节空阔的车厢，没有包厢也没有桌子。地上散落着各式玩具，画着毛线球和屎壳郎的纸团到处都是。四面墙上是水粉画的日常图案，车厢中间摆着一张纸做的长桌，手绘的图案让它像一张台球桌。一个卷心菜模样的生物坐在正中。
+  keeper: 墙上的画是宅邸娱乐室平面化、反色的样子。坐着的是喀巴奇·劳·四肢纤细（见 NPC 与怪物卷心菜国王）。
+  features:
+  - 纸做的长桌
+  - 满地纸团
+  - 墙上的水粉画
+  outdoors: false
+  ground: building
+  views:
+  - key: king_paper_table
+    label: 纸做的长桌与卷心菜
+    features:
+    - 纸做的长桌
+    - 满地纸团
+    - 墙上的水粉画
+    prompt: 空阔的车厢里一张纸做的长桌，手绘图案让它像一张台球桌；正中坐着一个由纸页构成的卷心菜模样的生物，戴着金黄纸冠；地上满是玩具和画着毛线球、屎壳郎的纸团，四壁是水粉画。
+- id: theatre_pleasure
+  name: 通往愉悦之路
+  within: theatre
+  art: theatre_pleasure
+  read_aloud: 车厢外就能听到鞭打声和嚎叫。推开门，里面几乎和宅邸的娱乐室一模一样。
+  keeper: '若特工已经历过“八次鞭子”，建议略去这个事件。悖论三人在举行仪式：赤裸的约瑟芬和吉姆蹲坐在台球桌上纠缠，约瑟芬尖叫，血从佩戴金属饰品的伤口流出，她身上刻满不同形状的黄印；皮特以朝圣者的态度递上工具。三人血腥地交媾、喊叫、舞蹈直到筋疲力尽，不会意识到特工；受到攻击只会狂欢大叫。或者他们注意到闯入者，转入“八次鞭子”。目击暴力
+    SAN 0/1D4。
+
+    仪式结束后三人短暂呆滞；亚当森不知从哪冒出来，拽着特工往门外跑：“不能，他不能直视。”不离开的话：吉姆的身体里分裂出一个赤裸的男性，头部是一团跳动的黑线——达夫。目击最坏的一幕会瞬间回忆起自己遭遇的一切：SAN
+    1/1D8，腐化 +4；吉姆主动介绍达夫·格林伍德，达夫没有反应。
+
+    八次鞭子：吉姆盛情邀请特工加入与神联系的仪式：连续 8 次鞭打，每两次受 1D2 伤害、SAN 0/1，并须过体质检定，否则晕倒；后背烙下黄印形的伤痕；增加等于仪式中理智损失总值的腐化。撑过之后，吉姆和约瑟芬邀请特工一同交媾，皮特摊手鼓励；完成整个仪式
+    SAN 0/1D6，腐化 +2。结束后可与平静的吉姆交流，剧院知识混乱地灌注进来，此后“心想事成”检定 +20。发现身上刻的是黄印额外 SAN 0/1D3，腐化 +2。特工可随时终止逃离，他们不阻拦；晕倒醒来时三人已经不在。
+
+    '
+  features:
+  - 台球桌
+  - 递工具的皮特
+  outdoors: false
+  ground: building
+- id: other_side
+  name: 彼岸·奥克兰
+  art: other_side
+  read_aloud: 这里和奥克兰极其相似，只是整座城市完全浸没在湖水之下。维多利亚式装潢的铁制电车悬浮着驶过，摩天大楼的棱角上布满复杂的浮雕，天空中漂浮着一盏盏电灯，上面插满铜质的喇叭。没有白天，两轮月亮永恒地悬在水面之上。
+  keeper: 'SI 预演孕育的新世界，理想主义，位于卡尔克萨又在其外；随正式演出推进而无限逼近王的宴会，永不抵达，时间尺度被拉长到无穷。它收留众多旅者，人们以抵达宴会为终极目标而欢悦，祝贺拿到邀请函、搭乘剧院的人。环境腐化
+    30，不提供时间腐化。
+
+    进入彼岸：现实记忆模糊，大量彼岸信息涌入；特工过着与现实区别不大的生活，不幸和矛盾尽数移除，自己不再是三角洲的一员（同尤里卡时刻）。极力渲染正常的氛围。
+
+    琐事：邮箱里塞满同事的生日派对和婚礼邀请；街坊热情攀谈；路人拍肩拥抱：“听说你拿到了邀请函！我的天！祝贺你，祝贺你。祝福我们的王。”
+
+    铜管声：每隔一段“时间”，若有若无的铜管声响起，随后所有电灯上的喇叭播放音乐，行人驻足高喊“祝福我们的王！”，特工发现自己嘴里也在喊；循着最初的声音可以走到彼岸的边缘。
+
+    离开彼岸只有两种办法：找到剧院站台，进入停靠的剧院，按剧院的规则回到现实；或找到造梦机，借它回到现实。
+
+    现实中：破碎的幻象干扰旅途；疯狂发作时做腐化值检定，成功则意识再入彼岸或触发彼岸事件，特殊场合也会引发。
+
+    '
+  features:
+  - 悬浮电车
+  - 天空中的喇叭电灯
+  - 街坊与路人
+  - 邮箱
+  scene_root: true
+  outdoors: true
+  ground: street
+  views:
+  - key: other_horn_lamps
+    label: 天上的喇叭电灯
+    features:
+    - 天空中的喇叭电灯
+    - 悬浮电车
+    prompt: 浸没在湖水下的城市，天空中漂浮着一盏盏插满铜质喇叭的电灯，维多利亚式铁制电车悬浮着驶过雕满浮雕的摩天大楼，水面之上悬着两轮月亮。
+- id: other_home
+  name: 彼岸·特工的家
+  within: other_side
+  art: other_home
+  read_aloud: 家比记忆里更像你想象中的样子。家人其乐融融，伴侣轻吻了你一下，一边收拾行李一边问：“我们什么时候前往那里？”
+  keeper: 再会亚当森的敲门声从这里引入彼岸（见事件）。
+  features:
+  - 门口
+  - 收拾中的行李
+  outdoors: false
+  ground: building
+  views:
+  - key: other_home_luggage
+    label: 收拾中的行李
+    features:
+    - 收拾中的行李
+    prompt: 温馨明亮的家中，客厅地上摊开几只行李箱，衣物叠了一半，像一家人正准备出远门。
+- id: other_tower
+  name: 彼岸·摩天大楼
+  within: other_side
+  art: other_tower
+  read_aloud: 最高那栋楼的楼顶。整座城市上空覆盖着一个巨大的黄色印记，巨型飞行器和水生生物在头顶漂浮，两轮月亮悬在水面上。形形色色的人在这里碰杯。
+  keeper: 可找到巴特。从楼顶跳下：失重感过后重新出现在彼岸的随机位置，SAN 0/1D3。俯瞰城市上空的黄印若是第一次目击，腐化 +4。
+  features:
+  - 楼顶边缘
+  - 碰杯的人群
+  outdoors: true
+  ground: street
+  views:
+  - key: tower_roof_view
+    label: 楼顶俯瞰
+    features:
+    - 楼顶边缘
+    - 碰杯的人群
+    prompt: 最高摩天大楼的楼顶，人们举杯交谈；俯瞰之下整座水下城市上空覆盖着一个巨大的黄色印记，巨型飞行器和水生生物在头顶漂浮，两轮月亮悬在水面上。
+- id: other_whale
+  name: 彼岸·鲸鱼堡垒
+  within: other_side
+  art: other_whale
+  read_aloud: 格林伍德宅邸的位置上卧着一座巨大的鲸鱼堡垒。窗户是鲸鱼的眼睛，门廊是一张张开的嘴，内部是湿滑粘腻的细胞墙。一条铁轨穿过鲸尾，一直连到天际。
+  keeper: 进入时听到外面的汽笛声，剧院停在铁轨上（可由此登上剧院）。
+  features:
+  - 张开的嘴
+  - 细胞墙
+  - 鲸尾的铁轨
+  outdoors: false
+  ground: building
+  views:
+  - key: whale_mouth
+    label: 鲸鱼堡垒的嘴
+    features:
+    - 张开的嘴
+    - 鲸尾的铁轨
+    - 细胞墙
+    prompt: 一座巨大的鲸鱼堡垒，窗户是一只只鲸鱼的眼睛，门廊是一张张开的嘴，嘴里是湿滑粘腻的细胞墙；一条铁轨穿过鲸尾，一直连到天际。
+- id: other_station
+  name: 彼岸·光辉的站台
+  within: other_side
+  art: other_station
+  read_aloud: 闹钟酒吧的位置上是一座富丽堂皇的车站，宽阔明亮的大门里人潮涌动，卖报纸和饮料的机械玩偶在人群中游走。铁轨一直连到天际线，一列火车停在站台上。站台上没有时刻表。大门旁摆着一张小木桌和一条凳子。
+  keeper: 想乘坐剧院，侍者会请特工出示邀请函，确认后引入剧院。大门旁坐着但丁（见 NPC）。
+  features:
+  - 站台上的列车
+  - 大门旁的小木桌
+  - 机械玩偶
+  outdoors: false
+  ground: building
+  looks:
+  - when: at:dante:other_station
+    change: 大门旁的小木桌上摆着一台吐着长纸带的蒸汽时代机械，凳子边靠着一根拐杖
+  views:
+  - key: station_small_table
+    label: 大门旁的小木桌
+    features:
+    - 大门旁的小木桌
+    prompt: 富丽堂皇的车站大门旁，一张小木桌和一条凳子，凳子上坐着一位穿袖口磨损红袍、双手杵着拐杖的瘦老人，桌上摆着一台复古的蒸汽装置。
+  - key: station_platform_train
+    label: 站台上的列车
+    features:
+    - 站台上的列车
+    - 机械玩偶
+    prompt: 明亮的站台上停着一列维多利亚式火车，铁轨连到天际线，卖报纸和饮料的机械玩偶在人潮中游走，站台上找不到时刻表。
+- id: other_edge
+  name: 彼岸的边缘
+  within: other_side
+  art: other_edge
+  read_aloud: 一道巨大的海底沟壑，深不见底，像一片虚空。远处立着一道像是由若干面镜子组成的遮罩，对面隐约是另一个彼岸的痕迹，一条铁轨穿过遮罩，通向看不见的终点。地面上埋着许多铜管乐器，喇叭口朝上露出地面，连成一条边界线，发出肃穆低沉的声音。数百名灰袍、戴面具的人围成一圈，堵住了通往中心的路，念着颂歌。
+  keeper: '对应现实中的海滨公园。凝视遮罩，会看见无数流动的人脸，SAN 0/1。灰袍人不注意特工；揭开面具，下面是熟悉的面孔，甚至是逝去的亲人。吉姆站在圆圈中央。
+
+    '
+  features:
+  - 海沟
+  - 镜子般的遮罩
+  - 地下的铜管乐器
+  - 灰袍人的圆圈
+  outdoors: true
+  ground: street
+  views:
+  - key: edge_mirror_veil
+    label: 镜子般的遮罩
+    features:
+    - 镜子般的遮罩
+    - 海沟
+    prompt: 深不见底的海底沟壑对面，立着一道由许多面镜子组成的遮罩，一条铁轨穿过它通向看不见的尽头。
+  - key: edge_buried_brass
+    label: 埋在地下的铜管
+    features:
+    - 地下的铜管乐器
+    - 灰袍人的圆圈
+    prompt: 地面上埋着一排排铜管乐器，喇叭口朝上露出地面连成边界线；远处数百名灰袍戴面具的人围成圆圈。
+- id: home_bedroom
+  name: 二楼卧室
+  read_aloud: 二楼的卧室。丈夫阿尔伯特在床上平稳地呼吸，床头的电子钟亮着。门外的走廊尽头是女儿爱丽丝的房间，门缝里透出一点小夜灯的光。
+  within: agent_home
+  art: home_bedroom
+  keeper: |-
+    开场时特工在这里醒来，敲门声来自楼下。阿尔伯特和爱丽丝通常在这一层；家人会被深夜出门吵醒，可能看到特工对着空气比划；多次目睹会偷偷联络心理医生（附录C）。
+    （AutoKeeper 补充：开场原文写特工在自己卧室醒来、敲门声在楼下，地点描述写卧室与走廊尽头的女儿房间；分出来以便区分家人在不在场、深夜出门是否吵醒家人。）
+  features:
+  - 卧室床头
+  - 走廊尽头爱丽丝的房门
+  outdoors: false
+  ground: building
+  views:
+  - key: bedroom_bedside_clock
+    label: 床头的电子钟
+    features:
+    - 卧室床头
+    prompt: 黑暗卧室的床头柜上，一只电子钟亮着红色数字，旁边是台灯和一杯水，床上有人平稳地睡着。
+  looks:
+  - when: flag:sign_fs_unconscious_notes_1
+    change: 半开的衣柜里，常穿的外套之间多出一抹灰色粗布。
+- id: home_study
+  name: 书房
+  read_aloud: 一间小书房，书桌上放着你的工作电脑。
+  within: agent_home
+  art: home_study
+  keeper: |-
+    特工在家里上网查询悖论、论坛、谷歌地图、城市记录与旧报刊都在这台电脑上进行。书房所在楼层原文未写，暂定一层。
+    （AutoKeeper 补充：地点描述写“书房里有你的工作电脑”，原文未写楼层；分出来以便家人不在场时独自调查。）
+  features:
+  - 书房电脑
+  outdoors: false
+  ground: building
+  views:
+  - key: study_work_pc
+    label: 书房的工作电脑
+    features:
+    - 书房电脑
+    prompt: 小书房书桌上一台工作电脑，显示器亮着浏览器窗口，旁边是笔记本、笔和一杯冷掉的咖啡。
+- id: bar_office
+  name: 员工办公室
+  read_aloud: 员工通道尽头一间狭小的办公室，堆着酒水单据和杂物，门可以关上。
+  within: bar
+  art: bar_office
+  keeper: 约瑟芬的办公室。原文写她在“她的办公室里”向特工展示身上更大面积的伤口（魅惑交涉）。
+  features:
+  - 办公桌
+  - 堆放的单据
+  outdoors: false
+  ground: building
+- id: bar_restroom
+  name: 卫生间
+  read_aloud: 酒吧的卫生间，隔着墙还能听见大厅里闷闷的鼓声和人声。
+  within: bar
+  art: bar_restroom
+  keeper: 酒吧安静的角落；附录B“幻听”以卫生间等安静处为例，墙壁里可能传出马里亚诺尸体带混响的声音（腐化≥10）。
+  features:
+  - 隔间
+  - 洗手台与镜子
+  outdoors: false
+  ground: building
+  views:
+  - key: restroom_mirror
+    label: 洗手台与镜子
+    features:
+    - 洗手台与镜子
+    prompt: 狭小卫生间的洗手台上方一面斑驳的镜子，水龙头滴着水，隔墙传来闷闷的鼓声。
+- id: mansion_master_bedroom
+  name: 二楼主卧
+  read_aloud: 二楼的主卧。床上的被套掀开着，上面积着一层厚灰，墙上有几道划痕。
+  within: greenwood_mansion
+  art: mansion_master_bedroom
+  keeper: 原文监视段落写午夜后鞭打声从二楼主卧方向传来，但主卧的床至少两周没用过，仪式实际在三楼娱乐室（原文不一致，照录）。
+  features:
+  - 主卧的床
+  - 隔壁的客卧
+  - 二楼卫生间与阳台
+  outdoors: false
+  ground: building
+  views:
+  - key: master_dusty_bed
+    label: 积灰的床
+    features:
+    - 主卧的床
+    prompt: 主卧的床上被套掀开着，上面盖着一层厚灰，墙上有几道黑色或绿色的划痕。
+passages:
+- id: agent_home__adamson_home
+  a: agent_home
+  b: adamson_home
+  kind: road
+  minutes: 20
+- id: agent_home__nppd_office
+  a: agent_home
+  b: nppd_office
+  kind: road
+  minutes: 20
+- id: agent_home__horn_media
+  a: agent_home
+  b: horn_media
+  kind: road
+  minutes: 20
+- id: agent_home__central_plaza
+  a: agent_home
+  b: central_plaza
+  kind: road
+  minutes: 20
+- id: agent_home__simpton_building
+  a: agent_home
+  b: simpton_building
+  kind: road
+  minutes: 20
+- id: agent_home__greenwood_mansion
+  a: agent_home
+  b: greenwood_mansion
+  kind: road
+  minutes: 25
+- id: agent_home__oakland_pd
+  a: agent_home
+  b: oakland_pd
+  kind: road
+  minutes: 20
+- id: agent_home__seaside_park
+  a: agent_home
+  b: seaside_park
+  kind: road
+  minutes: 30
+- id: central_plaza__horn_media
+  a: central_plaza
+  b: horn_media
+  kind: road
+  minutes: 10
+- id: central_plaza__simpton_building
+  a: central_plaza
+  b: simpton_building
+  kind: road
+  minutes: 15
+- id: central_plaza__nppd_office
+  a: central_plaza
+  b: nppd_office
+  kind: road
+  minutes: 15
+- id: central_plaza__oakland_pd
+  a: central_plaza
+  b: oakland_pd
+  kind: road
+  minutes: 10
+- id: central_plaza__adamson_home
+  a: central_plaza
+  b: adamson_home
+  kind: road
+  minutes: 20
+- id: central_plaza__greenwood_mansion
+  a: central_plaza
+  b: greenwood_mansion
+  kind: road
+  minutes: 20
+- id: central_plaza__seaside_park
+  a: central_plaza
+  b: seaside_park
+  kind: road
+  minutes: 25
+- id: adamson_home__adamson_bedroom
+  a: adamson_home
+  b: adamson_bedroom
+  kind: stairs
+  minutes: 0
+  perception: 楼梯口能听见卧室里不连续的呢喃。
+- id: nppd_office__adamson_office
+  a: nppd_office
+  b: adamson_office
+  kind: door
+  minutes: 0
+  gate:
+    open: false
+- id: horn_media__peter_office
+  a: horn_media
+  b: peter_office
+  kind: door
+  minutes: 0
+  gate:
+    open: false
+- id: central_plaza__plaza_control
+  a: central_plaza
+  b: plaza_control
+  kind: door
+  minutes: 1
+  gate:
+    open: false
+    locked: true
+- id: simpton_building__bar
+  a: simpton_building
+  b: bar
+  kind: door
+  minutes: 1
+  gate:
+    open: false
+- id: bar__bar_cellar
+  a: bar
+  b: bar_cellar
+  kind: door
+  minutes: 0
+  gate:
+    open: false
+  perception: 厚木门；门在幻象中被隐藏（腐化<25 时看上去是一幅画着门的装饰画，掀开才变成木门，见地窖须知）。
+- id: greenwood_mansion__mansion_storage
+  a: greenwood_mansion
+  b: mansion_storage
+  kind: door
+  minutes: 0
+  gate:
+    open: false
+    blocked: true
+  perception: 门被木条钉死，靠近能闻到尸臭。
+- id: greenwood_mansion__mansion_study
+  a: greenwood_mansion
+  b: mansion_study
+  kind: stairs
+  minutes: 0
+- id: greenwood_mansion__mansion_playroom
+  a: greenwood_mansion
+  b: mansion_playroom
+  kind: stairs
+  minutes: 1
+- id: greenwood_mansion__jim_bedroom
+  a: greenwood_mansion
+  b: jim_bedroom
+  kind: stairs
+  minutes: 1
+  perception: 吉姆卧室的门正对二楼上来的楼梯，在卧室里能听清二楼的动静。
+- id: adamson_bedroom__theatre
+  a: adamson_bedroom
+  b: theatre
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: peter_office__theatre
+  a: peter_office
+  b: theatre
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: bar__theatre
+  a: bar
+  b: theatre
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: jim_bedroom__theatre
+  a: jim_bedroom
+  b: theatre_childhood
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: mansion_study__theatre
+  a: mansion_study
+  b: theatre
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: mansion_storage__theatre_crib
+  a: mansion_storage
+  b: theatre_crib
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: theatre__agent_home
+  a: theatre
+  b: agent_home
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: theatre__theatre_dining
+  a: theatre
+  b: theatre_dining
+  kind: door
+  minutes: 0
+- id: theatre__theatre_scar
+  a: theatre
+  b: theatre_scar
+  kind: door
+  minutes: 0
+- id: theatre__theatre_childhood
+  a: theatre
+  b: theatre_childhood
+  kind: door
+  minutes: 0
+- id: theatre__theatre_crib
+  a: theatre
+  b: theatre_crib
+  kind: door
+  minutes: 0
+- id: theatre__theatre_dream
+  a: theatre
+  b: theatre_dream
+  kind: door
+  minutes: 0
+- id: theatre__theatre_king
+  a: theatre
+  b: theatre_king
+  kind: door
+  minutes: 0
+- id: theatre__theatre_pleasure
+  a: theatre
+  b: theatre_pleasure
+  kind: door
+  minutes: 0
+- id: theatre__other_station
+  a: theatre
+  b: other_station
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: other_side__other_home
+  a: other_side
+  b: other_home
+  kind: door
+  minutes: 5
+- id: other_side__other_tower
+  a: other_side
+  b: other_tower
+  kind: road
+  minutes: 10
+- id: other_side__other_whale
+  a: other_side
+  b: other_whale
+  kind: road
+  minutes: 15
+- id: other_side__other_station
+  a: other_side
+  b: other_station
+  kind: road
+  minutes: 10
+- id: other_side__other_edge
+  a: other_side
+  b: other_edge
+  kind: road
+  minutes: 20
+- id: other_whale__theatre
+  a: other_whale
+  b: theatre
+  kind: door
+  minutes: 0
+  gate:
+    blocked: true
+- id: agent_home__home_bedroom
+  a: agent_home
+  b: home_bedroom
+  kind: stairs
+  perception: 楼下门口的敲门声和说话声能传到楼上，可能吵醒家人。
+- id: agent_home__home_study
+  a: agent_home
+  b: home_study
+  kind: door
+  perception: 普通室内门，关着门打字或打电话，客厅里隐约能听见。
+- id: bar__bar_office
+  a: bar
+  b: bar_office
+  kind: corridor
+  perception: 经员工通道进出；关上门时大厅里听不清里面的谈话。
+- id: bar__bar_restroom
+  a: bar
+  b: bar_restroom
+  kind: door
+  perception: 隔着门能听见大厅的音乐和人声。
+- id: greenwood_mansion__mansion_master_bedroom
+  a: greenwood_mansion
+  b: mansion_master_bedroom
+  kind: stairs
+  minutes: 1
+plans:
+- building: agent_home
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: home_bedroom
+  - name: 一层
+    rooms:
+    - place: agent_home
+      label: 一楼客厅与门廊
+    - place: home_study
+      size: small
+  basis: 原文只写“特工的家”与开场在卧室醒来、楼下敲门；卧室、书房、客厅门廊的划分为 AutoKeeper 补充，依据地点描述。
+  layout:
+    rooms:
+    - {place: agent_home, x: 10, y: 10, w: 7, h: 5}
+    - {place: home_study, x: 17, y: 10, w: 4, h: 5}
+    - {place: home_bedroom, x: 10, y: 10, w: 5, h: 5}
+    doors:
+    - {passage: agent_home__home_study, at: [17, 12.5]}
+    - {passage: agent_home__central_plaza, at: [10, 13], main: true}
+    - {passage: agent_home__adamson_home, at: [10, 13]}
+    - {passage: agent_home__nppd_office, at: [10, 13]}
+    - {passage: agent_home__horn_media, at: [10, 13]}
+    - {passage: agent_home__oakland_pd, at: [10, 13]}
+    - {passage: agent_home__seaside_park, at: [10, 13]}
+    - {passage: agent_home__simpton_building, at: [10, 13]}
+    - {passage: agent_home__greenwood_mansion, at: [10, 13]}
+    - {passage: theatre__agent_home, at: [10, 13]}
+    windows:
+    - {room: agent_home, at: [14, 15], width: 1.5}
+    - {room: home_study, at: [21, 12.5]}
+    - {room: home_study, at: [19, 15]}
+    - {room: home_bedroom, at: [12.5, 15], width: 1.5}
+    - {room: home_bedroom, at: [10, 11]}
+    stairs:
+    - {passage: agent_home__home_bedroom, x: 11, y: 10, w: 3.5, h: 1}
+    fixtures:
+    - {room: agent_home, feature: 门廊与猫眼, label: 门廊与猫眼, sketch: door, outside: true, x: 8, y: 11.5, w: 2,
+      h: 3}
+    - {room: agent_home, feature: 书架, label: 书架, sketch: shelf, x: 15, y: 10, w: 1.5, h: 0.4}
+    - {room: agent_home, feature: 客厅的电话, label: 客厅的电话, sketch: table, x: 13, y: 12.5, w: 1.2, h: 0.6}
+    - {room: agent_home, sketch: lounge, x: 12.5, y: 13.8, w: 2, h: 0.9}
+    - {room: home_study, feature: 书房电脑, label: 书房电脑, sketch: desk, x: 20.4, y: 11.9, w: 0.6, h: 1.2}
+    - {room: home_study, sketch: chair, x: 19.6, y: 12.2, w: 0.5, h: 0.5}
+    - {room: home_bedroom, feature: 卧室床头, label: 卧室床头, sketch: bed, x: 10, y: 12, w: 0.5, h: 0.5}
+    - {room: home_bedroom, sketch: bed, x: 10, y: 12.5, w: 2, h: 1.6}
+    - {room: home_bedroom, feature: 走廊尽头爱丽丝的房门, label: 爱丽丝的房门, sketch: door, x: 14.4, y: 12.5, w: 0.6,
+      h: 1}
+    sides:
+    - {side: w, faces: 门前街道，通往市区, way: r_home_plaza}
+    - {side: n, faces: 邻居家}
+    - {side: e, faces: 邻居家}
+    - {side: s, faces: 后院}
+    basis: 原书无平面图，照原文与地点描述：一楼客厅连门廊、书房在客厅一侧，二楼卧室，楼梯通楼上；房间尺寸、门窗、家具位置为 AutoKeeper 按普通独栋住宅补全，正门朝西对着去市区各处的来路。
+- building: adamson_home
+  floors:
+  - name: 二层
+    level: 1
+    rooms:
+    - place: adamson_bedroom
+  - name: 一层
+    rooms:
+    - place: adamson_home
+      label: 门厅
+  basis: 原文 p15：一进门就是通往二楼的楼梯，亚当森的卧室位于二层；附录E有一、二楼平面图。
+  layout:
+    rooms:
+    - {place: adamson_home, x: 3, y: 0, w: 6, h: 5}
+    - {place: adamson_bedroom, x: 4, y: 0, w: 4, h: 4}
+    doors:
+    - {passage: agent_home__adamson_home, at: [9, 1.5], main: true}
+    - {passage: central_plaza__adamson_home, at: [7.5, 5]}
+    - {passage: adamson_bedroom__theatre, at: [5, 4]}
+    windows:
+    - {room: adamson_bedroom, at: [4, 2.5]}
+    - {room: adamson_home, at: [3, 3]}
+    - {room: adamson_home, at: [9, 3.5]}
+    - {room: adamson_home, at: [5, 5]}
+    stairs:
+    - {passage: adamson_home__adamson_bedroom, x: 5, y: 0, w: 3, h: 1}
+    fixtures:
+    - {room: adamson_bedroom, feature: 挡住窗户的床, label: 挡窗的床, sketch: bed, x: 4, y: 1.2, w: 1, h: 2}
+    - {room: adamson_bedroom, sketch: desk, x: 5.9, y: 3.4, w: 1.6, h: 0.6}
+    - {room: adamson_bedroom, feature: 书桌上的第一张纸条, label: 纸条一, sketch: papers, x: 6, y: 3.5, w: 0.3, h: 0.4}
+    - {room: adamson_bedroom, feature: 书桌上的第二张纸条, label: 纸条二, sketch: papers, x: 6.35, y: 3.5, w: 0.3,
+      h: 0.4}
+    - {room: adamson_bedroom, feature: 电脑, label: 电脑, sketch: machine, x: 6.7, y: 3.45, w: 0.4, h: 0.45}
+    - {room: adamson_bedroom, feature: 座机, label: 座机, sketch: machine, x: 7.15, y: 3.5, w: 0.3, h: 0.3}
+    - {room: adamson_bedroom, sketch: chair, x: 6.5, y: 2.8, w: 0.5, h: 0.5}
+    - {room: adamson_bedroom, sketch: papers, x: 5.5, y: 1.6, w: 1, h: 0.6}
+    - {room: adamson_home, feature: 门厅楼梯, label: 楼梯, sketch: stairs, x: 4.2, y: 0.1, w: 0.7, h: 0.8}
+    - {room: adamson_home, sketch: table, x: 5.3, y: 2.5, w: 1.2, h: 0.8}
+    - {room: adamson_home, feature: 桌上一摞书, label: 一摞书, sketch: papers, x: 5.6, y: 2.7, w: 0.5, h: 0.4}
+    - {room: adamson_home, sketch: lounge, x: 3.2, y: 1.5, w: 0.8, h: 1.8}
+    - {room: adamson_home, feature: 背面的小公园, label: 小公园, sketch: area, outside: true, x: 0.5, y: 1, w: 2,
+      h: 3}
+    sides:
+    - {side: e, faces: 林登街（来路）, way: r_home_adamson}
+    - {side: s, faces: 单行道, way: r_plaza_adamson}
+    - {side: w, faces: 小公园}
+    - {side: n, faces: 单行道}
+    basis: 没有原书平面图，照原文描述：一进门就是上二楼的楼梯，卧室在二层，床挡着窗，房子背面是小公园；房间大小、门窗位置、家具摆放和四面朝向都是 AutoKeeper 照全镇地图（来路在东、东南）和常理补的。
+- building: bar
+  floors:
+  - name: 负一层
+    level: -1
+    rooms:
+    - place: bar
+      size: large
+    - place: bar_office
+      size: small
+    - place: bar_restroom
+      size: small
+    - place: bar_cellar
+      size: small
+  basis: 原文 p21–25 与 p73 平面图：酒吧大厅连着员工办公室、后厨、卫生间和地窖（平面图小图称储物间），同在负一层；后厨未单列。
+  layout:
+    rooms:
+    - {place: bar, x: 10, y: 10, w: 14, h: 10}
+    - {place: bar_office, x: 10, y: 20, w: 4, h: 3}
+    - {place: bar_restroom, x: 14, y: 20, w: 3, h: 3}
+    - {place: bar_cellar, x: 18, y: 6, w: 6, h: 4}
+    doors:
+    - {passage: simpton_building__bar, at: [12, 10], main: true}
+    - {passage: bar__theatre, at: [10, 15]}
+    - {passage: bar__bar_office, at: [12, 20]}
+    - {passage: bar__bar_restroom, at: [15.5, 20]}
+    - {passage: bar__bar_cellar, at: [21, 10]}
+    windows:
+    - {room: bar, at: [16, 10]}
+    fixtures:
+    - {room: bar, feature: 吧台, label: 吧台, sketch: desk, x: 13, y: 12.5, w: 8, h: 0.8}
+    - {room: bar, feature: 前台电脑, label: 前台电脑, sketch: machine, x: 21.2, y: 12.6, w: 0.6, h: 0.6}
+    - {room: bar, feature: 舞池, label: 舞池, sketch: area, x: 15, y: 15, w: 4, h: 3}
+    - {room: bar, feature: 角落杂物堆, label: 杂物堆, sketch: clutter, x: 22.5, y: 18.5, w: 1.5, h: 1.5}
+    - {room: bar, feature: 墙上的装饰画, label: 装饰画, sketch: mark, x: 18.5, y: 10, w: 1.3, h: 0.3}
+    - {room: bar, feature: 铁门, label: 铁门, sketch: door, x: 10, y: 16.5, w: 0.4, h: 1}
+    - {room: bar, feature: 靠窗的台子, label: 靠窗的台子, sketch: table, x: 15, y: 10.3, w: 2, h: 0.8}
+    - {room: bar, feature: 皮特的角落, label: 皮特的角落, sketch: area, x: 22.5, y: 10.3, w: 1.5, h: 1.7}
+    - {room: bar, x: 19.5, y: 16, w: 1.5, h: 1.5}
+    - {room: bar, sketch: lounge, x: 10.4, y: 11, w: 1.6, h: 2}
+    - {room: bar_office, feature: 办公桌, label: 办公桌, sketch: desk, x: 11.5, y: 21.8, w: 1.2, h: 0.6}
+    - {room: bar_office, feature: 堆放的单据, label: 单据, sketch: papers, x: 10.2, y: 22, w: 0.8, h: 0.8}
+    - {room: bar_restroom, feature: 隔间, label: 隔间, sketch: area, x: 14, y: 21, w: 1.5, h: 2}
+    - {room: bar_restroom, feature: 洗手台与镜子, label: 洗手台, sketch: sink, x: 16, y: 21.5, w: 1, h: 1}
+    - {room: bar_cellar, feature: 两侧的架子, label: 架子, sketch: shelf, x: 18.2, y: 6.5, w: 1.5, h: 2.8}
+    - {room: bar_cellar, sketch: shelf, x: 22.5, y: 6.5, w: 1.5, h: 2.8}
+    - {room: bar_cellar, feature: 通风口, label: 通风口, sketch: mark, x: 20.5, y: 6, w: 1, h: 0.3}
+    - {room: bar_cellar, feature: 木门, label: 木门, sketch: door, x: 22.1, y: 9.5, w: 0.5, h: 0.5}
+    sides:
+    - {side: n, faces: 临街，去辛普敦大厦, way: d_simpton_bar, place: simpton_building}
+    - {side: w, faces: 去剧院的路, way: t_bar_theatre, place: theatre}
+    - {side: s, faces: 邻楼地基}
+    - {side: e, faces: 邻楼地基}
+    basis: 原书无平面图，照原文描述排布：大厅是 large 的长方形大房间，吧台东西向贯穿；办公室、卫生间贴在大厅南墙，地窖贴在北墙东段，通风口开在临街的北墙上。正门开在朝辛普敦大厦的北墙上，通往剧院的门开在西墙上。后厨原文提到但没有单列为房间，所以没有画。窗、沙发、架子鼓和东侧货架是补的；铁门的位置原文没写，暂放在西门旁边
+- building: greenwood_mansion
+  floors:
+  - name: 三层
+    level: 2
+    rooms:
+    - place: mansion_playroom
+    - place: jim_bedroom
+  - name: 二层
+    level: 1
+    rooms:
+    - place: mansion_master_bedroom
+    - place: mansion_study
+  - name: 一层
+    rooms:
+    - place: greenwood_mansion
+      label: 一楼门廊与客厅
+      size: large
+    - place: mansion_storage
+      size: small
+  basis: 原文 p34–36：一层门廊、车库、厨房餐厅客厅一体，储物间在楼梯转角；二楼主卧、书房、客卧、卫生间、阳台；三楼儿童卧室、娱乐室、露台。附录E有三层平面图。
+  layout:
+    rooms:
+    - {place: greenwood_mansion, x: 10, y: 12, w: 6, h: 11}
+    - {place: mansion_storage, x: 16, y: 20, w: 3, h: 2}
+    - {place: mansion_master_bedroom, x: 10, y: 13.5, w: 5, h: 5}
+    - {place: mansion_study, x: 10, y: 18.5, w: 4, h: 4.5}
+    - {place: mansion_playroom, x: 10, y: 15.5, w: 6, h: 3}
+    - {place: jim_bedroom, x: 10, y: 18.5, w: 4.5, h: 4.5}
+    doors:
+    - {passage: agent_home__greenwood_mansion, at: [13, 12], width: 2, main: true}
+    - {passage: central_plaza__greenwood_mansion, at: [10, 14]}
+    - {passage: greenwood_mansion__mansion_storage, at: [16, 21]}
+    - {passage: mansion_storage__theatre_crib, at: [17.5, 22]}
+    - {passage: mansion_study__theatre, at: [11.5, 23]}
+    - {passage: jim_bedroom__theatre, at: [11.5, 23]}
+    windows:
+    - {room: greenwood_mansion, at: [15, 12]}
+    - {room: greenwood_mansion, at: [10, 17]}
+    - {room: greenwood_mansion, at: [10, 21]}
+    - {room: mansion_master_bedroom, at: [12.5, 13.5], width: 3}
+    - {room: mansion_master_bedroom, at: [10, 16]}
+    - {room: mansion_study, at: [10, 20.5], width: 1.5}
+    - {room: jim_bedroom, at: [10, 21], width: 2.5}
+    - {room: mansion_playroom, at: [13, 15.5], width: 2}
+    stairs:
+    - {passage: greenwood_mansion__mansion_study, x: 13, y: 19, w: 1, h: 3}
+    - {passage: greenwood_mansion__mansion_master_bedroom, x: 14, y: 14, w: 1, h: 3}
+    - {passage: greenwood_mansion__jim_bedroom, x: 12, y: 19, w: 1, h: 3}
+    - {passage: greenwood_mansion__mansion_playroom, x: 11, y: 17, w: 3, h: 1}
+    fixtures:
+    - {room: greenwood_mansion, feature: 客厅中央的血迹, label: 客厅中央的血迹, sketch: mark, x: 14.2, y: 19.5, w: 1.5,
+      h: 1.2}
+    - {room: greenwood_mansion, feature: 厨房, label: 厨房, sketch: area, x: 14.7, y: 12.7, w: 1.2, h: 1.2}
+    - {room: greenwood_mansion, feature: 一楼卫生间, label: 一楼卫生间, sketch: door, x: 15.4, y: 18.2, w: 0.5,
+      h: 1}
+    - {room: greenwood_mansion, feature: 门廊与花园, label: 门廊与花园, sketch: path, outside: true, x: 11, y: 9.5,
+      w: 3, h: 2}
+    - {room: greenwood_mansion, feature: 邻居家门口, label: 邻居家门口, sketch: door, outside: true, x: 14.5, y: 9.5,
+      w: 1.5, h: 1}
+    - {room: greenwood_mansion, sketch: lounge, x: 10.4, y: 19, w: 1.2, h: 2}
+    - {room: greenwood_mansion, sketch: longtable, x: 10.6, y: 15.2, w: 1.4, h: 1.6}
+    - {room: mansion_storage, feature: 钉死的门, label: 钉死的门, sketch: door, x: 16.1, y: 20.5, w: 0.3, h: 1}
+    - {room: mansion_storage, feature: 地上的人形污渍, label: 人形污渍, sketch: mark, x: 16.8, y: 20.6, w: 1.4, h: 0.8}
+    - {room: mansion_storage, feature: 柜门, label: 柜门, sketch: wardrobe, x: 18.4, y: 20.2, w: 0.5, h: 1}
+    - {room: mansion_master_bedroom, feature: 主卧的床, label: 主卧的床, sketch: bed, x: 10.3, y: 14.2, w: 2,
+      h: 1.5}
+    - {room: mansion_master_bedroom, feature: 隔壁的客卧, label: 隔壁的客卧, sketch: door, x: 14.1, y: 17.9, w: 0.8,
+      h: 0.5}
+    - {room: mansion_master_bedroom, feature: 二楼卫生间与阳台, label: 二楼卫生间与阳台, sketch: door, outside: true,
+      x: 15.2, y: 15, w: 1, h: 1}
+    - {room: mansion_master_bedroom, sketch: mark, x: 12.5, y: 16.2, w: 1, h: 0.3}
+    - {room: mansion_study, feature: 窗户, label: 窗户, sketch: window, x: 10.05, y: 19.8, w: 0.4, h: 1.2}
+    - {room: mansion_study, feature: 书桌, label: 书桌, sketch: desk, x: 10.6, y: 19.8, w: 0.7, h: 1.2}
+    - {room: mansion_study, feature: 空底座, label: 空底座, sketch: clutter, x: 11, y: 18.8, w: 0.9, h: 0.5}
+    - {room: jim_bedroom, feature: 落地窗, label: 落地窗, sketch: window, x: 10.05, y: 19.8, w: 0.3, h: 2.4}
+    - {room: jim_bedroom, feature: 书桌上的纸团, label: 书桌上的纸团, sketch: papers, x: 10.5, y: 18.7, w: 1, h: 0.6}
+    - {room: jim_bedroom, feature: 书桌上的家庭照片, label: 书桌上的家庭照片, sketch: papers, x: 11.5, y: 18.7, w: 0.4,
+      h: 0.4}
+    - {room: jim_bedroom, feature: 书柜, label: 书柜, sketch: shelf, x: 13.1, y: 18.7, w: 1.2, h: 0.4}
+    - {room: jim_bedroom, feature: 床, label: 床, sketch: bed, x: 13, y: 20.8, w: 1.5, h: 2}
+    - {room: mansion_playroom, feature: 台球桌, label: 台球桌, sketch: table, x: 11.8, y: 15.9, w: 2.4, h: 1}
+    - {room: mansion_playroom, feature: 门把手上的鞭子, label: 门把手上的鞭子, sketch: mark, x: 14.3, y: 17.3, w: 0.4,
+      h: 0.4}
+    - {room: mansion_playroom, feature: 挂满刑具的架子, label: 挂满刑具的架子, sketch: shelf, x: 15.5, y: 15.8, w: 0.4,
+      h: 2}
+    - {room: mansion_playroom, sketch: chair, x: 10.3, y: 15.8, w: 0.6, h: 0.6}
+    sides:
+    - {side: n, faces: 罗伯勒多大道, way: r_home_greenwood}
+    - {side: w, faces: 去市中心的路, way: r_plaza_greenwood}
+    - {side: s, faces: 通往剧院的小路, way: t_greenwood_theatre}
+    - {side: e, faces: 邻居家}
+    basis: 照附录E三层平面图：图上门廊在下方，正门须朝北面来路，故整栋旋转180°（门廊、露台朝北，楼梯塔在南，车库在东）；车库、卫生间、客卧、阳台、露台不是列出的房间，留作图上的空位；楼梯按通路要求放进相关房间内，位置为补全；吉姆卧室落地窗朝西面道路照原文。
+interior_reviews:
+  agent_home:
+    fingerprint: 014e83d9727ca04c9c9807af97ee23858a61a8157e0d779051735de753ad7e8d
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文只写“特工的家”与开场在卧室醒来、楼下敲门；卧室、书房、客厅门廊的划分为 AutoKeeper 补充，依据地点描述。
+  adamson_home:
+    fingerprint: 0308bb8dcca4d9183e85922c346edb96a7017e3d35fca565868aedff72aa14ce
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文 p15：一进门就是通往二楼的楼梯，亚当森的卧室位于二层；附录E有一、二楼平面图。
+  bar:
+    fingerprint: f17ea0f6cf609a049400f2c6c0e1a46b4837cfa34381c4e954072a7a6ef0229d
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文 p21–25 与 p73 平面图：酒吧大厅连着员工办公室、后厨、卫生间和地窖（平面图小图称储物间），同在负一层；后厨未单列。
+  greenwood_mansion:
+    fingerprint: a145c8d02d9c40cf4ddd67c75e07a796b528313b2bc5d826b1f4c18805132575
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文 p34–36：一层门廊、车库、厨房餐厅客厅一体，储物间在楼梯转角；二楼主卧、书房、客卧、卫生间、阳台；三楼儿童卧室、娱乐室、露台。附录E有三层平面图。
+  nppd_office:
+    fingerprint: 980aa7af572e0c0ce4dd60af480ffffcc657135a2425e0a6290a3f73491e0699
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 大厅加已有的亚当森办公室已覆盖原文空间；伯莎的办公室原文未写单独调查内容，作为大厅调查项即可。
+  adamson_office:
+    fingerprint: ba53c13d485dda74fe8d858a679bd1eea1f9abe5f1145e58a716d773957d8127
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文写的独立办公室，已是 nppd_office 内的房间并有门相连。
+  horn_media:
+    fingerprint: ce71bf6433306fba435d19cc96f607c88400fcdb18cb7866b14ea8a0e6bceea2
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 大厅与已有的皮特办公室覆盖原文写到的空间；奥斯丁办公室只用于交谈，留作调查项。
+  peter_office:
+    fingerprint: c04aef3583196e3f5526e83580a2566ade6b8e842c663e2c293c4417a1867d96
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 已是 horn_media 内的独立房间，原文无更多分区。
+  central_plaza:
+    fingerprint: bbeea8c895d31d399679b5a12702bdcf502f0b143ca04db72ab7c8cf30e0fc3c
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 户外广场，不改成建筑；中控室已作为上锁的子地点存在。
+  plaza_control:
+    fingerprint: f5c42c6d266919274410b1a9feaa024e18a229e98d20422f2c5af2ec4d39f876
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文写的一间上锁小房间，已有锁门通路。
+  simpton_building:
+    fingerprint: e8c8119542937e27c28945f40ea04f15dd2cf271f336cd947545e50b6303ea35
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文只写临街门面与负一楼入口，酒吧已是独立地点，大厦本身无需分房间。
+  oakland_pd:
+    fingerprint: 0ec17f367eb8c0e52c6a508d122bb4e0843f00f20e701f1ea139996108a420bf
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: AutoKeeper 补充的档案室，单一空间足够调阅卷宗。
+  seaside_park:
+    fingerprint: 30b23eb94400aad57c4bad81c623077489d1c2b97782a0af51a7bf95545d1700
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 户外公园，原文无室内结构。
+  theatre:
+    fingerprint: bb854098b8e44fd9f3845768e1cf7b6583df3c9a974848acf992585ec256c92e
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 剧院是车厢随意连接的列车，各剧院事件车厢已作为子地点，以走廊为主厅相连。
+  theatre_dining:
+    fingerprint: 7ab5e5cc1745b9636830b314e8699d59066679e683f6fccfed69cf9fb60de0ef
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 单节车厢，已是剧院子地点。
+  theatre_scar:
+    fingerprint: 77b885e4704642e1d63420dff33750ee87aae82b69d3c2ceb1628d9d997d421f
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 门外的幻境场景，单一空间，已是剧院子地点。
+  theatre_childhood:
+    fingerprint: b45b72fc6077b9b7c5aa89ded485ce1ba35e19f7e147c1b32e3c2c464b5b56e9
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 单间卧室幻境，已有与吉姆卧室的通路。
+  theatre_crib:
+    fingerprint: 974f2314096bc128aa79d361f18dd512fff57da26d364de9324b165b9b9ad8f1
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 单间，已有与宅邸储物间的通路。
+  theatre_dream:
+    fingerprint: 0f52fbb72180757113b6a8c73058e9bec38f95cdadbf2f197f46b67ea89e74d4
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 单节车厢，已是剧院子地点。
+  theatre_king:
+    fingerprint: 60ebfc38a92b7687cf3b0d39e63e2e0e93a59d79780ba8ac6cc3f847b3459180
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 单节车厢，已是剧院子地点。
+  theatre_pleasure:
+    fingerprint: b76b623a1b2b8d54740067baa154ea913422f03a67e78392638dd12f1f41ec35
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 单节车厢，已是剧院子地点。
+  other_side:
+    fingerprint: 04f0aa63894dc63bfaea66916de2c11f7f098dbdc37c284c9c960b6999acb795
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 彼岸是整座城市，各处场景已作为子地点，不做建筑内部。
+  other_home:
+    fingerprint: a603567f5b0d7d098be9d332c0619b5dea5a05c862e1607be71e340ac2cf206a
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文只写门口与家人，单一场景足够。
+  other_tower:
+    fingerprint: dfbea03f08e0b813cf15e299419ef42b75da83b6c63276db8c92b2131b48bde6
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 只写楼顶一处，单一场景。
+  other_whale:
+    fingerprint: 1bfcac97683312c1a6080540debe1397d98e9b8de2ae06370bb926e4a1e1e566
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 原文只写入口与内部细胞墙，单一场景并已连到剧院。
+  other_station:
+    fingerprint: 3e07a84819cb7e7172aec39aab6dd3c1c618af14c3868570a3cb1cb6918413d4
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 车站大门与站台一处场景，已连到剧院。
+  other_edge:
+    fingerprint: 534698fa13f451efceb2547b498f91ef958c5a2fcaaf80ad6be8c830b83197b4
+    source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+    reason: 户外的海沟边界，单一场景。
+
+geography:
+  title: 奥克兰
+  subtitle: 美国加利福尼亚州 · 2008
+  minutes_across: 75
+  places:
+  - place: adamson_home
+    at: [0.26, 0.17]
+    glyph: house
+  - place: horn_media
+    at: [0.37, 0.335]
+    glyph: shop
+  - place: central_plaza
+    at: [0.5, 0.36]
+    glyph: street
+  - place: agent_home
+    at: [0.65, 0.375]
+    glyph: house
+  - place: seaside_park
+    at: [0.136, 0.435]
+    glyph: street
+  - place: simpton_building
+    at: [0.56, 0.55]
+    glyph: street
+  - place: bar
+    at: [0.6, 0.63]
+    glyph: shop
+  - place: greenwood_mansion
+    at: [0.835, 0.89]
+    glyph: house
+  - place: nppd_office
+    at: [0.26, 0.33]
+    glyph: public
+  - place: oakland_pd
+    at: [0.45, 0.44]
+    glyph: public
+  - place: theatre
+    at: [0.1, 0.88]
+    glyph: other
+  - place: other_side
+    at: [0.33, 0.86]
+    glyph: street
+  - place: other_tower
+    at: [0.25, 0.75]
+    glyph: other
+  - place: other_station
+    at: [0.42, 0.74]
+    glyph: public
+  - place: other_whale
+    at: [0.5, 0.92]
+    glyph: other
+  - place: other_edge
+    at: [0.18, 0.96]
+    glyph: other
+  ways:
+  - id: i880
+    kind: main
+    points:
+    - [0.14, -0.05]
+    - [0.14, 0.3]
+    - [0.076, 0.41]
+    - [0.228, 0.5]
+    - [0.52, 0.65]
+    - [0.63, 0.73]
+    - [0.837, 1.05]
+  - id: i580
+    kind: main
+    points:
+    - [-0.05, 0.34]
+    - [0.14, 0.305]
+    - [0.38, 0.35]
+    - [0.565, 0.49]
+    - [0.89, 0.63]
+    - [1.05, 0.8]
+  - id: hwy24
+    kind: main
+    points:
+    - [0.3, 0.25]
+    - [0.478, 0.14]
+    - [0.576, 0.14]
+    - [0.75, 0.0]
+    - [0.9, -0.05]
+  - id: hwy13
+    kind: main
+    points:
+    - [0.576, 0.14]
+    - [0.75, 0.4]
+    - [0.89, 0.63]
+    - [1.05, 0.85]
+  - id: plaza_streets
+    kind: main
+    points:
+    - [0.4, 0.36]
+    - [0.5, 0.36]
+    - [0.62, 0.36]
+    street: central_plaza
+  - id: plaza_cross
+    kind: main
+    points:
+    - [0.5, 0.26]
+    - [0.5, 0.36]
+    - [0.52, 0.46]
+    street: central_plaza
+  - id: r_home_adamson
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.55, 0.26]
+    - [0.4, 0.2]
+    - [0.26, 0.17]
+    passage: agent_home__adamson_home
+  - id: r_home_nppd
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.5, 0.31]
+    - [0.36, 0.3]
+    - [0.26, 0.33]
+    passage: agent_home__nppd_office
+  - id: r_home_horn
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.5, 0.33]
+    - [0.37, 0.335]
+    passage: agent_home__horn_media
+  - id: r_home_plaza
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.5, 0.36]
+    passage: agent_home__central_plaza
+  - id: r_home_simpton
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.62, 0.46]
+    - [0.56, 0.55]
+    passage: agent_home__simpton_building
+  - id: r_home_greenwood
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.72, 0.55]
+    - [0.79, 0.72]
+    - [0.835, 0.89]
+    passage: agent_home__greenwood_mansion
+  - id: r_home_pd
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.55, 0.41]
+    - [0.45, 0.44]
+    passage: agent_home__oakland_pd
+  - id: r_home_seaside
+    kind: main
+    points:
+    - [0.65, 0.375]
+    - [0.45, 0.4]
+    - [0.28, 0.42]
+    - [0.136, 0.435]
+    passage: agent_home__seaside_park
+  - id: r_plaza_horn
+    kind: main
+    points:
+    - [0.5, 0.36]
+    - [0.43, 0.35]
+    - [0.37, 0.335]
+    passage: central_plaza__horn_media
+  - id: r_plaza_simpton
+    kind: main
+    points:
+    - [0.5, 0.36]
+    - [0.52, 0.46]
+    - [0.56, 0.55]
+    passage: central_plaza__simpton_building
+  - id: r_plaza_nppd
+    kind: main
+    points:
+    - [0.5, 0.36]
+    - [0.38, 0.32]
+    - [0.26, 0.33]
+    passage: central_plaza__nppd_office
+  - id: r_plaza_pd
+    kind: main
+    points:
+    - [0.5, 0.36]
+    - [0.45, 0.44]
+    passage: central_plaza__oakland_pd
+  - id: r_plaza_adamson
+    kind: main
+    points:
+    - [0.5, 0.36]
+    - [0.4, 0.26]
+    - [0.26, 0.17]
+    passage: central_plaza__adamson_home
+  - id: r_plaza_greenwood
+    kind: main
+    points:
+    - [0.5, 0.36]
+    - [0.6, 0.6]
+    - [0.72, 0.75]
+    - [0.835, 0.89]
+    passage: central_plaza__greenwood_mansion
+  - id: r_plaza_seaside
+    kind: main
+    points:
+    - [0.5, 0.36]
+    - [0.35, 0.42]
+    - [0.23, 0.5]
+    - [0.136, 0.435]
+    passage: central_plaza__seaside_park
+  - id: d_simpton_bar
+    kind: path
+    points:
+    - [0.56, 0.55]
+    - [0.6, 0.63]
+    passage: simpton_building__bar
+  - id: o_side_tower
+    kind: lane
+    points:
+    - [0.33, 0.86]
+    - [0.25, 0.75]
+    passage: other_side__other_tower
+  - id: o_side_whale
+    kind: lane
+    points:
+    - [0.33, 0.86]
+    - [0.5, 0.92]
+    passage: other_side__other_whale
+  - id: o_side_station
+    kind: lane
+    points:
+    - [0.33, 0.86]
+    - [0.42, 0.74]
+    passage: other_side__other_station
+  - id: o_side_edge
+    kind: lane
+    points:
+    - [0.33, 0.86]
+    - [0.18, 0.96]
+    passage: other_side__other_edge
+  - id: o_station_theatre
+    kind: path
+    points:
+    - [0.42, 0.74]
+    - [0.25, 0.82]
+    - [0.1, 0.88]
+    passage: theatre__other_station
+  - id: o_whale_theatre
+    kind: path
+    points:
+    - [0.5, 0.92]
+    - [0.3, 0.95]
+    - [0.1, 0.88]
+    passage: other_whale__theatre
+  - id: t_adamson_theatre
+    kind: path
+    points:
+    - [0.26, 0.17]
+    - [0.2, 0.3]
+    - [0.1, 0.55]
+    - [0.06, 0.72]
+    - [0.1, 0.88]
+    passage: adamson_bedroom__theatre
+  - id: t_horn_theatre
+    kind: path
+    points:
+    - [0.37, 0.335]
+    - [0.3, 0.5]
+    - [0.2, 0.68]
+    - [0.1, 0.88]
+    passage: peter_office__theatre
+  - id: t_bar_theatre
+    kind: path
+    points:
+    - [0.6, 0.63]
+    - [0.4, 0.68]
+    - [0.2, 0.8]
+    - [0.1, 0.88]
+    passage: bar__theatre
+  - id: t_greenwood_theatre
+    kind: path
+    points:
+    - [0.835, 0.89]
+    - [0.7, 0.98]
+    - [0.4, 0.99]
+    - [0.1, 0.88]
+    passage: jim_bedroom__theatre
+  - id: t_home_theatre
+    kind: path
+    points:
+    - [0.65, 0.375]
+    - [0.55, 0.6]
+    - [0.35, 0.66]
+    - [0.15, 0.8]
+    - [0.1, 0.88]
+    passage: theatre__agent_home
+  regions:
+  - kind: water
+    shape:
+    - [0.0, 0.1]
+    - [0.05, 0.1]
+    - [0.06, 0.5]
+    - [0.03, 0.6]
+    - [0.0, 0.6]
+  - kind: water
+    shape:
+    - [0.33, 0.45]
+    - [0.37, 0.44]
+    - [0.39, 0.49]
+    - [0.35, 0.52]
+    near: oakland_pd
+  - kind: hills
+    shape:
+    - [0.72, 0.12]
+    - [0.95, 0.1]
+    - [1.0, 0.5]
+    - [0.88, 0.5]
+    - [0.75, 0.3]
+  - kind: woods
+    shape:
+    - [0.8, 0.18]
+    - [0.92, 0.17]
+    - [0.95, 0.35]
+    - [0.85, 0.38]
+  - kind: water
+    shape:
+    - [0.02, 0.68]
+    - [0.6, 0.68]
+    - [0.62, 0.99]
+    - [0.02, 0.99]
+    near: other_side
+  houses:
+  - along: i580
+    span: [0.2, 0.8]
+    density: dense
+  - along: plaza_streets
+    density: dense
+  - along: plaza_cross
+    density: dense
+  - along: r_home_greenwood
+    span: [0.2, 0.9]
+    density: dense
+  - along: r_home_adamson
+    span: [0.3, 0.9]
+    density: dense
+  - along: r_plaza_seaside
+    span: [0.2, 0.8]
+    density: dense
+  basis: 现实地点的位置照原书第 2 张「标注过的奥克兰地图」上的图钉换算，用的是原图 x 80–1000、y 150–1150 像素这一块，图上北朝上；高速公路走向照第 1 张市区图。警署档案室和
+    NPPD 办公室图上没有，按分钟数放在市中心。辛普敦大厦和酒吧共用一个图钉，分开画在两侧。剧院和彼岸不属于现实地理，作为单独一组放在西南角海湾一带。剧院与亚当森卧室、皮特办公室、酒吧、格林伍德宅邸、特工的家之间的
+    0 分钟门，用细步道表示连接，路线不代表实际距离。

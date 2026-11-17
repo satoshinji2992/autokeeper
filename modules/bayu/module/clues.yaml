@@ -1,0 +1,251 @@
+items:
+- id: incense
+  name: 线香
+  description: 几炷细长的线香，用旧报纸包着。
+  where: tackle_stall
+  owner: old_man
+  quantity: 3
+  status: 买渔具时作为赠品
+- id: statue
+  name: 木雕小像
+  description: 有些发黑的木雕小像，被磨得油光发亮。
+  where: boat_cabin
+- id: fish_knife
+  name: 剖鱼刀
+  description: 老张片鱼用的刀，刃口锋利。
+  where: boat_deck
+  owner: zhang
+  equipment: held
+- id: trawl_net
+  name: 带铅坠的拖网
+  description: 一张缀着铅坠的大拖网，叠在底舱。
+  where: boat_hold
+- id: longevity_lock
+  name: 黄铜长命锁
+  description: 红绳串着、严重腐蚀的黄铜长命锁，刻着模糊的“长命富贵”。
+  where: boat_deck
+  hidden: true
+  status: 缠在旧渔网里
+- id: half_glove
+  name: 半只塑胶手套
+  description: 半只亮黄色塑胶手套，断口很不规则。
+  where: reef_rock
+  hidden: true
+clues:
+- id: c_find_boat
+  title: 找到乘风破浪888号
+  where: wharf
+  feature: 泊位上的渔船
+  check:
+    skill: 侦查
+  text: 在一排排渔船里找到了船身写着“乘风破浪888号”的那艘，正是预约好的船。
+- id: c_auntie_fish
+  title: 大姨说渔况
+  where: breakfast_cart
+  feature: 大姨在早餐车后招呼客人
+  npc: auntie
+  points_to:
+  - k_mirage
+  text: 大姨说今年鲅鱼很肥，可这几天海上天变得快；前两天刚有天狗吃了月亮，连着好几天龙王爷脾气都不太顺，风浪说来就来。
+- id: c_auntie_mirage
+  title: 远海的海市
+  where: breakfast_cart
+  feature: 大姨在早餐车后招呼客人
+  npc: auntie
+  points_to:
+  - k_mirage
+  text: 前几天有渔民在远海看到“海市”：远处岛上凭空盖起一排排大红房子，挂着红灯笼；还有几个外地游客非说听见房子里有姑娘唱歌。
+- id: c_auntie_advice
+  title: 宁可信其有
+  where: breakfast_cart
+  feature: 大姨在早餐车后招呼客人
+  npc: auntie
+  points_to:
+  - k_danger
+  text: 大姨说海上的事宁可信其有，不可信其无，见着不对劲就赶紧返航准没错。
+- id: c_incense
+  title: 三炷香的老规矩
+  where: tackle_stall
+  feature: 老头从旧木盒里捻出线香
+  npc: old_man
+  requires:
+  - flag:bought_gear
+  points_to:
+  - k_monk
+  text: 老头把几炷线香用报纸包好递来：“拿着。送你们的。咱们这儿的老规矩，要是海上起了大雾，看不清道儿了，就在船头点上三炷香，念叨念叨，请海和尚尝尝香火。受了供奉，人家就不会多做纠缠了。”
+- id: c_monk_lore
+  title: 海和尚是什么
+  where: tackle_stall
+  feature: 老头坐在马扎上抽旱烟
+  npc: old_man
+  points_to:
+  - k_monk
+  text: 老头说：“海和尚，就是龙王的使者，专门在海上巡逻的。至于长啥样？谁知道，反正就是个念想，求个心安。记住，对大海要有敬畏心，别咋咋呼呼的。”
+- id: c_radio
+  title: 短波电台
+  where: boat_cabin
+  feature: 短波电台
+  check:
+    skill: 电子学
+  text: 近海、远海的渔船主要靠短波电台或 VHF 电台做船对船、船对岸的通讯；手机离岸一段距离后就没有信号。
+- id: c_statue
+  title: 木雕小像的样子
+  where: boat_cabin
+  feature: 木雕小像
+  check:
+    skill: 侦查
+  points_to:
+  - k_monk
+  text: 小像雕的不是传统的龙王或妈祖，而是一个盘坐在底座上、面目模糊的光头，看起来有些怪异。
+- id: c_statue_zhang
+  title: 祖传的“海神”
+  where: boat_deck
+  feature: 老张在船上张罗
+  npc: zhang
+  points_to:
+  - k_monk
+  text: 老张挠挠头：“这是祖上传下来的，能保平安的‘海神’。我爹说他叫……叫什么来着，反正就供着呗，心诚就灵。”
+- id: c_talisman
+  title: 褪色的黄纸符
+  where: boat_cabin
+  feature: 窗户角落
+  check:
+    skill: 侦查
+  text: 玻璃接缝处用透明胶带贴着一张小小的、已经褪色的黄纸符。
+- id: c_claw_marks
+  title: 船舷的爪痕
+  where: boat_deck
+  feature: 船舷
+  check:
+    skill: 侦查
+  points_to:
+  - k_monk
+  text: 船舷内侧有些凹痕和剐蹭，某个不显眼的角落有几道很深的划痕，像被什么东西用力抓握过，呈爪形，已经很旧了。
+- id: c_mirage_forest
+  title: 紫雾中的黑森林
+  where: boat_deck
+  feature: 日出时的海面
+  check:
+    skill: 侦查
+  requires:
+  - flag:mirage_risen
+  sanity: 0/1D3
+  points_to:
+  - k_mirage
+  text: 紫雾里，远方海平面上短暂浮现出一片扭曲的剪影，不像城市或岛屿，更像一片从海底升起的黑色森林；几秒后随雾气翻腾消失，仿佛看花了眼。
+- id: c_mirage_whisper
+  title: 远处的低语
+  where: boat_deck
+  feature: 日出时的海面
+  requires:
+  - flag:whisper_heard
+  - c_mirage_forest
+  sanity: 1/1D4
+  points_to:
+  - k_mirage
+  text: 森林幻象消失的瞬间，隐约捕捉到一阵从极远处传来、混在海浪声里的低语。
+- id: c_grandpa_fog
+  title: 爷爷遇雾
+  where: boat_deck
+  feature: 喝鱼汤时老张闲聊
+  npc: zhang
+  points_to:
+  - k_monk
+  text: 老张的爷爷年轻时遇上大雾，听见船边哗啦哗啦有人游泳的水声，喊了没人理，细听竟是从船底下传来；他赶紧往船头点了三炷香，念叨“龙王爷保佑，海神爷爷行个方便”，香一点完水声就没了，不久雾也散了。
+- id: c_monk_patrol
+  title: 海和尚巡海
+  where: boat_deck
+  feature: 喝鱼汤时老张闲聊
+  npc: zhang
+  points_to:
+  - k_monk
+  text: 按当地说法，雾里那是海和尚在巡海，习性不定，有时帮渔民把船推回岸边，有时也把船往深海里带，所以出海的人都敬着它们，船上供个像，嘴里也客气。
+- id: c_red_forest
+  title: 红色珊瑚树林
+  where: boat_deck
+  feature: 喝鱼汤时老张闲聊
+  npc: zhang
+  points_to:
+  - k_mirage
+  text: 老张亲眼见过一次邪乎的海市：一片红彤彤的树林，树长得跟珊瑚似的，一棵棵往天上戳，看着漂亮也瘆得慌，好在没出啥事。
+- id: c_father_missing
+  title: 父亲失踪
+  where: boat_deck
+  feature: 喝鱼汤时老张闲聊
+  npc: zhang
+  points_to:
+  - k_zhang
+  text: 老张的父亲几年前出海失踪，至今没找到尸体；老张猜他是追大鱼误入海流，被卷进了深海，说渔民出海本来就是把脑袋拴在船舷上。
+- id: c_lock
+  title: 网里的长命锁
+  where: boat_deck
+  feature: 缠成一团的旧渔网
+  requires:
+  - flag:net_snag
+  points_to:
+  - k_monk
+  text: 纠缠的网线中有一个红绳串着、严重腐蚀的黄铜长命锁，刻着模糊的“长命富贵”，锁的一侧有几道深深的抓痕。
+- id: c_shadow
+  title: 船底的黑影
+  where: boat_deck
+  feature: 船下的海水
+  check:
+    skill: 侦查
+  requires:
+  - flag:bumped
+  points_to:
+  - k_monk
+  text: 略显浑浊的海水里，一道巨大的黑影缓缓从船底滑过，像一条体型夸张的大鱼，两三秒后便摆动身体潜入深海。
+- id: c_radio_bubbles
+  title: 电台里的咕嘟声
+  where: boat_cabin
+  feature: 短波电台
+  check:
+    skill: 聆听
+  requires:
+  - flag:bumped
+  points_to:
+  - k_monk
+  text: 电台那断断续续的“鱼……好大的鱼……鲨鱼……”里，除了电流杂音，似乎还有像在水下吐泡泡的咕嘟声。
+- id: c_reef_smooth
+  title: 光滑的礁石
+  where: reef_rock
+  feature: 脚下的礁石
+  points_to:
+  - k_danger
+  text: 这里的礁石格外光滑，表面没有任何贝壳或藤壶附着。
+- id: c_glove
+  title: 半只手套
+  where: reef_rock
+  feature: 礁石缝隙
+  check:
+    skill: 侦查
+  points_to:
+  - k_danger
+  text: 两块礁石的缝隙里卡着一只仅剩一半的亮黄色塑胶手套，断口很不规则，像被巨大的力量扯开。
+- id: c_cold_water
+  title: 冰冷的海水
+  where: reef_rock
+  feature: 礁石边的海水
+  points_to:
+  - k_danger
+  text: 伸手碰一碰，这里的海水温度极低。
+- id: c_zhang_thirst
+  title: 老张的干渴
+  where: boat_deck
+  feature: 老张在船头拉竿、灌水
+  npc: zhang
+  check:
+    skill: 侦查
+  requires:
+  - flag:hooked
+  core: true
+  points_to:
+  - k_zhang
+  text: 老张嘴唇干裂起皮，明明刚灌下大半壶水，却仍是非常干渴的样子。
+sketches:
+- id: sk_statue
+  ask: 把驾驶室窗沿上那个木雕小像画出来
+  target: 一个盘坐在底座上的光头人像，面目模糊，整体发黑、被摩挲得油亮
+  threshold: 0.6
+  after: c_statue

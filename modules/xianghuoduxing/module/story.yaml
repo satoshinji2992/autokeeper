@@ -1,0 +1,315 @@
+conclusions:
+  - id: k_silas
+    text: 长途车的故障是西拉斯装的，他故意把调查员留在烬头村
+  - id: k_may
+    text: 梅·莱德贝特是同谋：她收留、监视并下药迷倒外来旅客
+  - id: k_trap
+    text: 村民要在节日上把外来人当祭品，前人都没能离开
+  - id: k_beacon
+    text: 节日的中心是村东北的灯塔，它将在 D3 晚上点燃
+  - id: k_hidden_room
+    text: 村会堂砖砌的窗后藏着一间暗室
+  - id: k_fire
+    text: 节日是控制来自群星（北落师门）之火的仪式，四十年前它曾毁灭烬头村
+  - id: k_escape
+    text: 北面崖壁有一道隐蔽的梯子，可以避开村口离开
+
+events:
+  - id: e_tractor
+    title: 急转弯
+    when: D1 12:00 & at:players:coach
+    where: coach
+    text: §134/§261/§59：长途车为躲一辆福特森拖拉机猛地急转。调查员做敏捷检定（00 加 0 读作 100）：成功抓住前座没受伤；失败撞上座椅失去 1 点生命。西拉斯随后道歉，开始搭话（§71）。
+    read_aloud: 车子猛地一拐，前方路中间横着一辆慢吞吞的拖拉机。
+    present:
+    - silas
+  - id: e_breakdown
+    title: 抛锚
+    when: D1 17:30 & at:players:coach & !flag:breakdown_done
+    where: coach
+    move_to: village_edge
+    present: [silas]
+    sets: [breakdown_done]
+    text: §144：傍晚车开上坡顶的小村，这里不是照片上的奥西皮。发动机熄火，西拉斯把车停在第一座红石住宅边的空地上，打开发动机舱。检定与他的说法见 village_edge 的 keeper。原文写“傍晚”，17:30 为 AutoKeeper 补充。
+    read_aloud: 傍晚，车子爬上一道坡顶，开进一个小村。发动机咳了几声，熄火了。西拉斯骂了一句，把车滑到路边一片空地上，下车掀开了发动机舱盖。
+  - id: e_watcher
+    title: 身后的人影
+    when: D1 21:00 & at:players:central_street & !flag:watcher_seen
+    where: central_street
+    sets: [watcher_seen]
+    text: §86：夜里散步时，身后二十码处站着一个漆黑的身影；被发现后它冲进小道。之后回梅家（§100）或直面（§121，追踪检定见 c_watcher_face）。原文是调查员夜里出门散步时发生，21:00 为补充的最早时刻。
+    read_aloud: 你回头时，二十码外的墙根下站着一个漆黑的身影，一动不动。
+  - id: e_bus_leaves
+    title: 长途车开走了
+    when: D2 05:30
+    where: village_edge
+    sets: [bus_gone]
+    text: §192：西拉斯天刚亮就开车离开烬头村，三四天后才回来。原文“天刚亮”，05:30 为补充。
+  - id: e_lunch
+    title: 街头偶遇
+    when: D2 12:00 & !flag:escaped_village & !flag:captured
+    where: central_street
+    present: [may, ruth]
+    text: §3：调查员饿了，梅带着露丝在街上碰见他。露丝跑过来，突然收起笑容，小声说“节日开始之前就走吧”（c_ruth_warning），然后逃回妈妈身后，用眼神恳求他保持沉默。梅说文特斯先生下午才在村会堂，请他到家里随便吃点东西，“房门没有锁”。
+    read_aloud: 正午时分，梅·莱德贝特牵着女儿从街那头走来，小女孩一见你就跑了过来。
+  - id: e_arbogast_night
+    title: 门里伸出的手
+    when: D2 21:00 & flag:arbogast_appointment & at:players:old_church & !flag:arbogast_night_met
+    where: old_church
+    present: [arbogast]
+    sets: [arbogast_night_met]
+    text: §200：阿博加斯特不在约定的坟地，调查员等了十分钟。回梅家的路上，一只手从门里伸出来抓住他：“他们有人过来了，跟我来。”随后他带调查员穿过大道，到村学校后面的壁凹（§169，请调查员移步 school_alcove）。
+    read_aloud: 坟地里只有风吹杂草。等了十分钟，你转身往回走，一扇门里突然伸出一只手抓住了你。“他们有人过来了，跟我来。”
+  - id: e_assassination
+    title: 黑影袭来
+    when: flag:lesson_over & flag:learned_chant & !flag:arbogast_dead
+    where: school_alcove
+    present:
+    - arbogast
+    - assassins
+    sets: [arbogast_dead]
+    sanity: 0/1D3
+    effects:
+      - {kind: die, target: arbogast, why: §188–§236：无论调查员闪避成败，阿博加斯特都被刺杀身亡（§203 见他被刺三刀，§210/§236 他扑倒死去）}
+    text: |
+      §188：一个黑影从黑暗中窜出，抱住阿博加斯特的咽喉，把他拖出壁凹，长刀在月光下闪着寒光。调查员做闪避检定：
+      失败（§203）：太阳穴被砸，受 1D6 伤害，倒下前看见阿博加斯特被刺三刀，火从地上燃起，照出三个黑影；醒来在梅家客房（§45）。
+      成功（§195）：推开另一个持钝器的黑影；阿博加斯特颈部被割，攻击者脸涂焦油、满眼仇恨；阿博加斯特抬起手。此时理智检定：成功（§210）他做出怪异手势，脚下涌出蓝色热浪火焰烧向两个攻击者，刺杀者尖叫四散，他扑倒死去（§236），调查员可带梅来看（§242，只剩血迹焦痕、没有尸体）或回梅家闭口不提；失败（§217）燃烧的血脸用利爪挠向调查员，失去 1D3 理智（即本事件的理智损失）和 1D2 生命，醒在梅家（§45）。
+      本事件的 sanity 0/1D3 只在闪避成功后掷。
+  - id: e_arbogast_cry
+    title: 远处的叫声
+    when: flag:arbogast_refused
+    where: central_street
+    text: §182：调查员拒绝学咒后，阿博加斯特往东盘山路离去；调查员回梅家路上听到一个模糊、虚弱、绝望的男人叫声。原文没有交代他的下场。
+  - id: e_may_night
+    title: 转动的门把手
+    when: D2 23:00 & at:players:guest_room & !flag:powder_burned
+    where: guest_room
+    present: [may]
+    sets: [powder_burned]
+    text: |
+      §157/§224/§230：调查员睡下的，梦见壁炉里悬浮的火焰（§224），醒来按 §26 处理（设 drugged）。不睡的，门把手慢慢转动：拉开门（§248）梅穿着睡衣外套说“你看上去不太对劲，看看你是不是不舒服”，调查员可以用椅子顶门小睡；假睡（§254）看见梅蹲在壁炉边摆弄东西，对质（§260，恐吓检定，成功§19，失败§32 梅大怒“你敢在女人家里打人？这街上住着十八个人”）或静观（§266，见 c_powder）。吸一口烟的按 §26 处理。
+    read_aloud: 夜深了，门把手慢慢地、慢慢地转动起来。
+  - id: e_d3_guards
+    title: 村口有人把守
+    when: D3 06:00
+    where: east_road
+    present: []
+    text: §7/§78：D3 一早，村民开始往灯塔搬柴，南边和西边的村口各有四个村民拿着农具棍棒把守。离开办法见 east_road 的 keeper。
+  - id: e_capture
+    title: 被村民带走
+    when: D3 18:00 & !flag:escaped_village & !flag:captured
+    move_to: cell
+    anywhere: true
+    sets: [captured]
+    text: AutoKeeper 归并：原作中仍留在村里的调查员都会在节日前被村民制服关进囚室（§108），原作有多种途径。到 D3 傍晚仍在村里的，村民把他反绑双手带进囚室。18:00 为补充钟点。
+    read_aloud: 门外的脚步声越来越多。几只粗糙的手抓住你的胳膊，把你的双手反绑在背后。
+  - id: e_procession
+    title: 火焰节游行
+    when: D3 20:00 & flag:captured & !flag:chained_on_beacon
+    where: cell
+    move_to: beacon
+    present: [may, ruth, silas, winters]
+    sets: [chained_on_beacon]
+    text: |
+      §205/§27/§117/§18/§33：天黑后两个穿厚黑长袍、脸手涂黑、左眼画红三角的高大村民把调查员架出去，全村涂黑脸围观，押着他沿中央大街走向灯塔。三具盖红布的人体走在前面，发出低沉的嗡嗡声；三个挥舞火球的年轻女孩舞者依次亲吻他的左颊、右颊和前额并耳语，空气里是煤油味。外貌检定：成功（§10）第三个舞者是露丝，说她已经放松了锁链，火焰高到能藏住你之前别逃（设 chain_loosened）；失败（§148）她说“愿你在这白热之中获得至福”。
+      十个村民把他抬上铁阶梯平台，用铁链拴在撑架上，三具红布人体摆成三角形。他认出梅和西拉斯；戴眼镜的文特斯演说：“感谢将村庄从虚空之火中拯救的人，您将代替我们被从天而降者带走……”20:00 为补充钟点。
+    read_aloud: 一张张涂黑的脸，一只只左眼上的红三角。火把排成长龙，沿着大街向灯塔涌去。
+  - id: e_ignite
+    title: 点火
+    when: D3 21:00 & flag:chained_on_beacon & !flag:beacon_lit
+    where: beacon
+    sets: [beacon_lit]
+    text: |
+      §33/§40/§44：举火者点燃高台四周。调查员可挣扎（§44）：铁链有一节有弱点，困难力量检定，成功（§53）挣脱、脚踝灼伤，高台上的男人喊两个衣袍着火的年轻人扑来，困难闪避：成功（§109）受 1D6 火伤，失败（§123）被压在火里烧死。失败或静观（§40）：火蔓延，三具人体被点燃，红火黑烟；学过奇怪咒语的可以念（见 mechanics），否则（§65）受 1D6 火伤，归零烧死；未死再过力量检定：成功（§93）挣断，再受 1D6 火伤，归零烧死；失败（§77）烧死。
+      活下来的（§137）从灯塔另一边跳下，离悬崖只有几寸，打滚灭火；村民都仰望天空没注意到他；他躲到最近的房子后面（§156，见 general_store 的自行车，设 broke_free）。21:00 为补充钟点。
+    read_aloud: 火把一支接一支地伸向高台下的柴堆，火苗舔上铁架。
+    present:
+    - winters
+    - may
+    - silas
+  - id: e_carts
+    title: 身后的马蹄声
+    when: flag:escaped_village & !flag:carts_passed & at:players:forest_road
+    where: forest_road
+    present: [coachman, old_coachman]
+    sets: [carts_passed]
+    text: |
+      §152/§211/§216：逃出村向东入林，约两小时后天黑，身后传来两匹马的蹄声。潜行检定：成功（§211，打勾）躲开大路，看着车夫举着提灯、面目憔悴地赶车向东离开（之后到 hilltop，§223）。失败（§216）车夫喊“看！在那儿！”，调查员可逃进树林（§229 甩掉他们→§223）或搏斗（§235，只有年轻车夫下车）：车夫每轮掷 1D6，单数攻击、双数闪避；他生命降到 4 以下（§241），年长车夫说“你赢了。我估计现在也已经太晚了。”扶同伴驾车离开，格斗打勾→§223；调查员生命归零或重伤昏迷（§247），被拖上马背后滑落进树林，车夫说“别管了，我们走”，直到早晨（设 left_in_woods）。
+    read_aloud: 天色已暗，身后的路上传来马蹄声和车轮的吱嘎声，一盏提灯在树影间晃动。
+  - id: e_beasts
+    title: 荧光的眼睛
+    when: D2 19:00 & at:players:forest_road & !flag:in_tree & !flag:beasts_met & !flag:escaped_village
+    where: forest_road
+    sets: [beasts_met]
+    sanity: 1/1D3
+    sights: [burning_beasts]
+    move_to: guest_room
+    advance_to: D3 07:00
+    text: §215/§264/§269/§5：继续走夜路的调查员被嗥叫声前后包围，矮小黑暗、长尖耳朵、眼睛发荧光的动物从树上下来挡路。理智检定：成功（§269）它们动作急躁怪异，忽然燃烧，一只扑来，失去 1 点理智；失败（§5）它们围攻后自燃起红紫色火焰，失去 1D3 理智。调查员昏倒，后半夜被农夫在路上发现送回梅家，醒来回复 1 点生命（§13→§64）。19:00 为补充的最早时刻。
+    read_aloud: 嗥叫声从前后两边同时逼近。树枝间亮起一双双荧光的眼睛。
+  - id: e_tree_dream
+    title: 树上的梦
+    when: flag:in_tree & at:players:forest_road
+    where: forest_road
+    sanity: 0/1D2
+    damage: 1D3
+    move_to: guest_room
+    advance_to: D3 07:00
+    text: §228/§246/§252/§258：调查员用腰带把自己系在树枝上睡着，梦见树木挪动、发出黄绿色的光，火舌舔来，腰带成了累赘。理智检定：成功（§252）意识到这火不自然，腰带松脱坠落，下面有影子；失败（§258）跌进火里，失去 1D2 理智。两种都失去 1D3 生命，昏倒后被农夫送回梅家（§13）。
+    read_aloud: 你在树枝上迷迷糊糊地睡去。四周的树开始挪动，发出黄绿色的光。
+  - id: e_hilltop
+    title: 山顶回望
+    when: flag:escaped_village & flag:carts_passed & at:players:hilltop & !flag:left_in_woods
+    where: hilltop
+    sets: [reached_hilltop]
+    ending: escape_hilltop
+    text: §223：调查员爬上山顶回望，灯塔在燃烧，橘色的火光映着夜空；转身时，他看见村子上方有一颗星星在移动。
+    read_aloud: 远处的高地上，灯塔燃起了橘色的大火。你转身要走时，村子上方的一颗星星动了一下。
+
+endings:
+  - id: escape_bicycle
+    title: 向黎明而行
+    condition: flag:escaped_bicycle
+    text: §168/§185：调查员骑车下山向东。回头时，白热之物如雷霆劈进灯塔前的人群，火焰横扫村会堂一带；二十分钟后，烬头村已化作火海，浓烟聚成灰暗的烟柱。他停了五分钟，然后重新蹬上自行车，向文明而行，向黎明而行。
+    reward: 度过冒险，可以保留角色卡；打过勾的技能可做成长检定
+  - id: escape_hilltop
+    title: 移动的星星
+    condition: flag:reached_hilltop
+    text: §223：调查员逃出烬头村。山顶上回望，灯塔在燃烧，村子上方有一颗星星在移动。
+    reward: 度过冒险，可以保留角色卡；打过勾的技能可做成长检定
+  - id: left_in_woods
+    title: 林中的早晨
+    condition: flag:left_in_woods
+    text: §247：车夫们放弃了被打倒的调查员，驾车离开。早晨，他从树林里站了起来，离开了烬头村。
+    reward: 度过冒险，可以保留角色卡；打过勾的技能可做成长检定
+  - id: burned
+    title: 灯塔上的火
+    condition: flag:burned_on_beacon
+    text: §65/§77/§93/§109/§123：调查员没能逃出灯塔的火焰，被烧死在高台上。
+  - id: chant_end
+    title: 第二颗太阳
+    condition: flag:chant_cast
+    requires: [c_chant]
+    text: §270：火舌停在半空，村民涂黑的面孔变白剥落，天上升起第二颗太阳。人群、村庄和山丘都被焚化；调查员的存在被解放，飞往北落师门，在活火焰中起舞。方圆十六英里被毁，他也不能幸免。
+  - id: summon_end
+    title: 群星坠落
+    condition: flag:summon_cast
+    requires: [c_fire_tome]
+    text: §80：调查员念起召唤天之火，村民同声吟诵，群星坠落，他被烧死。
+  - id: star_madness
+    title: 我是星星
+    condition: flag:star_madness
+    text: §220：调查员的理智归零，彻悟自己就是一颗星星，被烧死。
+  - id: command_return
+    title: 群星归位
+    condition: flag:command_return
+    text: §255：调查员号令群星返回原位。群星飘升，村民喘息着，陷入深深的悲伤；他仍被烧死。
+  - id: command_release
+    title: 解脱
+    condition: flag:command_release
+    text: §243：调查员号令群星放他解脱，被白炽的光湮灭、烧死。
+  - id: command_burn
+    title: 陪葬
+    condition: flag:command_burn_village
+    text: §231：光点落下，全村人燃烧起来，无人生还；调查员也被烧死，村子为他陪葬。
+  - id: bear_death
+    title: 熊爪之下
+    condition: flag:killed_by_bear
+    text: §193：调查员被黑熊撕碎。
+  - id: fall_death
+    title: 崖下
+    condition: flag:fell_to_death
+    text: §92：调查员坠下断崖，失血而死。
+  - id: roof_death
+    title: 坍塌的教堂
+    condition: flag:crushed_by_roof
+    text: §196：教堂屋顶塌下，把调查员砸死。
+
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 去阿卡姆的长途车
+    art: cover
+    prompt: 1927 年秋天的新英格兰小镇，药店门口的车站，一辆灰色小长途车停在路边，远处山坡上是教堂尖顶，清冷的早晨。
+  - id: sc_breakdown
+    kind: 突发
+    when: event:e_breakdown
+    title: 坡顶的小村
+    base: bus
+    prompt: 傍晚，长途车停在山顶小村第一座红石矮屋旁的空地上，发动机舱盖掀开，四周房屋阴郁沉默，天边余晖暗红。
+  - id: sc_beacon
+    kind: 重要场景
+    when: visit:beacon
+    title: 黑色的铁塔
+    prompt: 悬崖边三条路交汇处，一座熟铁铸造、漆黑的灯塔，头顶高处巨大的弧形平台，撑架像蛇一样汇向中心，下面堆着成捆木柴，灰白的秋日天空。
+  - id: sc_bear
+    kind: 怪物
+    when: creature:black_bear
+    title: 林间空地
+    base: black_bear
+    prompt: 秋日林间空地上，一头黑熊用后腿站起，伸向结满果子的树枝，树叶金黄橙红。
+  - id: sc_beasts
+    kind: 危机
+    when: event:e_beasts
+    title: 荧光的眼睛
+    prompt: 夜里的林间小路，树枝间亮着一双双荧光的小眼睛，长尖耳朵的黑影从树上滑下，其中一只身上冒出红紫色的火苗。
+  - id: sc_assassination
+    kind: 危机
+    when: event:e_assassination
+    title: 月下的刀光
+    prompt: 月夜的崖顶草地，一个黑影从背后勒住一个裹头巾的老人，长刀反着冷光，地上隐约冒出蓝色的火焰。
+  - id: sc_procession
+    kind: 危机
+    when: event:e_procession
+    title: 火把长龙
+    prompt: 夜晚村子的大街，一张张涂黑的脸、左眼画着红三角，火把排成长龙涌向远处的黑色铁塔，前面抬着三具盖红布的人形。
+  - id: sc_ignite
+    kind: 最终boss
+    when: event:e_ignite
+    title: 点火
+    prompt: 从高台上往下看，火把伸向铁塔下的柴堆，火苗沿铁架往上爬，下面是密密麻麻仰望的人群，夜空里星光异常明亮。
+  - id: sc_end_bicycle
+    kind: 结局
+    when: ending:escape_bicycle
+    title: 向黎明而行
+    prompt: 黎明前的山坡顶，一辆自行车停在路边，远处山头上的村子化作火海，灰暗的烟柱直冲天空。
+  - id: sc_end_hilltop
+    kind: 结局
+    when: ending:escape_hilltop
+    title: 移动的星星
+    prompt: 夜里的山顶，远处高地上一座铁塔燃着橘色大火，村子上空有一颗星星拖着微光在移动。
+  - id: sc_end_woods
+    kind: 结局
+    when: ending:left_in_woods
+    title: 林中的早晨
+    prompt: 秋日清晨的树林，晨雾里落叶满地，路上留着车辙和马蹄印，一个人扶着树干站起来。
+  - id: sc_end_burned
+    kind: 结局
+    when: ending:burned
+    title: 灯塔上的火
+    prompt: 夜色里熊熊燃烧的铁塔高台，火焰和黑烟吞没了顶上的铁链，下面人群高举火把。
+  - id: sc_end_chant
+    kind: 结局
+    when: ending:chant_end
+    title: 第二颗太阳
+    prompt: 夜空中升起第二颗耀眼的白色太阳，火舌凝在半空，整座山头连同村庄在白光中化为灰烬。
+  - id: sc_end_summon
+    kind: 结局
+    when: ending:summon_end
+    title: 群星坠落
+    prompt: 无数星星拖着火尾从夜空坠向山顶铁塔，人群仰望吟诵，火光冲天。
+  - id: sc_end_madness
+    kind: 结局
+    when: ending:star_madness
+    title: 我是星星
+    prompt: 一个人形在火中张开双臂，身体化作白热的光点，与夜空的星星连成一片。
+
+prelude:
+  - art: cover
+    text: 1927 年秋，新罕布什尔州。北面是白山山脉，南面是温尼伯索基湖。
+  - art: hometown_stop
+    text: 你要去阿卡姆开始新的工作。车站没有人来送行，你独自等着去奥西皮的长途车。
+  - art: bus
+    text: 换乘要好几天。山路弯弯绕绕，窗外是溪流、果园和越来越深的秋色。

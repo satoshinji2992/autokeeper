@@ -1,0 +1,602 @@
+{
+  "id": "bayu_sea",
+  "name": "海上状况与礁石滩逃生",
+  "description": "记录《鲅鱼？鲅鱼！》的晕船与礁石滩逃生。seasick：近海停船或返航时为某调查员掷体质检定，失败加上“晕船”状态（所有动作一个惩罚骰，由守秘人执行）；在礁石上休息过的人下一次检定额外一个奖励骰。rest：船到礁石滩后在礁石上休息片刻。recover：晕船好转时移除状态。cut_rope：逃生时用锋利工具割一处网绳（左舷挂钩、右舷挂钩、船尾固定栓），船剧烈倾斜，须敏捷检定，合理行为由守秘人给奖励骰。start_engine：至少两处网绳割断后在驾驶室启动引擎，用驾驶或守秘人认可的相关知识技能，每两次检定耗一轮；成功即冲出礁石滩。calm：点燃渔具铺送的香或把木雕小像扔下海，周围海和尚停止行动一轮，每种方式仅一次。",
+  "api_version": 1,
+  "version": "0.1.0",
+  "hooks": [
+    "action"
+  ],
+  "capabilities": [
+    "dice",
+    "note",
+    "flag",
+    "condition"
+  ],
+  "actions": [
+    {
+      "name": "seasick",
+      "description": "近海停船时或返航油门推到底时，为一名调查员做晕船体质检定。arguments：who 调查员 id；bonus 0 或 1（有出海经验或渔民背景给 1）。"
+    },
+    {
+      "name": "rest",
+      "description": "船停在礁石滩（at_reef）后，晕过船的调查员登上礁石休息片刻。arguments：who 调查员 id。"
+    },
+    {
+      "name": "recover",
+      "description": "守秘人判定某调查员晕船好转（如喝下鲅鱼汤）。arguments：who 调查员 id。"
+    },
+    {
+      "name": "cut_rope",
+      "description": "逃生时（net_cast 之后）调查员用锋利工具割一处网绳。arguments：who 调查员 id；rope 为 左舷挂钩、右舷挂钩、船尾固定栓 之一；bonus 0-2（合理的行为给奖励骰）。"
+    },
+    {
+      "name": "start_engine",
+      "description": "至少两处网绳割断后，调查员在驾驶室尝试启动引擎。arguments：who 调查员 id；skill 技能名，默认 驾驶(小型船舶)，无此技能可用守秘人认可的相关知识类技能；bonus -2 到 2。"
+    },
+    {
+      "name": "calm",
+      "description": "逃生时点燃渔具铺老头送的香，或把驾驶室的木雕小像扔下海。arguments：method 为 incense 或 statue。"
+    }
+  ],
+  "commands": [],
+  "flags": {
+    "escaped_reef": "引擎启动，渔船冲出了礁石滩"
+  },
+  "initial": {
+    "seasick": [],
+    "rested": [],
+    "cut": [],
+    "engine_tries": 0,
+    "incense": false,
+    "statue": false,
+    "escaped": false
+  },
+  "tests": [
+    {
+      "name": "晕船检定失败",
+      "event": {
+        "hook": "action",
+        "action": "seasick",
+        "arguments": {
+          "who": "lin_xiao",
+          "bonus": 0
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          },
+          {
+            "id": "zhao_haifeng"
+          }
+        ]
+      },
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "seasick": [
+          "lin_xiao"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "condition",
+          "who": "lin_xiao",
+          "key": "晕船",
+          "amount": 1
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "晕船检定成功",
+      "event": {
+        "hook": "action",
+        "action": "seasick",
+        "arguments": {
+          "who": "zhao_haifeng",
+          "bonus": 1
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          },
+          {
+            "id": "zhao_haifeng"
+          }
+        ]
+      },
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "seasick": []
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "礁石上休息后奖励骰用掉",
+      "event": {
+        "hook": "action",
+        "action": "seasick",
+        "arguments": {
+          "who": "lin_xiao"
+        }
+      },
+      "state": {
+        "seasick": [
+          "lin_xiao"
+        ],
+        "rested": [
+          "lin_xiao"
+        ],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ]
+      },
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "rested": []
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "未到礁石滩不能休息",
+      "event": {
+        "hook": "action",
+        "action": "rest",
+        "arguments": {
+          "who": "lin_xiao"
+        }
+      },
+      "state": {
+        "seasick": [
+          "lin_xiao"
+        ],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ],
+        "flags": {
+          "at_nearshore": true
+        }
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "rested": []
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "礁石上休息",
+      "event": {
+        "hook": "action",
+        "action": "rest",
+        "arguments": {
+          "who": "lin_xiao"
+        }
+      },
+      "state": {
+        "seasick": [
+          "lin_xiao"
+        ],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ],
+        "flags": {
+          "at_reef": true
+        }
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "rested": [
+          "lin_xiao"
+        ]
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "晕船好转",
+      "event": {
+        "hook": "action",
+        "action": "recover",
+        "arguments": {
+          "who": "lin_xiao"
+        }
+      },
+      "state": {
+        "seasick": [
+          "lin_xiao"
+        ],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ]
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "seasick": []
+      },
+      "expected_effects": [
+        {
+          "kind": "condition",
+          "who": "lin_xiao",
+          "key": "晕船",
+          "amount": -1
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "割断第二处网绳",
+      "event": {
+        "hook": "action",
+        "action": "cut_rope",
+        "arguments": {
+          "who": "zhao_haifeng",
+          "rope": "右舷挂钩",
+          "bonus": 1
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [
+          "左舷挂钩"
+        ],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "zhao_haifeng"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        }
+      },
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "cut": [
+          "左舷挂钩",
+          "右舷挂钩"
+        ]
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "右舷挂钩上的网绳被割断了。船身的倾斜缓解了一些。"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "割绳敏捷失败",
+      "event": {
+        "hook": "action",
+        "action": "cut_rope",
+        "arguments": {
+          "who": "zhao_haifeng",
+          "rope": "船尾固定栓"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "zhao_haifeng"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        }
+      },
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "cut": []
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "只断一处不能启动引擎",
+      "event": {
+        "hook": "action",
+        "action": "start_engine",
+        "arguments": {
+          "who": "lin_xiao"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [
+          "左舷挂钩"
+        ],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        }
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "engine_tries": 0,
+        "escaped": false
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "启动引擎失败",
+      "event": {
+        "hook": "action",
+        "action": "start_engine",
+        "arguments": {
+          "who": "lin_xiao",
+          "skill": "机械维修"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [
+          "左舷挂钩",
+          "船尾固定栓"
+        ],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        }
+      },
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "engine_tries": 1,
+        "escaped": false
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "启动引擎成功",
+      "event": {
+        "hook": "action",
+        "action": "start_engine",
+        "arguments": {
+          "who": "zhao_haifeng"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [
+          "左舷挂钩",
+          "船尾固定栓"
+        ],
+        "engine_tries": 1,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "zhao_haifeng"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        }
+      },
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "engine_tries": 2,
+        "escaped": true
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "引擎轰鸣起来，螺旋桨绞断了剩下的网绳。"
+        },
+        {
+          "kind": "flag",
+          "key": "escaped_reef"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "点香一次",
+      "event": {
+        "hook": "action",
+        "action": "calm",
+        "arguments": {
+          "method": "incense"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        }
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "incense": true
+      },
+      "expected_effects": [
+        {
+          "kind": "note",
+          "text": "香头的青烟飘过船舷，周围的海和尚迟疑了，这一轮停止了动作。"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "香不能用第二次",
+      "event": {
+        "hook": "action",
+        "action": "calm",
+        "arguments": {
+          "method": "incense"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [],
+        "engine_tries": 0,
+        "incense": true,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiao"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        }
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "incense": true
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    }
+  ]
+}

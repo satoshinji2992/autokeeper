@@ -1,0 +1,133 @@
+pictures:
+  sc_end_lost-9902ba64.photo:
+    title: File:Herzog-Friedrich-Straße in Innsbruck's Historic Old Town, Austria.jpg
+    page: https://commons.wikimedia.org/wiki/File:Herzog-Friedrich-Stra%C3%9Fe_in_Innsbruck%27s_Historic_Old_Town,_Austria.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/Herzog-Friedrich-Stra%C3%9Fe_in_Innsbruck%27s_Historic_Old_Town%2C_Austria.jpg/500px-Herzog-Friedrich-Stra%C3%9Fe_in_Innsbruck%27s_Historic_Old_Town%2C_Austria.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC0
+    artist: Wilfredor
+    width: 8256
+    height: 5504
+    kind: scene
+  sc_basement-2ec2aedb.photo:
+    title: File:3-Bay Sangar - Damp-Proof Course (51070450303).jpg
+    page: https://commons.wikimedia.org/wiki/File:3-Bay_Sangar_-_Damp-Proof_Course_(51070450303).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1c/3-Bay_Sangar_-_Damp-Proof_Course_%2851070450303%29.jpg/500px-3-Bay_Sangar_-_Damp-Proof_Course_%2851070450303%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 2.0
+    artist: Nick / from United Kingdom
+    width: 6000
+    height: 3376
+    kind: scene
+  sc_opening-b5b617c3:
+    title: 考前最后一课
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 1920 年代大学阶梯教室，黑板写满公式，矮小乱发的教授站在讲台前，前排一个座位空着，晨光斜照
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:University of Edinburgh Lecture Theatre (28779436435).jpg
+      page: https://commons.wikimedia.org/wiki/File:University_of_Edinburgh_Lecture_Theatre_(28779436435).jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/University_of_Edinburgh_Lecture_Theatre_%2828779436435%29.jpg/500px-University_of_Edinburgh_Lecture_Theatre_%2828779436435%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY 2.0
+      artist: Open Ed
+      width: 3092
+      height: 2319
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_lost-9902ba64:
+    title: 陌生的街道
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 从警车后窗望出去的 1920
+      年代风格街道，但招牌、汽车和行人的服装都隐约不对劲，天空颜色微妙地偏移
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:Herzog-Friedrich-Straße in Innsbruck's Historic Old Town, Austria.jpg
+      page: https://commons.wikimedia.org/wiki/File:Herzog-Friedrich-Stra%C3%9Fe_in_Innsbruck%27s_Historic_Old_Town,_Austria.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/Herzog-Friedrich-Stra%C3%9Fe_in_Innsbruck%27s_Historic_Old_Town%2C_Austria.jpg/500px-Herzog-Friedrich-Stra%C3%9Fe_in_Innsbruck%27s_Historic_Old_Town%2C_Austria.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC0
+      artist: Wilfredor
+      width: 8256
+      height: 5504
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_lost_dead-c2253cac.photo:
+    title: '[Interior of Freedom Riders'' Bus, with view through window of line of 6 police cars and soldiers lining pavement]'
+    page: https://www.loc.gov/item/2002709628/
+    thumb: https://tile.loc.gov/storage-services/service/pnp/ds/15100/15104_150px.jpg
+    license: 美国国会图书馆藏照片，授权各异，只在本机使用
+    artist: ''
+    width: 150
+    height: 100
+    kind: scene
+  sc_guardian-8d7c720a:
+    title: 楼梯上的脚步
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment: 从地下室门口仰望狭窄的楼梯，一个腐烂的老妇人身影跌跌撞撞地往下走，身上有对称的裂口，只露出半身轮廓，蓝光从下方映照
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 576
+  sc_end_lost_dead-c2253cac:
+    title: 陌生的街道
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜里的警车后座，车窗外的城市灯火排列成陌生的几何形状，街上驶过形状古怪的车辆
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: '[Interior of Freedom Riders'' Bus, with view through window of line of 6 police cars and soldiers lining pavement]'
+      page: https://www.loc.gov/item/2002709628/
+      thumb: https://tile.loc.gov/storage-services/service/pnp/ds/15100/15104_150px.jpg
+      license: 美国国会图书馆藏照片，授权各异，只在本机使用
+      artist: ''
+      width: 150
+      height: 100
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_fallen-bfb1c298:
+    title: 熄不灭的蓝光
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1920 年代，美国马萨诸塞州波士顿的一所大学（原文为波士顿大学，守秘人可换成任何合适的大学），以及佛蒙特州勒德洛镇边缘的一栋小房子.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment: 地下室地板上散落着倒下的人影，淡蓝色光芒仍然笼罩着空地中央，一个站立的佝偻剪影背对画面
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 576

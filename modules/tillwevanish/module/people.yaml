@@ -1,0 +1,352 @@
+npcs:
+  - id: waldemont
+    name: 沃德蒙特·冯·赫施伯格
+    role: 赫施伯格钢铁厂新任董事长，阿克塞尔的长子
+    called: 主持葬礼的苍白男子
+    look: 黑色丧服，脸色苍白，眼睛布满血丝
+    personality: 谨慎、体面，努力表现忠诚；身体一天比一天差
+    voice: 语调飘忽，偶尔说出前言不搭后语的怪话；被问到过去时会说“年轻时候不懂事”
+    goal: 保住钢铁厂和家人，不让间谍身份暴露
+    knows:
+      - 自己早年参加过左派运动，1934 年入党
+      - 自己身体不适；之后每次见面更憔悴神经质，可能如实说浑身刺痛、像有人拿火烤他的骨头
+      - 书桌下的手枪是他防身用的
+      - 每隔一周的周六下午去希尔德·莱费尔的公寓，第二天早上回来；上一次去已是至少两周前
+    secrets:
+      - 他是苏联间谍，约半年前在一次工业贸易会议上被英国外交官加尔文·考克斯发展为下线
+      - 他借职务之便偷拍军方订单文件，把胶卷藏在希尔德公寓里交给加尔文
+    lies:
+      - 不否认意识形态问题，只说年轻时候不懂事，再说一堆效忠的空话
+    clues: [c_waldemont_unwell]
+    location: cemetery
+    portrait: waldemont
+    important: true
+    looks:
+      - {when: "flag:waldemont_dead", change: 被火焰烧成一具焦黑的骷髅}
+  - id: lotte
+    name: 洛特·冯·赫施伯格
+    role: 阿克塞尔的遗孀，续弦
+    called: 用手帕捂脸的遗孀
+    look: 黑纱丧服，手帕不离手
+    personality: 悲伤、虚弱
+    voice: 声音很轻，常被哭声打断
+    goal: 体面地送走丈夫
+    knows: [丈夫 2 月 6 日去世]
+    location: cemetery
+    portrait: lotte
+  - id: eberhard
+    name: 艾伯哈德·冯·赫施伯格
+    role: 阿克塞尔的小儿子
+    called: 画眼线的瘦高青年
+    look: 瘦高，黑色头发梳得服帖，眉毛挑得很高，蓝宝石一样的眼睛，画了眼线和睫毛；常穿女装，也会换西装或高领羊毛衫
+    personality: 被宠坏的少爷，礼貌得尖酸刻薄；狂热的纳粹拥趸和克图格亚邪教徒；对高大的金发碧眼帅哥毫无节制地示爱，偶尔露出种族主义的残忍
+    voice: 雌雄难辨的破锣嗓子，张口闭口“亲爱的长官”“我的好先生”；会在撒娇中突然板起脸一本正经地胡扯
+    goal: 借附魔武器在战争里“净化欧洲”，烧死所有人；在那之前尽情享受生活，也许把调查员的头收藏起来
+    knows:
+      - 沃德蒙特的情人叫希尔德·莱费尔，住在哪里，沃德蒙特每隔一周的周六下午去、第二天早上回来
+      - 熔铸之血、生命薪柴的全部原理和附魔武器的去向
+      - 调查员的配枪已经激活
+    secrets:
+      - 他与塞格利依据《马克西米利安的炼金指南》制造附魔武器
+      - 他杀了三个犹太人和三个金发德国男人（包括兰伯特上尉），头颅收藏在地下实验室
+      - 他怂恿瓦尔德玛射杀韦伯
+      - 守灵夜他挖出约兰的骨灰撒进父亲棺材并施放熔铸之血，2 月 9 日又对沃德蒙特施法
+      - 他在银行有一个保险柜，钥匙在自己房间里
+    lies:
+      - 一切都好，花纹只是钢铁厂的标识
+      - 被问到制服上的肩章勋章，暧昧地说是情人分别前送的
+    clues: [c_mistress]
+    location: cemetery
+    portrait: eberhard
+    important: true
+    stats: {力量: 70, 体质: 90, 体型: 60, 敏捷: 50, 智力: 80, 意志: 125, 外貌: 75, 教育: 80, 生命: 15, 魔法值: 25, 格斗(斗殴): 80, 格斗(斧): 80, 闪避: 25, 移动: 8, 图书馆使用: 80, 取悦: 60, 话术: 50, 心理学: 50, 乔装: 80, 机械维修: 50}
+    attacks:
+      - 格斗(斗殴) 80%，伤害 1D3+DB
+      - 格斗(斧) 80%，伤害 1D8+2+DB
+  - id: segli
+    name: 塞格利·普拉斯特
+    role: 赫施伯格钢铁厂总工程师，慕尼黑工业大学博士
+    called: 戴眼镜的腼腆青年
+    look: 弱不禁风，戴眼镜，总是微笑
+    personality: 怕生腼腆、很有礼貌；天赋惊人又勤勉；对艾伯哈德言听计从
+    voice: 说话轻声细语，带着微笑
+    goal: 让艾伯哈德高兴
+    knows:
+      - 许多产线（包括坦克）都装了刻这种花纹的冲压模具，当作钢铁厂的特色标识
+      - 手枪握柄的花纹是他提出的，对外说是防滑和美观
+      - 赤钢用于工业生产效益极低，常规钢材对武器已经足够
+    secrets:
+      - 冲压模具刻的是熔铸之血与生命薪柴的咒文
+      - 地下层的实验室只有他和艾伯哈德能进
+    lies: [花纹只是为了防滑和美观]
+    clues: [c_stamp_lines]
+    location: segli_office
+    portrait: segli
+    important: true
+    stats: {力量: 45, 体质: 40, 体型: 50, 敏捷: 50, 智力: 90, 意志: 80, 外貌: 70, 教育: 90, 生命: 9, 魔法值: 16, 闪避: 25, 移动: 7, 图书馆使用: 80, 机械维修: 60, 电气维修: 60}
+  - id: meisner
+    name: 麦克斯纳先生
+    role: 赫施伯格家的老管家
+    called: 撑伞张望的老管家
+    look: 白发，背有些驼，衣着一丝不苟
+    personality: 忠心，胆小，非常不安
+    voice: 说话又快又低，像怕被人听见
+    goal: 把憋在心里的事告诉当局的人，求个安心
+    knows:
+      - 沃德蒙特的生母是阿克塞尔的犹太前妻约兰，难产而死；当局帮忙掩盖，档案里生母写成洛特
+      - 阿克塞尔当年立场摇摆，这段婚姻和沃德蒙特的安全成了纳粹与他谈判的筹码；之后约兰的坟墓被迁到别处
+      - 约兰迁移后的坟墓在哪里
+      - 沃德蒙特死后他想去看看约兰，发现骨灰被挖了
+      - 艾伯哈德平时的财产都交给他管
+    secrets:
+      - 艾伯哈德在银行有一个保险柜，钥匙在艾伯哈德房间里（被坚持追问艾伯哈德的秘密时才想起来）
+    clues: [c_jolan_ashes, c_safe_key]
+    location: manor
+    portrait: meisner
+  - id: servants
+    name: 庄园的仆人们
+    role: 赫施伯格庄园的仆人
+    called: 压低声音的仆人
+    look: 黑白制服，手里总拿着托盘或抹布
+    personality: 怕事，爱嚼舌根
+    voice: 说到少爷就支支吾吾
+    knows:
+      - 艾伯哈德守灵夜偷跑出去过，支吾着暗示是见不得人的癖好
+      - 三年前艾伯哈德要钱买地开农场，不到一年就卖了；知道农场在哪、现在的农场主是谁
+    clues: [c_wake_sneak, c_farm_history]
+    location: manor
+    portrait: servants
+    goal: 保住差事，不被卷进少爷们和当局的麻烦里
+  - id: daughter
+    name: 沃德蒙特的女儿
+    role: 沃德蒙特的小女儿（原文无姓名）
+    called: 黑裙子的小女孩
+    look: 穿黑裙子的小女孩
+    personality: 懵懂，喜欢和叔叔玩
+    voice: 小声，怯生生
+    knows: [父亲死了，妈妈病倒了]
+    location: manor
+    portrait: daughter
+    goal: 有人陪她玩，等妈妈好起来
+  - id: works_staff
+    name: 钢铁厂的员工们
+    role: 办公楼的职员和工头
+    called: 办公楼的职员
+    look: 衬衫袖套，夹着文件
+    personality: 规矩，有问必答
+    voice: 公事公办
+    knows:
+      - 沃德蒙特此前是财务部长，常参与其他部门事务、翻阅文档、把文件带回家，没人在意
+      - 枪上的花纹据说是为了防滑和美观，是塞格利提出的
+      - 塞格利在地下层有个实验室，只有他和艾伯哈德有钥匙；有人记得前年艾伯哈德帮塞格利“搬一批设备”
+    clues: [c_staff_waldemont, c_pattern_reason, c_lab_rumor]
+    location: works_office
+    portrait: works_staff
+    goal: 照章办事，不惹柏林来的长官不快
+  - id: huebner
+    name: 休布纳·莱费尔
+    role: 外交官，希尔德的丈夫
+    called: 西装笔挺的外交官
+    look: 西装笔挺，举止圆滑
+    personality: 有绿帽癖，对妻子的情人们了如指掌
+    voice: 外交辞令，笑里有话
+    knows:
+      - 妻子的两个情人都是他介绍的：沃德蒙特，和英国外交官加尔文·考克斯
+      - 加尔文约两年前调来德国，约半年前在一次工业贸易会议上发展了沃德蒙特，用希尔德当不知情的中间人
+      - 加尔文是军情六处的人，同时是苏联间谍
+    secrets: [他对整件事完全知情]
+    clues: [c_calvin]
+    location: hilde_apartment
+    portrait: huebner
+    goal: 维持妻子与情人们的这层关系，同时保住自己外交官的体面
+  - id: hilde
+    name: 希尔德·莱费尔
+    role: 外交官休布纳的妻子，沃德蒙特的情人
+    called: 打扮雅致的夫人
+    look: 雅致的家常裙装
+    personality: 天真，不知情
+    voice: 温和，有点慌张
+    knows:
+      - 沃德蒙特每隔一周的周六下午来，第二天早上走；他上一次来已是至少两周前
+      - 那之后加尔文来过一次
+    location: hilde_apartment
+    portrait: hilde
+    goal: 照旧过她的日子，别让丈夫和情人们的事闹出麻烦
+  - id: calvin
+    name: 加尔文·考克斯
+    role: 英国外交官，军情六处兼苏联间谍
+    called: 说英国口音德语的男人
+    look: 剪裁考究的英式西装
+    personality: 冷静，精于算计
+    voice: 带英国口音的德语
+    goal: 保住情报网
+    knows: [沃德蒙特交出的全部胶卷，已被他取走]
+    secrets: [他是双面间谍]
+    portrait: calvin
+  - id: old_woman
+    name: 韦伯的老邻居
+    role: 韦伯的另一个邻居，老太太
+    called: 裹披肩的干瘦老太太
+    look: 干枯瘦小，裹着披肩
+    personality: 淡漠
+    voice: 平平淡淡，一口一个“长官”
+    knows:
+      - 韦伯失踪后她找了两天，在小树林里发现了他被枪击的尸体
+      - 韦伯在本地没有亲友，她知道警察不会管，就想帮他埋了，结果尸体烧了起来，时间和瓦尔德玛烧死一致
+      - 韦伯埋在哪里，发现尸体的地方在哪
+    clues: [c_weber_burned]
+    location: weber_street
+    portrait: old_woman
+    goal: 顺着长官的意思把事情交代清楚，早点了事
+  - id: waldemar_friends
+    name: 瓦尔德玛的朋友们
+    role: 希特勒青年团的少年
+    called: 穿青年团制服的少年
+    look: 短裤、领巾、青年团制服
+    personality: 欺软怕硬
+    voice: 粗声粗气，满口黑话
+    knows:
+      - 瓦尔德玛体弱多病，常被他们欺负
+      - 大约 37 年初他开始和一个“个子很高的公鸭嗓骚货大姐”混在一起，还给他们看过一把“刻着奇怪花纹的手枪”
+      - 后来他炫耀说杀了韦伯，没人理他，过了几天他就烧死了
+    clues: [c_waldemar_friends]
+    location: weber_street
+    portrait: waldemar_friends
+    goal: 别被瓦尔德玛的事牵连，在长官面前表现得像个好团员
+  - id: jewish_neighbors
+    name: 旧住址的邻居们
+    role: 失踪犹太人原住址的邻居
+    called: 门缝后的邻居
+    look: 隔着门缝打量来人
+    personality: 害怕制服
+    voice: 吞吞吐吐
+    knows: [有个“奇怪的女人”曾在这一带出现过]
+    clues: [c_strange_woman]
+    location: jewish_quarter
+    portrait: jewish_neighbors
+    goal: 别引起制服的注意，保住自己和家人
+  - id: farmer
+    name: 现在的农场主
+    role: 从艾伯哈德手里买下农场的人
+    called: 穿胶靴的农场主
+    look: 胶靴，粗布外套
+    personality: 老实
+    voice: 憨厚，话不多
+    knows: [收购时对方很爽快；农场里只有两个金属板搭的结实畜棚和一个大炉子，特别干净]
+    clues: [c_farm_owner]
+    location: farm
+    portrait: farmer
+    goal: 守着买下的农场过安生日子，别惹上当局
+  - id: farm_neighbor
+    name: 周边的农户
+    role: 农场附近的农户
+    called: 隔壁的农户
+    look: 满手老茧
+    personality: 好奇，爱说闲话
+    voice: 乡下口音
+    knows: [那家人神出鬼没，只见过往里运牲畜，没见过他们卖农产品]
+    clues: [c_farm_neighbors]
+    location: farm
+    portrait: farm_neighbor
+    goal: 说说那家怪人的闲话，但别惹祸上身
+  - id: bank_clerk
+    name: 银行职员
+    role: 银行柜台职员
+    called: 柜台后的职员
+    look: 整齐的西装背心，脸色发白
+    personality: 胆小，守规矩
+    voice: 说话结巴
+    knows: [艾伯哈德上一次来存东西是 6 个月前]
+    clues: [c_last_deposit]
+    location: bank
+    portrait: bank_clerk
+    goal: 守住银行的规矩，又不得罪穿制服的人
+  - id: soldier
+    name: 小兵
+    role: 从埃森办事处带出来的司机兼保镖
+    called: 穿制服的年轻士兵
+    look: 灰色制服，腰间别着配枪
+    personality: 服从命令
+    voice: “是，长官！”
+    goal: 执行命令
+    location: sd_office
+    portrait: soldier
+    stats: {力量: 60, 体质: 60, 体型: 65, 敏捷: 55, 生命: 12, 格斗(斗殴): 50, 射击(手枪): 40, 闪避: 27, 移动: 8}
+    attacks:
+      - 格斗(斗殴) 50%，伤害 1D3+DB
+      - 射击(手枪) 40%，伤害 1D8
+  - id: assassin
+    name: 刺客
+    role: 英国或苏联的间谍（由守秘人定）
+    called: 暗处持枪的男人
+    look: 不起眼的大衣，手里一把外国产的手枪
+    personality: 冷静，被抓住就自尽
+    voice: 一言不发
+    goal: 暗杀艾伯哈德
+    secrets: [口中藏着氰化物胶囊]
+    portrait: assassin
+    stats: {力量: 55, 体质: 55, 体型: 60, 敏捷: 65, 生命: 11, 格斗(斗殴): 50, 射击(手枪): 55, 闪避: 40, 移动: 8}
+    attacks:
+      - 射击(手枪) 55%，伤害 1D10
+      - 格斗(斗殴) 50%，伤害 1D3+DB
+  - id: superior
+    name: 柏林的上级
+    role: 调查员在帝国保安处的上级，通过电话联系
+    called: 电话里的上级
+    voice: 简短，不耐烦
+    goal: 钢铁厂掌握在可靠的人手里，别出乱子
+    knows: [沃德蒙特血统的真相，但认为调查员没必要知道]
+    location: sd_office
+    portrait: superior
+    personality: 多疑，只在乎局面受控，不愿向下属多解释
+
+pregens:
+  - id: krause
+    name: 弗里德里希·克劳泽
+    occupation: 帝国保安处军官（上尉）
+    age: 32
+    sex: 男
+    residence: 柏林
+    birthplace: 汉诺威
+    portrait: krause
+    backstory:
+      背景: AutoKeeper 补充。高大的金发碧眼军官，在保安处国内处干了五年，擅长调档案和审问，被上级点名派来埃森。
+      信念: 秩序就是一切，问题要用手续解决。
+    characteristics: {力量: 65, 体质: 60, 体型: 70, 敏捷: 60, 外貌: 80, 智力: 70, 意志: 60, 教育: 70}
+    luck: 35
+    skills: {射击(手枪): 60, 侦查: 60, 心理学: 55, 恐吓: 60, 图书馆使用: 55, 话术: 40, 说服: 45, 法律: 40, 驾驶汽车: 40, 格斗(斗殴): 55, 闪避: 40, 外语(英语): 30, 信用评级: 40, 聆听: 45}
+    inventory: [瓦尔特 PPK 配枪（握柄刻着奇怪的花纹）, 保安处证件, 制服]
+  - id: winter
+    name: 卡尔·温特
+    occupation: 帝国保安处军官（中尉）
+    age: 27
+    sex: 男
+    residence: 柏林
+    birthplace: 慕尼黑
+    portrait: winter
+    backstory:
+      背景: AutoKeeper 补充。英俊的年轻军官，出身中产，靠体育和外貌在党内平步青云，跟踪和外勤比文书更拿手。
+      信念: 元首的意志就是答案。
+    characteristics: {力量: 70, 体质: 65, 体型: 65, 敏捷: 70, 外貌: 85, 智力: 60, 意志: 55, 教育: 60}
+    luck: 30
+    skills: {射击(手枪): 65, 格斗(斗殴): 65, 闪避: 50, 侦查: 55, 潜行: 45, 恐吓: 50, 取悦: 50, 驾驶汽车: 50, 锁匠: 30, 聆听: 50, 心理学: 40, 攀爬: 40, 信用评级: 30}
+    inventory: [瓦尔特 PPK 配枪（握柄刻着奇怪的花纹）, 保安处证件, 制服]
+
+creation:
+  summary: |
+    调查员是从柏林派来的帝国保安处人员，军衔不高于少校，需要是帅哥形象。
+    额外获得 100 点技能点；代价是初始幸运减去 3D10。
+    目击针对人类、不明显涉及神话的极端暴力场面时，只扣最低理智值。
+    原作建议单人游玩，也可 2-4 人。
+
+creatures:
+  - id: fire_vampire
+    name: 炎之精
+    called: 飘浮的火团
+    description: 一团团飘浮的活火，在空中忽明忽暗。只在艾伯哈德或塞格利于实验室现场召唤成功时出现。
+    sanity: 0/1D6
+    pursues: true
+    stats: {体质: 35, 体型: 5, 敏捷: 95, 意志: 65, 生命: 4, 移动: 11, 闪避: 47}
+    attacks:
+      - 灼烧接触 85%，伤害 2D6
+    notes: 数值按 CoC 7 版规则书炎之精条目（原作“详见核心书”）。物理武器无法伤害；水和灭火器能伤害它；接触可吸取魔法值。召唤成功率与克图格亚请神术相加不超过 60。

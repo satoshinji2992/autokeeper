@@ -1,0 +1,627 @@
+relations:
+  - {a: eberhard, b: players, kind: 爱慕, value: 80, why: 调查员正是他喜欢的高大德国帅哥}
+  - {a: segli, b: eberhard, kind: 盟友, value: 90, why: 中学好友，艾伯哈德为他争取了资助}
+  - {a: meisner, b: players, kind: 恐惧, value: 60, why: 调查员是当局的人}
+  - {a: huebner, b: calvin, kind: 盟友, value: 40, why: 他把加尔文介绍给妻子}
+  - {a: eberhard, b: waldemont, kind: 敌对, value: -80, why: 对他施放了熔铸之血}
+
+agendas:
+  - npc: eberhard
+    goals: [让附魔武器在战场上烧死所有人, 得到调查员]
+    steps:
+      - {id: dinner, text: 沃德蒙特死后邀请调查员共进晚餐, when: "flag:waldemont_dead", meet: false, source: 守秘人须知}
+      - {id: coax, text: 哄骗调查员一切都好，不搞暗杀；最坏时把事情闹大，让人忽视花纹, meet: true, once: false, source: 守秘人须知}
+      - {id: lab_invite, text: 调查员收集到大部分线索或计划弄死他时，邀请调查员“到自己的秘密基地看看”, meet: true, once: true, ruling: true, source: 守秘人须知}
+
+mechanics:
+  - name: 熔铸之血
+    runs: 守秘人
+    why: 调查员的配枪、匕首、保险柜里的 PPKdemo 与全线量产的附魔武器
+    rules: |
+      调查员柏林出发前领到的配枪已经激活（前主人谢尔曼被烧死的过程也算被命中，MP 自给自足）。每次用这把枪成功造成伤害都释放一次熔铸之血：用这把瓦尔特打中活物，调查员一定会死。
+      用刻有熔铸之血的武器命中任何会流血的生物，会瞥见克图格亚的一角，朗读：“深暗的宇宙和刺骨的严寒将调查员包围，克图格亚作为唯一的炽热的太阳崩塌坠落，升腾的热力将调查员像一具死尸一样卷走，与卷走一捧灰烬无异。这就是生命一直以来与生成它们的宇宙所分享的力量，人的智慧与贪婪从跃跃欲试的火苗中诞生，现在你要与这无情的烈焰共舞与它融为一体，直面你的来处与归处。说到底，精神和意志只是毫无生气的肉团，在颅骨这口狭窄的坩埚里翻滚。灵魂不过是被沥干的虚无，它与物质是同一种东西。唯有金属永恒，唯有物质不灭，现在接受你那回归矿物灰和金属元素的命运，接受这来自宇宙的赐福与冷峻的爱，你是永恒不死的物质。”
+      触发熔铸之血后理智检定 1D3/1D8。至多几天后，调查员在永生不死的幻觉中燃烧死亡（生效时间按血量计算，守秘人可灵活调整）。被命中者同样会被烧死。
+      子弹算枪支的一部分；枪托钝击同样有效但转化效率一般；只对哺乳动物有效。
+      持续接触附有已激活熔铸之血的物品会产生幻觉，守秘人按强度让调查员做最高不超过 1/1D4 的理智检定。
+      申请换枪需过幸运检定，失败则换来的是附魔但未激活的枪（打空一个弹夹都安全，调查员无法确定）；拿走手下人的枪同样要过幸运检定，否则这些枪全都带熔铸之血。
+  - name: 法术原文
+    runs: 守秘人
+    why: 《马克西米利安的炼金指南》与艾伯哈德、塞格利的法术
+    rules: |
+      生命薪柴：消耗与所得 MP 成正比的 HP，转化比例取决于武器材质；锻造武器无消耗。在精炼金属制成的匕首上刻咒文，致生物流血时吸取其生命力储存。
+      熔铸之血：消耗 (5MP+1D4 理智)/每升血，生效时间按血液体积 24 小时/升。以足量血液完全浸泡骨质器具并注入魔力，血液燃烧、骨质物品转化为光滑的银白色赤钢。两种咒文形式，分别用生命薪柴或施法者自身 MP。赤钢是召唤克图格亚的关键材料。
+      材料变温：按材料性质和体积（毫升）消耗 MP，对金属或热塑性材料局部加热或降温；对赤钢消耗最小。实验室铁门进出各花 2MP。
+      艾伯哈德还会克图格亚请神术、炎之精召唤术、炎之精束缚术（规则书条目）。
+preparation:
+  scenery:
+    place:cemetery:
+      fingerprint: 1f4d12148f8d5b97f9e3170c20029e4e51be8d192ddddae469304e6ad22234e3
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 露天墓园，开场写“阴雨”“雨就没停过”，已有 outdoors=true、graveyard、rain 正确
+    place:manor:
+      fingerprint: ef67161bc2f91febb7a20cd9146f9d7818f54bc5f20f2c09f52ac5c04787a978
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 庄园外壳地点，入口为大厅，室内建筑，已有资料无误
+    place:manor_hall:
+      fingerprint: e6f4f38142d860c514347a3f13e9cfab708d1781197fb610092b9262387e4998
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内大厅，“壁炉烧得很旺”，flicker 有依据，保留
+    place:eberhard_room:
+      fingerprint: d8da74c8f09f0820e71b0e4bdb842fd9238e9d2b398b60b0bdc749d3c91fa6ac
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内卧室，原文无天气光线描写，保留
+    place:waldemont_room:
+      fingerprint: 8fffa83616cf3adbb57fa78b6729cfea1798f2391e381791a2ebd988a4da4f60
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内书房卧室，原文无天气光线描写，保留
+    place:steelworks:
+      fingerprint: 93b55c3753f993d8fd9c675b44670bde3aeda092855decdbdafaab94e02a01cd
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 钢铁厂外壳地点，入口为办公楼，建筑，保留
+    place:works_office:
+      fingerprint: 64e842cfc403f1f3ebc2bd350327db6899e28a84ea4f5ee4de8d500a0c26ab19
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内办公楼，窗外烟囱黑烟不是室内天气，保留
+    place:segli_office:
+      fingerprint: e145eecc5df74ff6a5fc226563518d67acd5a2fb6e5cb11026fe86eda8d3fc17
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内办公室，原文无天气光线描写，保留
+    place:factory_floor:
+      fingerprint: b035e0db04e457ede258691739d2a1dba2aae9e2a93df3d2a15e67f176fd8843
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内车间；原文只写冲压机、传送带、吊机，没写火星，去掉补加的 embers
+    place:lab_corridor:
+      fingerprint: e747a29b17ae6aa9183f11eed9814ad1354c5933fd99eac4231c0c412ceb123c
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 地下走廊，“灯泡嗡嗡作响”、又潮又暗，flicker 可成立，保留
+    place:lab:
+      fingerprint: 56c92581b13059857f30564eb4673377568fb0001edbbc2643f0a3db9882a686
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 地下实验室，终战朗读“炉火映着金属的光泽”，embers 有依据，保留
+    place:sd_office:
+      fingerprint: df4cfb481466bad2a8f0a33d3f137b4f0c7b5f38e3e992c888908b87cbdc0ae7
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内办事处（院子只是附带的停车处），原文无天气描写，保留
+    place:restaurant:
+      fingerprint: 521c9125c3cfa1e2edbb989772f3bc41abc03740a1239dce326530c7608af9c5
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内单间，原文没写烛光或摇曳的灯光，去掉 flicker
+    place:hilde_apartment:
+      fingerprint: baa1ba827cfb6e37caabceb3a48e2538afec7a9990c1ac7efddcc484d748ecdb
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内公寓，原文无天气光线描写，保留
+    place:bank:
+      fingerprint: a199a4823b168f450ff64d1e3803cfb88615838e92be1d2c422bf9c485d10518
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 室内银行大厅，原文无天气描写，保留
+    place:jolan_grave:
+      fingerprint: d82a5c139d7267ab2f7b7c54a239aefed38f055cb3258b0d46d1b8e32a8f1ead
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 露天偏僻墓园，模组设定在阴雨连绵的日子，rain 保留
+    place:weber_street:
+      fingerprint: e4adeb14a3815914e15cb95fe7d43d77734db5605892414c0cce4f2dd95c7115
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 露天工人街区，原文无天气描写，保留
+    place:weber_woods:
+      fingerprint: 2a0de9bef544784666c882aaba5c742b4f220c89bce97e585916d2a7ec19d403
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 露天桦树林；原文写树光秃秃、地上是湿透的落叶，没写雾，也没有正在飘落的叶子，去掉 fog
+    place:farm:
+      fingerprint: 49e8d29f8222bf44d4b3ad73b75fd90f4b01e15b3981978769923a82021b372a
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 露天郊外农场，fields 正确，原文无天气描写，保留
+    place:jewish_quarter:
+      fingerprint: cbfcbb657e2acb7af20c8783903041b1bc7ae90755051213bf5139d3e09a6753
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 旧公寓门口一带，按街道处理，原文无天气描写，保留
+    handout:h_transcript:
+      fingerprint: fd81be2a34cb4c83e76f5d0fb697cb03553ecfd98a3cca3fc17b0375d2017d34
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 打字转录的炼金指南抄本上的批注，paper=book 正确，保留
+  npcs:
+    waldemont:
+      fingerprint: daa9858c94e9cd8b4a2dde3521350f8a017ef52767fc74ce4859dbe8dc6847c9
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 称呼、目标、性格、说话方式、所知均已齐全，原作无更多可补
+    lotte:
+      fingerprint: 1c4bf08c26b93a55be09d2ee5d584810afca21223f616cb629dc7ea03e012242
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 字段齐全；原作只写她道别时被棺火烧伤，无更多认知
+    eberhard:
+      fingerprint: f7568bdacfd5b5d1ae7b49cc3935f8ce19f7fd314c7996e0707b5a2cce63656c
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 艾伯哈德的 called（画眼线的瘦高青年）、goal、personality、voice、knows 在资料里都已写好，没有标“缺”的字段。这些内容和原作第 6 页的关键 NPC
+        一节、第 8 页的有关沃德蒙特一节、第 9 页的晦气的约会一节以及真相背景一致。按“只补空着的，已有的不动”，保留原状。
+    segli:
+      fingerprint: c087f4c251f80f84ad4fade42baf21854520c967a2708db81e1871749a8077e4
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 字段齐全，取自原作关键NPC与花纹、产线说明
+    meisner:
+      fingerprint: ee6640cf711639819c27647b5c1a98c2b4da0cbef40aca8246018d9083852a7f
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 字段齐全，取自原作“骨灰”“典籍（原件）”两节
+    calvin:
+      fingerprint: a88a571f5c74548995514b0051e5047f12253bca6c88c20134a8ca06de4ac142
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 称呼、目标、性格、说话方式、所知均已有；原作没写他亲自出场的更多认知，不另加
+    soldier:
+      fingerprint: 694e44422861e4e0305c0f2119873d50684be9a629f1774e32510342d735e5b8
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 只缺所知；原作只写小兵当司机保镖、几乎必死，没写他们知道任何案情，保留空白
+    assassin:
+      fingerprint: 843e864bf78fd9523d323375c63a597811dcfebf5e275d4acad74e5d2fe5de7e
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 只缺所知；原作明确不展开刺客的谍战背景（被控制即自杀），没写他知道什么，保留空白
+    servants:
+      fingerprint: 6ff178fed9857b17ada4ef3c56f7795fa0a67e5985d5cb0a023e2cadf91b22a1
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    daughter:
+      fingerprint: f6a0f4daad866853cf46646298e858f5ffdf01732f281cc5760585d4b2bd76bf
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    works_staff:
+      fingerprint: 09aac0a66c7de3660dd1de1af83b7935070509ccbf9f6e7446ca4aeb93d75c92
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    huebner:
+      fingerprint: 3ebbdfea49481c0da0341771a96ca06f891d06b94800fe39480fc7edb2919bb5
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    hilde:
+      fingerprint: 90028ad23502c61f9ad1577916ccde0e47414a56d0c535a69dc82ee2c8c72dc4
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    old_woman:
+      fingerprint: dfd8775da06ab8f1117562bcfe40a4dbace283cc4c77b003f9706862d0645e7e
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    waldemar_friends:
+      fingerprint: 959e5dcacf53ba4ad55d8e50591940dec1755426ea315752340907ac0805826a
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    jewish_neighbors:
+      fingerprint: d0759912344a45060bf72ad57d92650ae9f31842fe4714b6b97652737968a5f8
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    farmer:
+      fingerprint: 2f57577015d25961f2a75ab21639387252698ff9f3f81cfe25ef0e33c5ad2dc9
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    farm_neighbor:
+      fingerprint: a2a1871d4e58894a3f786b6da1874a04c5d909a62fac87985ca165fbbb3358e5
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    bank_clerk:
+      fingerprint: 615c426c106553ebfe62ecf3b5aea179f2f93afbd02531c2f05b266e8b754c2f
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+    superior:
+      fingerprint: 3ea01f00d737d04d7803b2180debc2491220cb2e67c9c40fb9031733e5a5f47a
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 已整理人物资料及认知依据
+  variants:
+    cemetery:
+      fingerprint: b55fd1cb1afa78a8fa9466fb4612ff3dc78c547eef6c0c42835904e4a2b74537
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原图就是葬礼进行中的样子（黑伞围着墓穴、棺材停在穴边）。棺材起火是永久变化，不算时有时无的差分；残骸里的骨架和匕首已经各有一条差分。原作没写公墓还有别的来了又走的东西，所以保留原状。
+    manor:
+      fingerprint: 5bcd01aa087f56f3de173f7bde88a8e4edfe43d78135504d8e9edef82eacb33c
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: soldier
+    manor_hall:
+      fingerprint: 798d89983bd8cbb29d9947aee3aacb872cdc3203217491a50727e989705c61e2
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 保留原状。黑纱、壁炉、三角钢琴都已经画在原图里。原作写到的变化有小女孩和艾伯哈德捉迷藏、弹钢琴，以及穿改版制服的迎接，这些都是人物本身，场景角上的小像会显示，不画进背景。原作没写会来去的物件或灯光。
+    eberhard_room:
+      fingerprint: f63fc8e2a6fa6d55824fbee8dd30ffead1e5b52b08b7ba1b231d3f6404abab39
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原作只写房内固定陈设（衣柜、梳妆台），没有时有时无的东西
+    waldemont_room:
+      fingerprint: 1ae33f6b0056c9264c669f9eb815e453521c5599528b1e55ca373daf79935a8d
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原作写明这里找不到任何线索，书桌下的手枪是藏着的，没有可见的来去之物
+    steelworks:
+      fingerprint: d6ebd09e722955aa99029335598ec5975c1e7e20c23b0f6f806a6de0e18d47ff
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 厂区外景原作没写随状态出现的车辆或人群
+    works_office:
+      fingerprint: 5c1785c3f35ebd74d87940f82e52877f31ff6a07ad499d6d7d39ee0a6062f699
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 打字机和员工是常态，已在原图；原作没写临时变化
+    segli_office:
+      fingerprint: 990096f2dedc54edf13667c8c9d915099114c45996c728b14c6c05cb7d7cd141
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 图纸和书柜是固定陈设，转录本藏在书柜里，不宜画出
+    factory_floor:
+      fingerprint: f4a068fdbfb224f73979284bb4121f7af5e3132ec2f78b535d1e5aa0bed006a7
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 冲压机、传送带、坦克壳体已在原图；原作没写停工或换班之类的画面变化
+    lab:
+      fingerprint: d2519f574f26c18030cdf273a8cd50407b793c31350f183e6c21d0ea7a0a5453
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 终战时的变化是艾伯哈德本人（人物，用小像显示），柜中头罐属于剧透内容；原作没写其他会来去的东西
+    sd_office:
+      fingerprint: 787f9a851aa0540b1c123f5f7366e25784d0307d0c671535bf0589ae3067d19d
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 座车与值班士兵已在原图；艾伯哈德在长椅上等人是人物，由小像显示
+    hilde_apartment:
+      fingerprint: 4feed0d9aab23ab389047249c4f535fe3504a8ac3f2b4ec603e2944c81435e15
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原作明确沃德蒙特至少两周没来过，藏物处是空的，没有来去之物可画
+    bank:
+      fingerprint: 686005f6f585fe93e78c0f522974089fcea2b97c92977e7640b190591962950e
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原作只写职员和保险柜库房，没有随状态出现的东西
+    jolan_grave:
+      fingerprint: cc86e7e1fd5adde75b0bb3846f5bbcf79a21244a86dfd60119896567c65ca885
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 被挖开的坟是开局前就有的永久状态，不是来去之物
+    weber_street:
+      fingerprint: fb36474bf208030dccf30b4c05e826319c7cfb820d08718aac038bdf0e85fb64
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 老太太和钉了木板的房子已在原图；青年团少年是人物，由小像显示
+    weber_woods:
+      fingerprint: 9acebb0435885224fd404ad19d7bdee970d5e75ce8f896eea8c0c9c6b1a5208c
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 翻过的土已在原图；原作没写其他时有时无的东西
+    farm:
+      fingerprint: ff830d9c704fbab426ded4458fc31cc0ad48e2c19753a9bfb0a6b1da3546ad09
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 畜棚和炉子是固定建筑，原作写运牲畜是三年前的旧事，现在不会出现
+    jewish_quarter:
+      fingerprint: df7a00dffb1a07052877326e926d529a386a5b96b94451f39f9883fe478cc3cb
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 门缝后的邻居已在原图；原作没写临时变化
+    lab_corridor:
+      fingerprint: 20e659607bfa6e1aeadf39871ccd2bceb904b06835fb3e8c5f6f5e3fd9122182
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: e_cutting
+    restaurant:
+      fingerprint: b2d40798b1328b9b1cc7009dd4b4259efd02f17b2c64e86c158fd97a3e5336d7
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 保留原状。已有差分“at:eberhard:restaurant”：单间里摆好两副餐具、点着烛台、放着香槟，对应原作里艾伯哈德用女人名字订的单间晚餐（e_dinner），已经够用。原作没写这里还有别的来去变化，每个地点也最多一条。
+  closeups:
+    cemetery:
+      fingerprint: 1204a598a1a2c6a66ad4ab45604693c0d89048ffb9eb3ed8989aefe5dab0c603
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: cemetery、c_coffin_bones、c_coffin_ashes
+    manor_hall:
+      fingerprint: d3f3f6b8a8d35b3a724b737cd7bc52114dd4e4e44483745f289680f64339a943
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 这里的两个可调查项「三角钢琴」「守灵用过的灵堂」已分别有 manor_grand_piano、manor_wake_room 两张特写。大厅里的线索都靠和人交谈得到（艾伯哈德、麦克斯纳、仆人），或是人物出场（改版制服），找到后物件画面不会变，所以不再加新视角。
+    eberhard_room:
+      fingerprint: 67fce47a6a3dc8c6951fdbc1074a069cd21b2662a6f90fbf8ed6b2cb72f0c4bc
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 「衣柜」「梳妆台」已分别有 eberhard_wardrobe、eberhard_vanity 两张特写。现有画面只画了门缝里露出的裙摆、半开的抽屉，没画出藏着的东西。c_wardrobe
+        和 c_key_found 的内容（与目击描述相符的衣服、保险柜钥匙）是搜查后才看到的；再为同一个可调查项单开一张找到后的图，就和已有视角重复了，所以保留原状。
+    waldemont_room:
+      fingerprint: f92d04020e9a606aa95042b02187c76b7018d620c9167858b19d96c87205df6e
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: waldemont_room、c_desk_gun
+    works_office:
+      fingerprint: 746ae2bf74a0545c0d20873c7a4f285eedbfcb9156c3c227f45e04443dc3c083
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: works_office、c_supply_records
+    segli_office:
+      fingerprint: 7b8d82f3c9c622680e82e9fc1d008804f759c8ac8d378a644ec118cc9f02f40e
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 「书柜里的打字稿与图册」「墙上的模具设计图」已分别有 segli_bookcase、segli_die_drawings 两张特写。现有书柜画面只写了下层压着成沓的纸，没有提前画出转录本。c_stamp_lines
+        是塞格利领着参观车间时说出来的，c_spell_meaning 要过检定、花几个小时研究才读懂，两条都不会改变办公室里看得见的样子，所以不新增。
+    factory_floor:
+      fingerprint: 3debe233013cfe92f9f3f3525752692a716e775c4f11b44b1b04089d5116c023
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 冲压机和模具、坦克壳体已有视角（factory_stamp_press、factory_tank_hull），刻花纹的模具和坦克壳本来就看得见。这里没有找到后会改变画面的线索，保留原状。
+    lab_corridor:
+      fingerprint: 10dfc1742b00a72432431e11413e381eeb92ddb6b7999c5c018026bc44180fce
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: lab_corridor、c_welded_lock
+    lab:
+      fingerprint: 9dc9572fa5a97f448da809785bc6b2d38a21ae9e048bb270fc4a99c5d0b9f247
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: lab、c_lab_heads
+    sd_office:
+      fingerprint: 9b92bf3be6d8be7859c1475b3b66ce9dbfd18cfd20a8d469359b4fa71197bec4
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: sd_office
+    restaurant:
+      fingerprint: 8ff6e1ef3186fd6b47454b9a9c9ce53542c332dad7525e0d1992835c1ff65183
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: restaurant、e_dinner
+    hilde_apartment:
+      fingerprint: 451db013208f76a414e88ac38dfd5968fb474a8cb6b95fe2482d89de278c0fee
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: hilde_apartment、c_floor_hide
+    bank:
+      fingerprint: dbe635507eb1121ce64c22d72ad1402a778910c163df7aa9590cdfeb939c5a39
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: bank、c_vault
+    jolan_grave:
+      fingerprint: 2a8e96bcebbf8ed8fdc8f890777bcb51761e0ac04afaab2c7b3d85f2170174ea
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: jolan_grave、c_open_grave、c_nail
+    weber_street:
+      fingerprint: 97cfc197619d26ecb6d1ff347a0c0d57b6d91b5bda57f0bd7e49772dabc7a314
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: weber_street
+    weber_woods:
+      fingerprint: 0ae30a12d34d826f26e7f402748a9ff73182b55a15128dcc0100592823ad188f
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: weber_woods、c_shell
+    farm:
+      fingerprint: d5ad45250cef5b50e72603e279a868e038c76ed36d93ea7ac90a9ddf729f3226
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: farm、c_farm_owner
+    jewish_quarter:
+      fingerprint: 59fbbf91828140fcccc20e1ae133583bd42f71db85d74a7bc94c3ba8e729a010
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: jewish_quarter
+  present:
+    e_coffin_fire:
+      fingerprint: 448e52ba7f080a78254f0c8964087c60a5267b90eb98ce12b4e1a4f44e962e34
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“导入：一场葬礼”：沃德蒙特主持葬礼，艾伯哈德在人群里画着眼线朝调查员看；洛特与阿克塞尔道别时棺材起火，她也被烧伤。开场写老管家撑伞在墓园门口；原文“骨灰”一节写麦克斯纳协助操办葬礼。四人都在场。原文没写塞格利出席，所以不列他。
+    e_waldemont_burns:
+      fingerprint: 95a960f4b0e594000c97c9c9dc5b4ef1d2ffbbf1a89f8923426f1bb6a1b84a7c
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“Asche zu Asche！”：调查员在守秘人认为合适的时候亲眼看到沃德蒙特被火吞噬，所以他在场。其他人（与他有肢体接触的人、来逮捕他的小兵）要看守秘人把这一幕放在哪里、调查员带没带人，不是一定在场，所以不列。
+    e_dinner_invite:
+      fingerprint: 3d3d0c643cccf80546aeaf094b8a698737281d0dcfa140733307c03757d5851b
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“晦气的约会”只写沃德蒙特死后艾伯哈德会邀请调查员共进晚餐，没写邀请怎么送到。用信使、电话或仆人转达是 AutoKeeper 补充的写法，具体哪个人当面递信没有定，艾伯哈德本人也不在场，所以留空。
+    e_dinner:
+      fingerprint: 344ecde9068615da028cf01f64deabe3ffc8f4ce4639e33b869673e1dfe2e1f7
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“晦气的约会”：艾伯哈德打扮成贵妇人，在用女人名字订的单间里赴约，当面示爱、胡扯、干杯，最后买单。他当场表演。侍者不是登记的 NPC。
+    e_assassin:
+      fingerprint: 8c801279696d90765fc091124eb410ba8af12abd144614cf094229bf6f1031fd
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“引诱调查员开枪”：约会结束后，刺客当场来暗杀艾伯哈德，他是动手的人；艾伯哈德是目标，事后还缠着调查员送他回家，两人都在调查员眼前。
+    e_assassin_dies:
+      fingerprint: 759881e159552c5028b07bbafd6a5dde61ea76d8e4d2ae28de9210e79df9762e
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文：刺客一被调查员控制就吞下氰化物自杀，这是在调查员眼前发生的；原文又写“此事过后艾伯哈德压抑着兴奋的神情……缠着调查员”，说明艾伯哈德还在场。
+    e_daughter:
+      fingerprint: d6c0824526c8ed0bc6e7fc8569ce053a04a0666353d04c4c960dffca4fa429d4
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文：沃德蒙特死后，调查员下一次见到艾伯哈德时，他正陪沃德蒙特的女儿玩，看见调查员就带着她过来，暗示把她处理掉。两人都当场在调查员面前，艾伯哈德是表演者。
+    e_cutting:
+      fingerprint: 9d8dd93ddc7873ba65916b5a6f16b29a44dba19d87c3071c62f7ae9dfa93f0c5
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“实验室？”：调查员切门的时候，艾伯哈德得知消息赶来，当众抚摸调查员，打开那扇门。切割机操作工是没有登记的路人，不写。
+    e_bank_alarm:
+      fingerprint: 6c8c75cc51809d7d9942977bd50366c6f8e8e1f23193b0d7be70656c7b48dd20
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“爱的誓言”情况 3：艾伯哈德穿正常西装到埃森办事处等调查员，“任何守秘人认为合适的 NPC 都可以通知调查员这件事”。这件事的朗读写的是值班士兵当面报告，所以小兵和艾伯哈德都在场。
+    e_finale:
+      fingerprint: 2cecea83b9ba8ece9065d410cdf3c98dd6b3b776a2bac8a431dcac1743a7c5f8
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文“爱的誓言”：终战一定在塞格利在钢铁厂地下的实验室进行，艾伯哈德在那里等调查员。原文写到“塞格利是技术人员，不能算在内”，还写两人可能配合召唤，说明塞格利在场。
+    e_fireball:
+      fingerprint: 1d643296330f0239a6edd4ed717345fd5fa1a0027284aa93550c52f87bdf69c9
+      source: abff2570640c87c2fa07365b307d6089c2688f08f200cb44def909c96be7990e
+      reason: 原文：艾伯哈德用几乎全部 MP 点燃在场除他本人、塞格利和调查员以外的所有 NPC，然后和调查员一对一决斗；塞格利在场，但作为技术人员不算决斗的一方。被点燃的其他 NPC（比如调查员带来的小兵）要看调查员带了谁，不是一定在场，所以不列。
+ties:
+- id: tie_lambert_colleague
+  hook: 失踪的保安处上尉兰伯特曾是调查员受训时的同期或老上司。1936 年年末他在埃森查案时音讯全无，调查员一直把这件事记在心里；他最后一次被人见到就在埃森办事处（补充；只给调查员一个动机，兰伯特的档案照原作在档案室查阅才能得到）。
+  place: sd_office
+  fits:
+  - 重要之人
+  - 职业
+- id: tie_segli_munich
+  hook: 调查员早年在慕尼黑上学或驻扎，和当年那个靠资助才读完书的腼腆工科生塞格利有过一面之缘，或同上过一门课；他记得调查员，见面时会更腼腆、更客气（补充；他所知和守口如瓶的事都照原作不变）。
+  npc: segli
+  fits:
+  - 重要之人
+  - 意义非凡之地
+- id: tie_waldemont_student_circle
+  hook: 二十年代调查员年轻时在某个大学或青年圈子里见过还在搞左派运动的沃德蒙特，所以能亲眼对照他“年轻时候不懂事”的说法（补充；只适用于背景里有这段往事的调查员。沃德蒙特不会因为是旧识就承认自己是间谍）。
+  npc: waldemont
+  fits:
+  - 重要之人
+  - 思想与信念
+- id: tie_huebner_berlin_circle
+  hook: 调查员在柏林的外交或社交场合与外交官休布纳·莱费尔打过交道，知道他圆滑、交游广，但并不知道他家里的事（补充；见面时他照样用外交辞令周旋，他知道的事仍要按原作去问）。
+  npc: huebner
+  fits:
+  - 重要之人
+  - 职业
+- id: tie_father_steelworks
+  hook: 调查员的父亲或兄弟上一场大战里扛过赫施伯格钢铁厂造的枪炮，或者在鲁尔区的钢厂做过工；对调查员来说，这座冒黑烟的工厂既熟悉又沉重（补充；只适用于鲁尔区或工人家庭出身的背景）。
+  place: factory_floor
+  fits:
+  - 意义非凡之地
+  - 重要之人
+- id: tie_ruhr_hometown
+  hook: 如果调查员就是埃森或鲁尔区人，郊外那片农场一带正是他小时候走过的乡下，邻近的农户可能还认得他家里人，闲话会说得更随便（补充；农户知道的仍然只有原作里那些）。
+  place: farm
+  fits:
+  - 意义非凡之地
+- id: tie_hitler_youth_leader
+  hook: 调查员年少时在希特勒青年团当过小队长，一眼就能看穿韦伯旧居一带那帮欺软怕硬的少年；他们也会抢着在“老前辈”面前表现（补充；他们知道的仍然是原作里瓦尔德玛那些事）。
+  npc: waldemar_friends
+  fits:
+  - 职业
+  - 思想与信念
+- id: tie_old_jewish_acquaintance
+  hook: 调查员年少时有过一个犹太邻居或同学，这段往事在 1939 年只能藏着。在失踪犹太人旧住址门缝后的那些面孔，或者重新登记名单上的某个姓名，可能会勾起这段回忆（补充；只适用于背景里有这段往事的调查员。不改变邻居们的知情范围和害怕制服的态度）。
+  place: jewish_quarter
+  fits:
+  - 重要之人
+  - 思想与信念
+- id: tie_fuhrer_faith
+  hook: 对把效忠元首当作信念的调查员，艾伯哈德会热烈地附和这份信念，再把它扭曲成用烈火“净化欧洲”的说法；原作“忠诚是你的奖赏”那条撒手不管的路线，也正好接在这份信念上（补充；只是演法上的牵连，不替调查员下结论）。
+  npc: eberhard
+  fits:
+  - 思想与信念
+- id: tie_superior_mentor
+  hook: 电话那头的柏林上级是一手提拔调查员的人，所以调查员愿意替他干这种“找到或制造把柄”的脏活；可他明知沃德蒙特的血统真相，却觉得调查员没必要知道（补充；上级的态度和知情范围照原作不变）。
+  npc: superior
+  fits:
+  - 职业
+  - 重要之人
+- id: tie_lotte_family
+  hook: 续弦洛特出身“血统更高贵”的体面人家，调查员的家族可能在社交圈里和她娘家有些往来；她在葬礼上认出调查员，会轻声道谢（补充；她所知的仍然只有丈夫的死期）。
+  npc: lotte
+  fits:
+  - 重要之人
+- id: tie_meisner_old_service
+  hook: 老管家麦克斯纳年轻时在调查员的家族或亲戚家帮过佣，后来才去了赫施伯格家；他认得调查员，所以更急着向当局的这位熟面孔一吐为快（补充；他吐露什么、什么时候吐露，仍然照原作的条件，比如约兰骨灰的事要在沃德蒙特死后才说）。
+  npc: meisner
+  fits:
+  - 重要之人
+history:
+- when: 纳粹上台以前（二十多年前）
+  text: 阿克塞尔与犹太女人约兰自由恋爱结婚，约兰难产而死，留下有一半犹太血统的长子沃德蒙特；阿克塞尔后来续娶洛特。
+  known_by:
+  - meisner
+  - superior
+  - eberhard
+- when: 纳粹势力壮大的那几年
+  text: 纳粹当局看在赫施伯格家族的地位上，帮忙掩盖了沃德蒙特的血统，档案里把他的生母写成洛特。上级认为调查员没必要知道这件事。
+  known_by:
+  - meisner
+  - superior
+- when: 纳粹势力壮大的那几年
+  text: 阿克塞尔当时立场摇摆，他和约兰的婚姻以及沃德蒙特的人身安全成了纳粹和他谈判的筹码；之后约兰的坟被迁到偏僻墓园的一角。
+  where: jolan_grave
+  known_by:
+  - meisner
+- when: 三年前
+  text: 艾伯哈德向阿克塞尔要钱，在埃森郊区买地开农场，不到一年就痛快地卖给了现在的农场主。
+  who:
+  - eberhard
+  - farmer
+  where: farm
+  known_by:
+  - servants
+- when: 三年前到两年多前
+  text: 艾伯哈德和塞格利在农场里用运进来的牲畜做研究和测试，储存了大量 MP，畜棚用金属板搭建是为了防火，最后用炉子把一切烧干净。
+  who:
+  - eberhard
+  - segli
+  where: farm
+- when: 约两年前
+  text: 英国外交官加尔文·考克斯（军情六处的人，同时是苏联间谍）调来德国，与休布纳有工作往来，在休布纳认可下成了希尔德的情人，两人常在那间固定的公寓幽会。
+  who:
+  - calvin
+  - huebner
+  - hilde
+  where: hilde_apartment
+- when: 约 24 个月前（36 年末前后）
+  text: 艾伯哈德扮成妓女模样的高个子女人跟踪金发碧眼的医生安森和律师雷纳德，用附魔瓦尔特 PPK 样枪杀了他们，并成对杀了犹太人；负责调查此案的保安处上尉兰伯特最后在埃森办事处露面后也被他杀害，为补足
+    MP 他又杀了第三个犹太人。三个金发男人的头被他割下收藏，尸体和犹太人的一起被烧炼成金属。
+  who:
+  - eberhard
+  - segli
+- when: 兰伯特遇害后
+  text: 艾伯哈德扒下兰伯特的制服，改成恶俗的版型，保留了上尉肩章和勋章，留着自己穿。
+  who:
+  - eberhard
+- when: 约两年前（前年）
+  text: 艾伯哈德以“搬一批设备”为名，帮塞格利把受害者的遗体运进钢铁厂地下层的实验室。塞格利换了用第一对受害者铸成的赤钢锁芯，在门内刻了材料变温咒文，两人每次进出各花 2MP 开门、焊门。
+  who:
+  - eberhard
+  - segli
+  where: lab
+- when: 约两年前（37 年初）
+  text: 艾伯哈德扮成女人接近体弱多病的希特勒青年团成员瓦尔德玛，怂恿他用已激活的附魔样枪射杀犹太邻居韦伯。瓦尔德玛把韦伯骗进小树林里射杀后丢掉了枪，艾伯哈德把枪捡了回去；几天后瓦尔德玛和韦伯的尸体同时起火。
+  who:
+  - eberhard
+  - waldemar_friends
+  - old_woman
+  where: weber_woods
+  known_by:
+  - segli
+- when: 18 个月前
+  text: 塞格利利用总工程师的权限，在包括坦克在内的多条产线上加装刻有熔铸之血和生命薪柴咒文的冲压模具，样枪升级为正式版准备量产。
+  who:
+  - segli
+  - eberhard
+  where: factory_floor
+- when: 6 个月前
+  text: 附魔武器全线量产，首批未激活的正式版已交付军方，发给士兵和军官。
+  who:
+  - segli
+  - eberhard
+- when: 6 个月前
+  text: 艾伯哈德在银行开了保险柜，存进《马克西米利安的炼金指南》拉丁文原件和已激活的附魔样枪，钥匙放在自己房间里。
+  who:
+  - eberhard
+  where: bank
+- when: 约半年前
+  text: 加尔文在一次工业贸易会议上把沃德蒙特发展为下线，经休布纳介绍让沃德蒙特成了希尔德的情人，把不知情的希尔德当作中间人。沃德蒙特此后每隔一周的周六下午去公寓，把偷拍的军方订单文件胶卷藏进床底被撬开的地板或他送的台灯空灯座里，由加尔文下次来时取走。
+  who:
+  - calvin
+  - waldemont
+  - huebner
+  where: hilde_apartment
+- when: 至少两周前
+  text: 沃德蒙特最后一次去希尔德的公寓（葬礼当天本该是他去的日子，他没去）。
+  who:
+  - waldemont
+  - hilde
+  where: hilde_apartment
+- when: 沃德蒙特最后一次去公寓之后
+  text: 加尔文去过公寓一次，藏物处就算有情报也已经被他取走，现在两处都是空的。
+  who:
+  - calvin
+  where: hilde_apartment
+- when: 两周前
+  text: 集中营军官谢尔曼用未激活的附魔瓦尔特 PPK 正式版射杀太多囚犯，熔铸之血被触发，他被自己的配枪烧死；当天集中营的一处尸体掩埋点也莫名起火。那把已激活的枪被回收，后来重新发给了调查员。
+- when: 2 月 6 日
+  text: 阿克塞尔因动脉夹层抢救无效去世。
+  who:
+  - lotte
+  - waldemont
+  - eberhard
+  - meisner
+  where: manor
+  known_by:
+  - servants
+- when: 2 月 6 日之后的守灵夜
+  text: 艾伯哈德照例打扮得花枝招展、戴着红色延长甲偷跑出去，挖出约兰的骨灰撒进阿克塞尔的棺材，对父亲的尸体施放熔铸之血，并把一把刻有咒文的匕首留在了棺里。挖坟时他弄断了一片指甲，留在坟土里，回来后一气之下把其他指甲也拆掉扔了。
+  who:
+  - eberhard
+  where: jolan_grave
+- when: 2 月 9 日
+  text: 艾伯哈德对沃德蒙特施放熔铸之血，沃德蒙特从此开始谵妄、发病，正在走向自燃。
+  who:
+  - eberhard
+foreshadow:
+- id: fs_coffin_dry_lid
+  hint: 雨下得这么密，那口橡木棺材的盖子上却挂不住水珠，落上去的雨点很快就没了，棺盖缝边偶尔飘起一丝像是雾气的白。
+  where: cemetery
+  pays_off: e_coffin_fire
+- id: fs_bare_nails
+  hint: 画眼线的瘦高青年妆容精致，十根手指的指甲却光秃秃的，没涂颜色，几个指尖边缘还有撕扯过的红印子，跟他这一身打扮很不相称。
+  where: cemetery
+  pays_off: k_jolan
+- id: fs_waldemont_heat
+  hint: 二月的冷雨里，主持葬礼的苍白男子却一次次拉松领口，伞下的雨水好像一沾上他的肩膀就淡了。
+  where: cemetery
+  pays_off: e_waldemont_burns
+  stages:
+  - hint: 大厅里人人都往壁炉边凑，只有他站得离火最远，袖口挽了起来，手背泛着不正常的红，还在擦汗。
+    where: manor_hall
+  - hint: 再见到他时，他身边若有若无地飘着一股焦糊味，手里攥的手帕上沾着几点像是烫出来的褐色小斑。
+    when: D2 08:00
+    where: manor_hall
+- id: fs_warm_grip
+  hint: 雨里站了这么久，手指都冻僵了，腰间那把配枪的握柄摸上去却一点也不冰，好像刚被谁握过。
+  where: cemetery
+  pays_off: k_guns
+  stages:
+  - hint: 在办事处里，你总闻到一股淡淡的硝烟味，可这把枪从领到手起一发都没开过。
+    when: D1 18:00
+    where: sd_office
+  - hint: 安静的时候，耳边像有头发被火燎着的那种细细的嘶嘶声，一凑近腰间的枪就更清楚。
+    when: D2 08:00
+    where: sd_office
+  - hint: 值班士兵立正向你报告时，有那么一眨眼，你看见他整个人着了火；再定睛一看，他还好好地站着，问你是不是没睡好。
+    when: D3 08:00
+    where: sd_office
+- id: fs_warm_door
+  hint: 地下层又冷又潮，走到尽头那扇铁门跟前，空气却明显暖了一些，还有一股像是烧热的金属的气味，可附近没有任何炉子或管道。
+  where: lab_corridor
+  pays_off: k_lab

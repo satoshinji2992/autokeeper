@@ -1,0 +1,850 @@
+locations:
+- id: ocean_park
+  name: 废弃的海洋乐园
+  aliases:
+  - 海洋乐园
+  - 秘密基地
+  - 乐园
+  art: ocean_park
+  public: true
+  scene_root: true
+  outdoors: true
+  ground: street
+  read_aloud: 海洋乐园所在的地块是个跨世纪烂尾工程。售票亭窗口玻璃上贴着一张残破的价目表，边角卷起，被雨水浸透后模糊了大部分数字，只留下“成人”“儿童”几个字还能辨认。脏兮兮的游乐设施被藤蔓爬满，各种废弃物、铁架、底盘、柱子和铁皮丢在一起。乐园的各个角落散布着海洋生物塑像，海豚、八爪鱼、海豹，还有你们最喜欢的黄色小海马。它们被日晒雨淋了太久，从鲜艳褪成黯淡，从黯淡褪成斑驳，最后变成一种难以描述的颜色。入园口已被封锁，你们一向从侧门下方那个缺口爬进爬出。
+  keeper: '调查时长 40 分钟。入园口封锁；侧门下方有一处长期无人维护的缺口，成年人弯腰也难以通过，小学生能轻松爬过（小个子规则）。
+
+    园区地面为水泥地，园内找不到脚印。真相：阮施宁昨夜在残存人类理智时按约先走进乐园，又以某种方式爬了出来，朝石坡尾方向离开。
+
+    井盖有海水倒灌痕迹和几条死鱼（无须检定）；聆听成功听见粘稠的咕嘟声。
+
+    接触园内仍较完整的设施（登上旋转木马平台、坐上长椅等）：理智检定 0/1D4。成功只感到短暂不适；失败时眼前出现昏暗、泛着水光的幻象，游乐设施被隔绝到遥远的地方；视线适应后，调查员意识到那是一座庞大得无法估量的城市，建筑物在暗流中投下变幻的倒影，无数交错如迷宫、缠满海藻的街道向前延伸，街道上有身影缓缓移动。原文限定为“祖上也是本地人的调查员（可能有极其稀薄的混血深潜者血统）”。
+
+    调查员准备离开时，会感到有人正从乐园外注视着他们——那是夜市春卷摊的丽英。她不现身搭话，只是远远看着。
+
+    '
+  features:
+  - 侧门附近的泥地
+  - 侧门下方的缺口
+  - 井盖
+  - 旋转木马平台
+  - 长椅
+  - 售票亭价目表
+  - 海洋生物塑像
+  - 伙伴们商量的去处
+  views:
+  - key: park_side_gate_mud
+    label: 侧门下的泥地和缺口
+    features:
+    - 侧门附近的泥地
+    - 侧门下方的缺口
+    prompt: 锈迹斑斑的铁皮侧门底部有一处豁开的缺口，只够孩子弯腰爬过；门外是一片晒得半干的泥地，杂草稀疏，远处是被封锁的入园口
+  - key: park_manhole
+    label: 乐园的井盖
+    features:
+    - 井盖
+    prompt: 水泥地上一块圆形铸铁井盖，四周有海水漫过后留下的白色盐渍和水痕，几条死鱼翻着白肚躺在井盖边上
+  - key: park_carousel
+    label: 旋转木马平台
+    features:
+    - 旋转木马平台
+    - 长椅
+    prompt: 爬满藤蔓的旋转木马平台，彩漆褪成斑驳难辨的颜色，木马和顶棚积着灰；旁边一张还算完好的长椅，午后强光照得一切发白
+  - key: park_ticket_booth
+    label: 售票亭和海洋塑像
+    features:
+    - 售票亭价目表
+    - 海洋生物塑像
+    prompt: 售票亭窗玻璃上贴着一张边角卷起、被雨泡烂的价目表，只认得出“成人”“儿童”几个字；亭子旁立着褪色斑驳的海豚、八爪鱼、海豹和一只黄色小海马塑像
+  looks:
+  - when: knows:players:clue:c_park_tracks
+    change: 泥地上多出两组痕迹：一串孩子的鞋印通向入口，另一道拖长的爬行痕迹从入口延伸出去，上面挂着半干的黏液
+    'on': park_side_gate_mud
+- id: ruan_home
+  name: 阮施宁的家
+  aliases:
+  - 阿宁家
+  - 阮家
+  art: ruan_home
+  scene_root: true
+  outdoors: true
+  ground: building
+  read_aloud: 阮施宁的家是一栋普通的二层自建房。窄巷两侧的老墙壁近得几乎要贴在一起，墙面灰水泥剥落的地方露出里面的砖石。你们记得这里石头椅子上曾经被人写上“幸运石”三个字，你们每次来找阮施宁玩都会摸一摸。但自从有狗在上面拉屎之后，你们就不再摸了。几个阿婆坐在矮凳上聊天，她们的手指熟练地掰开绿色的豆壳，让饱满的豆粒滚落进膝上的铁盆里。
+  keeper: '调查时长 40 分钟。按下门铃约两分钟后，门才打开一条缝。阮母垂着眼帘，目光落在孩子们头顶上方的空气里，一只手扶着门框；她太高了，身体和双腿把门后挡得严严实实，孩子们只能从她身边或胳膊下往里看。屋里飘出湿湿的、闷闷的味道，像淋雨后没晒干的衣服、柜子里放久的东西，还混着饭煮过头的焦糊味。
+
+    问阮施宁去向：阮母说阿宁回家了，回奶奶那里了。阮父从屋内出现，光线从他身后照来，看不清脸，告诫调查员近段时间不要再来找阮施宁玩。无论是否追问，对话都会被强行终止。若调查员抵住门板或继续提问，阮母低头反复说“不行。不行。你们走吧。”阮父向门口走近几步，不带感情地重复“走吧。”之后门被完全关上，传来门锁转动声，再按多少次门铃都无人应答。
+
+    真相：阮母阮父都是深潜者混血种，乐于见到女儿的变化，计划不久后也入海，他们知道阮施宁确实“回家了”。观察他们（心理学）可发现两人语气非常平静，似乎真的相信自己说的是实话。
+
+    门口的阿婆们会说出昨天见到阿宁的情形，并指点去夜市问卖虾饼的阿伯（建福）。
+
+    '
+  features:
+  - 门铃
+  - 门缝里的屋子
+  - 幸运石石椅
+  - 剥豆的阿婆们
+  - 门前的排水沟
+  views:
+  - key: ruan_door_gap
+    label: 开了一条缝的家门
+    features:
+    - 门铃
+    - 门缝里的屋子
+    prompt: 窄巷里一栋二层自建房的门只开了一条缝，一个高得几乎占满门框的女人一只手扶着门框，身体把门后挡得严严实实，屋里光线昏暗，看不清里面
+  - key: ruan_lucky_stone
+    label: 幸运石石椅和剥豆的阿婆
+    features:
+    - 幸运石石椅
+    - 剥豆的阿婆们
+    prompt: 贴得很近的两面老墙，灰水泥剥落露出砖石；墙根一张写着“幸运石”三个字的石头椅子，旁边几个阿婆坐在矮凳上，膝上铁盆里堆着剥好的绿豆粒
+  - key: ruan_drain_ditch
+    label: 门前的排水沟
+    features:
+    - 门前的排水沟
+    prompt: 门前一条窄窄的露天排水沟，水泥沟沿发黑长着青苔，沟里一层浑浊的积水
+- id: huang_home
+  name: 黄懿的家
+  aliases:
+  - 黄懿家
+  - 阿懿家
+  art: huang_home
+  scene_root: true
+  outdoors: false
+  ground: building
+  read_aloud: 黄懿家里和附近的人家没有太大的区别，但墙上挂着一件平直展开的戏服，背后有四面靠旗，下摆的飘带和战裙垂落，衣服用金银彩线绣出鱼鳞纹，腹部位置有着双凤牡丹图案的圆形绣片，旁边放着一顶华丽的蝴蝶盔。柜子里塞满了书，多是古白话小说和武侠小说，有些封面已经字迹模糊。一位阿嫲正戴着老花镜，坐在摇椅上读书；她额头狭窄，眼睛有些奇特且突出。
+  keeper: '调查时长 90 分钟。阿嫲（原文称姥姥，注：石坡尾口语一般直接称阿嫲）是地方高甲戏戏班成员，也是深潜者混血种。她问“你们是阿懿的同学吧？”得到肯定回答后露出笑容，招呼调查员坐下，端来冰粉、仙草冻、西瓜、菠萝和阿达子招待；不介意调查员多待一会儿。部分书页里的文字字形与当下通行写法不同。
+
+    黄懿出场时站在楼梯口，双手缩进上衣前襟，把多余布料捏起来向两侧甩出又收回，嘴里煞有其事地模仿小锣的拟声，带着等待认可的表情看向阿嫲；阿嫲脸上的笑会慢慢淡下来——她不希望黄懿留在这里继承衣钵。
+
+    调查员准备离开时，阿嫲会说出她对黄懿的期望，并建议他们近期不要靠近海边、夜间尽早回家。
+
+    日记本：阮施宁失踪前交给黄懿保管。黄懿知道密码，只有调查员通过说服或话术检定，或者用啤酒豆、辣条等零食贿赂，她才愿意透露（贿赂视为成功）。若失败，守秘人应当允许调查员通过智力检定回忆起密码，趁黄懿不备时查看（线索
+    c_diary_peek）。密码数字原文未给。
+
+    '
+  features:
+  - 墙上的戏服
+  - 蝴蝶盔
+  - 书柜
+  - 摇椅上的阿嫲
+  - 楼梯口
+  - 阮施宁的日记本
+  - 日记本最后一张涂鸦
+  views:
+  - key: huang_opera_costume
+    label: 墙上的戏服和蝴蝶盔
+    features:
+    - 墙上的戏服
+    - 蝴蝶盔
+    prompt: 墙上平直展开一件高甲戏戏服，背后四面靠旗，金银彩线绣着鱼鳞纹，腹部一块双凤牡丹圆形绣片，飘带和战裙垂下；旁边摆着一顶华丽的蝴蝶盔
+  - key: huang_bookcase
+    label: 塞满旧书的书柜
+    features:
+    - 书柜
+    prompt: 一个塞得满满的书柜，多是古白话小说和武侠小说，不少封面年久字迹模糊，书脊发黄卷边
+  - key: huang_diary
+    label: 阮施宁的日记本
+    features:
+    - 阮施宁的日记本
+    - 日记本最后一张涂鸦
+    prompt: 一本硬质塑料封皮的密码日记本，右侧固定着一排 8 个按钮和一个中央解锁键，本子合着锁住
+  - key: huang_rocking_chair
+    label: 摇椅和关着的窗
+    features:
+    - 摇椅上的阿嫲
+    prompt: 一张旧藤摇椅上坐着一位戴老花镜读书的老人，额头狭窄，眼睛有些奇特、向外突出；身旁小桌上摆着几碗冰粉、仙草冻，还有切好的西瓜、菠萝和阿达子；摇椅旁那扇朝海那边的窗关得死死的，插销插着，窗缝里塞着布条
+  looks:
+  - when: knows:players:clue:c_diary
+    change: 日记本打开，一页画满几个孩子的简笔像写着“好朋友们！”，后面是人鱼、被大鱼围住的孩子、一条布满怪符号通向洞口的路的涂鸦
+    'on': huang_diary
+- id: library
+  name: 少儿图书馆
+  aliases:
+  - 图书馆
+  - 囡仔图书馆
+  art: library
+  public: true
+  scene_root: true
+  outdoors: false
+  ground: building
+  read_aloud: 从热闹的街角折入侧巷，灰白色的外墙，方方正正的建筑，一座刚投入使用没几年的现代馆舍出现在眼前。借阅台后的管理员正低头为几册图书加盖日期戳。《冒险小虎队》《鸡皮疙瘩》和《皮皮鲁历险记》的封面已经有些破破烂烂，《丁丁历险记》的书脊裂开了好几道口子，你们好不容易才把注意力从这些书身上移开。《中外神话传说》和《伊索寓言精选》紧紧地挤在一处，再过去是《纳尼亚传奇》和国际大奖小说书系，最边上斜靠着《黄冈小状元达标卷》和《小学生必背古诗
+    70 篇》。
+  keeper: 调查时长 60 分钟。阮施宁常来这里。管理员昨天见过她。阅览处有当天的《石头屿晚报》。图书馆使用成功可找到几本崭新的深海绘本。
+  features:
+  - 借阅台
+  - 书架
+  - 新到的绘本
+  - 报刊架
+  views:
+  - key: library_bookshelf
+    label: 少儿书架
+    features:
+    - 书架
+    - 新到的绘本
+    prompt: 一排少儿书架，《冒险小虎队》《鸡皮疙瘩》《皮皮鲁历险记》封面破破烂烂，《丁丁历险记》书脊裂了口子，最边上斜靠着练习卷和古诗本
+  - key: library_newspaper
+    label: 报刊架上的晚报
+    features:
+    - 报刊架
+    prompt: 阅览处的报刊架上夹着当天的《石头屿晚报》，头版标题写着石坡尾清淤发现老旧闸门渗漏，版面角落有天气栏和潮汐表
+  - key: library_desk
+    label: 借阅台
+    features:
+    - 借阅台
+    prompt: 借阅台上摞着几册待还的书，一枚日期戳和印泥盒放在一旁，台后的管理员正低头盖戳
+  looks:
+  - when: knows:players:clue:c_picture_book
+    change: 书架间多出几本崭新的深海绘本，封面是深蓝靛紫的海和一群圆滚滚、大眼睛的鱼形小生物
+    'on': library_bookshelf
+  - when: flag:sign_fs_city_cough_1
+    change: 阅览处的桌边多出两三个弯着腰、手按在胸口上的大人身影。
+- id: music_square
+  name: 音乐广场
+  aliases:
+  - 广场
+  - 喷泉广场
+  art: music_square
+  public: true
+  scene_root: true
+  outdoors: true
+  ground: street
+  read_aloud: 音乐广场是一个下沉式广场，中央设有圆形喷泉，水流从中心雕塑底部涌出，沿石质坡面逐级流下，最终汇入底部的环形水池，水池边缘可供人坐下休息。喷泉边有个流浪汉在弹唱，面前打开的琴盒里散落着几张皱巴巴的纸币和硬币。广场北侧台阶上方站着一位挎着相机的青年女子，手里攥着一本卷了边的笔记本，正低头翻看。
+  keeper: '调查时长 90 分钟。喷泉、水池属于转变规则中的水源。
+
+    流浪汉：调查员和他搭话，他会停下弹唱；否认见过阮施宁模样的小孩，但说最近几天广场上多了些深夜逗留的人。说话时他一边掏耳朵，从耳道里带出一大团混浊的黏稠物；因他本身卫生差，旁人不觉得异常。侦查成功还能注意到他唱歌时频繁中断喘息，每次都剧烈张嘴、急促费力。
+
+    北侧台阶上的是《石头屿晚报》要闻部编辑杨纵溪。如果调查员没和流浪汉搭话，杨纵溪可能正在和流浪汉说话，并把信息转述给调查员。
+
+    '
+  features:
+  - 圆形喷泉
+  - 环形水池
+  - 弹唱的流浪汉
+  - 琴盒
+  - 北侧台阶
+  looks:
+  - when: at:busker:music_square & hour:23-24
+    change: 喷泉水池边坐着几个一动不动的人，都把手伸进水里
+  views:
+  - key: square_fountain
+    label: 圆形喷泉和水池
+    features:
+    - 圆形喷泉
+    - 环形水池
+    prompt: 下沉式广场中央的圆形喷泉，水从雕塑底部涌出，沿石坡逐级流下汇入环形水池，池沿可以坐人，水面在阳光下晃动
+  - key: square_busker
+    label: 弹唱的流浪汉和琴盒
+    features:
+    - 弹唱的流浪汉
+    - 琴盒
+    prompt: 喷泉边一个衣服很脏的流浪汉抱着吉他弹唱，面前打开的琴盒里散着几张皱巴巴的纸币和硬币
+- id: night_market
+  name: 夜市
+  aliases:
+  - 鱼市
+  - 夜市仔
+  art: night_market
+  public: true
+  scene_root: true
+  outdoors: true
+  ground: street
+  read_aloud: 夜市在通往石坡尾的必经之路上。清晨这里是个普通的鱼市，白天空无一人；傍晚六点左右，摊位的照明灯一盏盏点亮。收纳盒、水杯、衣架、脸盆，还有时下流行的牛仔裤和 T 恤，以无限的种类和有限的颜色组合占据着每一个角落。空气里混着烧烤摊的油烟味和炸物的香气，楼上住户窗户里透出的零碎灯光，和楼下五光十色的灯箱招牌交织在一起。人群里，塑料玩具摊、虾饼海蛎饼摊、扁食拌面摊和春卷摊挨在一起。
+  keeper: '调查时长 90 分钟。约 18:00 亮灯开市，此前摊位不在；清晨为鱼市。摊位见下列 NPC 与线索。小吃：扁食拌面（扁食形似馄饨，馅里有荸荠丁，拌面加花生酱和石头屿特有的甜辣酱）、蚵仔糋（海蛎炸饼）与虾饼、薄饼（春卷）、芋包、花生汤、沙茶面、姜母鸭、炸五香、韭菜盒、面线糊。
+
+    零碎谈话透露混血种内部冲突：“变化”“回归”“留下”“选择”。回归派认为身体变化是血脉觉醒，支持排水通道保持开启，“只要过了今晚两点……”；留下派认为变化不意味着必须放弃现有生活，担心通道开放会加速所有人的异化，让尚未准备好的人失去选择权。
+
+    危险：调查员在未经引导的情况下过于深入地询问，可能引起回归派混血种的注意。若调查员单独行动，该成员可能突然出现在道路前方，用身体挡住狭窄通道，低声问他们为什么要打听这些；调查员试图离开时，她可能跟随一段距离，用含糊的话暗示“有些事情不是孩子应该知道的”；若调查员带着笔记本、关键玩具或调查物品，她可能趁混乱破坏其中一件并威胁他们（关键玩具须先给保护或挽救的机会）。原文未点名此人，可由丽英担任。
+
+    '
+  features:
+  - 塑料玩具摊
+  - 虾饼和海蛎饼摊
+  - 扁食拌面摊前排队的人
+  - 春卷摊
+  - 摊位间的零碎谈话
+  - 柜台
+  - 摊位旁的椅子
+  - 路中央的人流
+  views:
+  - key: market_toy_stall
+    label: 塑料玩具摊
+    features:
+    - 塑料玩具摊
+    - 柜台
+    prompt: 灯下一个塑料玩具摊，柜台上堆满花花绿绿的塑料玩具，比孩子的视线还高，女摊主正大声招呼
+  - key: market_shrimp_cake
+    label: 虾饼和海蛎饼摊
+    features:
+    - 虾饼和海蛎饼摊
+    prompt: 滚烫的油锅里沉着铁勺，裹着米浆的虾饼和海蛎饼滋啦膨胀、翻滚，摊主守在锅边，灯泡下油烟升腾
+  - key: market_noodle_queue
+    label: 扁食拌面摊前的队伍
+    features:
+    - 扁食拌面摊前排队的人
+    prompt: 扁食拌面摊前挤着排队的大人，从孩子的高度看去，只见一排垂在眼前的手和衣摆，后面热气腾腾
+  - key: market_spring_roll
+    label: 春卷摊
+    features:
+    - 春卷摊
+    prompt: 春卷摊上摊着薄饼皮，盆里是炒好的薄饼菜、炸海苔和碎花生贡糖，摊主站在灯箱招牌下
+  looks:
+  - when: knows:players:clue:c_toy_ears
+    change: 摊主两只耳朵里塞满混浊的粘稠物，正沿着耳廓慢慢往下滑
+    'on': market_toy_stall
+  - when: knows:players:clue:c_webbed_hand
+    change: 前面一个大人张开手掌，手指之间连着一层蹼状的皮
+    'on': market_noodle_queue
+- id: shipowei
+  name: 石坡尾
+  aliases:
+  - 石坡尾工地
+  - 避风坞
+  - 清淤工地
+  art: shipowei
+  public: true
+  scene_root: true
+  outdoors: true
+  ground: water
+  read_aloud: 石坡尾旁的街道只剩下几家老旧的杂货铺和理发店还在营业。整个坞底的黑色淤泥随着潮水退去彻底暴露在空气里，散发着浓烈的海腥与腐臭味。工地外围拉起了警戒线，施工区域内部，排洪箱涵的入口处被临时围挡遮掩起来。工地边缘独自站着一位上了年纪、皮肤黝黑的渔民。
+  keeper: '调查时长 60 分钟。工人只在白天进坞底施工，夜里现场只留看守老张。工地上散落着几根撬棍和钢筋，老张的看守室里堆着几袋水泥和沙袋；天黑之后拿这些东西不难，但要避免被人发现。
+
+    没有杨纵溪陪同时，陈工第一次发现调查员出现在工地附近会驱赶他们，态度刻薄；阿宝会主动提供帮助。与杨纵溪同行时（yang_joined），杨纵溪出示记者证后陈工才肯停下来讲话。
+
+    靠近排水通道的方法 1：北侧有一条石砌台阶直通坞底，台阶完好，但施工队把木板、管子和一箱机器零件堆在上面，占了大半路面，只能侧身挤过。下到坞底后沿坞壁边缘蹚过约二十米浅水淤泥区才到排水箱涵入口，须过敏捷检定，以免踩进深坑或脚底打滑摔进泥水。阿宝认识看门的老张；若调查员说服她带路（使用闽南语交谈获得优势，即
+    1 颗奖励骰），她会拿上手电筒陪同前往（设 abao_guiding），到达入口后可在外面望风，或在调查员被困时帮忙找人求救。
+
+    靠近排水通道的方法 2：无法说服阿宝或希望秘密进入时，从坞区东岸绕行。东岸一段驳岸年久失修坍塌，形成约四米高的缺口。须避开老张的视线（潜行检定），从缺口攀爬下到坞底（攀爬检定）；攀爬失败会滑落跌入下方淤泥，受
+    1D8 点伤害，并须额外花时间清理身上的污泥。下到坞底后同样要沿坞壁横向移动约二十米才到箱涵入口。
+
+    '
+  features:
+  - 警戒线
+  - 排洪箱涵入口的围挡
+  - 北侧石台阶
+  - 东岸坍塌的驳岸
+  - 坞底淤泥
+  - 散落的撬棍和钢筋
+  - 旁街的杂货铺和理发店
+  looks:
+  - when: at:chen_gong:shipowei & hour:8-18
+    change: 坞底淤泥里有几个戴安全帽的工人在施工，挖掘机械伸着长臂在泥里作业
+  - when: flag:sign_fs_culvert_seep_1
+    change: 围挡底下的湿痕扩大成一滩反着光的水，一路漫到坞壁边上。
+  views:
+  - key: shipowei_north_steps
+    label: 北侧石台阶
+    features:
+    - 北侧石台阶
+    prompt: 一条石砌台阶直通坞底，台阶上堆着木板、管子和一箱机器零件，占去大半路面，只剩侧身能过的缝
+  - key: shipowei_east_bank
+    label: 东岸坍塌的驳岸
+    features:
+    - 东岸坍塌的驳岸
+    prompt: 坞区东岸一段塌掉的驳岸，形成约四米高的缺口，碎石块乱堆，下方是黑色的淤泥
+  - key: shipowei_culvert
+    label: 箱涵入口的围挡
+    features:
+    - 排洪箱涵入口的围挡
+    - 坞底淤泥
+    - 警戒线
+    prompt: 警戒线后，退潮露出的整片黑色淤泥泛着水光，坞壁边一处排洪箱涵入口被临时围挡遮住，远处浅水洼连成一片
+  - key: shipowei_crowbars
+    label: 散落的撬棍和钢筋
+    features:
+    - 散落的撬棍和钢筋
+    prompt: 工地泥地上横七竖八散着几根撬棍和钢筋，沾着干泥
+- id: drain_tunnel
+  name: 排水通道
+  aliases:
+  - 排水箱涵
+  - 地下排水通道
+  - 排水巷路
+  art: drain_tunnel
+  scene_root: true
+  outdoors: false
+  ground: building
+  weather:
+  - torch
+  read_aloud: 排水通道在排洪箱涵里。最开始它看起来确实像一处废弃的排水设施，越往里走，就越不像现代工程能留下来的东西：下半部分是粗糙的石砌结构，石缝里长满白色的贝壳和某种已经硬化的海洋生物残骸，墙壁上没有现代排水系统该有的编号和检修标记。通道的尺寸也不寻常，有些地方高得出奇，有些地方又突然变得低矮。前方有好几处积水。
+  keeper: '调查时长 60 分钟。第一次进入时，调查员只会以为那些声音来自自己的脚步和水流回声；随着前进，回声没有随距离消失，反而始终跟在身后，越来越近；回头时，昏暗的手电光只能照亮一截湿润的石壁。拐过一处低矮的弯道后进入追逐（事件
+    e_tunnel_chase）。
+
+    追逐路线照原书 10 个点排列，调查员起始于点 4，深潜者起始于点 1；点 10 是一条狭窄的侧向裂隙，通向闸门，抵达即逃脱。D2 02:24 后通道被完全淹没。
+
+    '
+  features:
+  - 石砌墙壁
+  - 石缝里的白色贝壳
+  - 积水区
+  - 低矮的弯道
+  chase:
+  - id: tunnel_p1
+    name: 黑暗深处的积水
+    look: 远处原本平静的积水里接连响起扑通声
+    place: drain_tunnel
+  - id: tunnel_p2
+    name: 坍塌的条石堆
+    look: 通道被一堆坍塌的条石和锈蚀的金属构件堵塞
+    place: drain_tunnel
+    obstacle:
+      kind: barrier
+      what: 坍塌的条石和锈蚀金属
+      skill: 攀爬
+      methods:
+      - id: climb
+        label: 爬过碎石堆
+        skill: 攀爬
+  - id: tunnel_p3
+    name: 通道中段
+    look: 湿漉漉的石壁向两头延伸
+    place: drain_tunnel
+  - id: tunnel_p4
+    name: 低矮弯道后
+    look: 刚拐过的低矮弯道，手电光照着脚下的积水
+    place: drain_tunnel
+  - id: tunnel_p5
+    name: 石砌通道
+    look: 头顶忽然高得出奇，脚步声在里面打转
+    place: drain_tunnel
+  - id: tunnel_p6
+    name: 长满苔藓的条石
+    look: 条石表面覆满灰绿色苔藓，被海水浸湿后异常湿滑
+    place: drain_tunnel
+    obstacle:
+      kind: barrier
+      what: 湿滑的苔藓路面
+      skill: 敏捷
+      methods:
+      - id: step
+        label: 稳住脚步走过去
+        skill: 敏捷
+  - id: tunnel_p7
+    name: 狭长的积水段
+    look: 水没过脚踝，每一步都溅起水声
+    place: drain_tunnel
+  - id: tunnel_p8
+    name: 贝壳石壁
+    look: 两侧石缝里挤满白色贝壳
+    place: drain_tunnel
+  - id: tunnel_p9
+    name: 腐臭的岔口
+    look: 空气里弥漫着臭鸡蛋和腐烂海藻的气味，令人头晕恶心
+    place: drain_tunnel
+    obstacle:
+      kind: hazard
+      what: 令人眩晕的气体
+      skill: 体质
+  - id: tunnel_p10
+    name: 侧向的窄裂隙
+    look: 一条狭窄的侧向裂隙，只够孩子侧身挤进去
+    place: drain_gate
+    exit: true
+  views:
+  - key: tunnel_stone_wall
+    label: 长满贝壳的石壁
+    features:
+    - 石砌墙壁
+    - 石缝里的白色贝壳
+    prompt: 手电光里一段粗糙的石砌墙壁，石缝里密密长满白色贝壳和硬化的海洋生物残骸，墙上没有任何编号或检修标记
+  - key: tunnel_low_bend
+    label: 低矮的弯道和积水
+    features:
+    - 低矮的弯道
+    - 积水区
+    prompt: 通道顶突然压低，拐进一处低矮的弯道，地上一片平静的黑色积水，手电光照不到尽头
+- id: drain_gate
+  name: 闸门口
+  aliases:
+  - 闸门
+  - 旧闸门
+  - 排水闸门
+  within: drain_tunnel
+  art: drain_gate
+  outdoors: false
+  ground: building
+  weather:
+  - torch
+  read_aloud: 侧身挤过那道狭窄的裂隙，身后的追赶声渐渐弱了下去。通道更深处，一道旧闸门横在黑暗里，海水的气味从它后面涌过来。闸门口坐着一个穿浅色短袖的小小身影。
+  keeper: '调查时长与通道合计 60 分钟。阮施宁在这里（事件 e_ruan_leaves）。
+
+    仔细检查闸门可进行侦查检定：旧闸板没有完全脱离结构，一侧仍卡在轨道里，形成一道仅容一人勉强通过的缝隙，海水正从这里渗入；解决问题要把缝隙彻底封死。
+
+    复位旧闸板：利用施工现场留下的工具让闸板重新卡入轨道。用撬棍强行清理过力量检定；用工具小心拆除障碍物过敏捷检定。成功则清出足够空间，闸板能够移动；失败则不仅没有进展，还可能惊动更深处的深潜者。
+
+    临时封堵：无法复位时，可用工地的沙袋和水泥袋做简易结构。过一次智力检定，成功则找到一种虽简陋但足够稳定的方法，坚持到第二天，等待台风后施工队浇筑水泥。这无法永久解决问题，但足以阻止下一次涨潮的污染。
+
+    每轮失败尝试额外损失 1 小时；可用“超越人体极限”多人协作检定，闸门 SIZ 120；可选每三次失败暗骰 1D3，结果为 1 遭遇 1 只巡逻深潜者。封死后设 gate_sealed。D2 02:24
+    后此处被完全淹没。
+
+    '
+  features:
+  - 旧闸门
+  - 闸板与轨道的缝隙
+  - 阮施宁坐过的地方
+  looks:
+  - when: flag:gate_sealed
+    change: 闸板的缝隙被推回轨道或用沙袋、水泥袋层层堵死，渗水停了
+  - when: knows:players:clue:c_gate_gap
+    change: 看清闸板一侧还卡在轨道里，另一侧滑脱，留出一道仅容一人的缝隙，海水正从缝里渗进来
+    'on': gate_old_sluice
+  - when: knows:players:clue:c_ruan_note
+    change: 石台上留着几张湿透的稀有小浣熊卡片，和一张字迹歪歪扭扭的纸条
+    'on': gate_ruan_seat
+  views:
+  - key: gate_old_sluice
+    label: 旧闸门
+    features:
+    - 旧闸门
+    - 闸板与轨道的缝隙
+    prompt: 黑暗里横着一道锈蚀的旧闸门，闸板歪斜，周围石壁湿漉漉的，海腥味很重
+  - key: gate_ruan_seat
+    label: 她坐过的地方
+    features:
+    - 阮施宁坐过的地方
+    prompt: 闸门前一块湿漉漉的石台，地面积着薄薄一层海水
+- id: player_home
+  name: 有电脑的伙伴家
+  aliases:
+  - 小舟家
+  - 伙伴家
+  - 调查员家
+  art: player_home
+  scene_root: true
+  outdoors: false
+  ground: building
+  read_aloud: 屋里电风扇咔嗒咔嗒地转着，书桌上那台老旧的台式机开机要等好一会儿，屏幕上是熟悉的 Windows XP 蓝天草地。桌面上排着黄金矿工、泡泡堂、拳皇和闪翼双星无敌版的图标。
+  keeper: AutoKeeper 补充的地点：原文只写调查员原计划下午去“其中一位调查员家中”玩电脑。距夜市开市尚有时间时可来这里玩几局，按游戏类型给 1 枚相关奖励骰（见守秘人须知）。家里的饮用水与食物属于转变规则中的水源与食物。
+  features:
+  - 台式电脑
+  - 电风扇
+  - 冰箱
+  views:
+  - key: home_xp_computer
+    label: 书桌上的台式电脑
+    features:
+    - 台式电脑
+    - 电风扇
+    prompt: 书桌上一台老旧的台式机，显示器上是 Windows XP 蓝天草地桌面，排着黄金矿工、泡泡堂、拳皇、闪翼双星的图标，旁边电风扇在转
+- id: shipowei_guardroom
+  name: 老张的看守室
+  read_aloud: 工地边上一间简陋的看守室，屋里堆着几袋水泥和沙袋，墙角放着看门人的杂物。
+  within: shipowei
+  art: shipowei_guardroom
+  keeper: 原文：夜里工人不进坞底，现场只留看守老张，他守在堆着水泥袋和沙袋的看守室里。天黑以后拿走这些材料不难，但要避免被人发现。被老张发现时可以按告状风险处理；阿宝认识老张，有她带路时老张会好说话（原文写阿宝认识老张，没写他具体怎么反应，由守秘人裁定）。从东岸缺口偷偷下坞底要用潜行避开老张的视线，原文没写他在看守室里能看到多远，由守秘人裁定。白天他在不在这里，原文没写。
+  features:
+  - 水泥袋
+  - 沙袋
+  - 看守室的窗口
+  outdoors: false
+  ground: building
+  views:
+  - key: guardroom_sandbags
+    label: 堆着的水泥袋和沙袋
+    features:
+    - 水泥袋
+    - 沙袋
+    prompt: 简陋看守室的墙边堆着几袋水泥和沙袋，旁边是看门人的杂物，窗口朝着工地
+passages:
+- id: shipowei__night_market
+  a: shipowei
+  b: night_market
+  kind: road
+  minutes: 10
+- id: night_market__music_square
+  a: night_market
+  b: music_square
+  kind: road
+  minutes: 10
+- id: night_market__library
+  a: night_market
+  b: library
+  kind: road
+  minutes: 10
+- id: music_square__library
+  a: music_square
+  b: library
+  kind: road
+  minutes: 10
+- id: music_square__ruan_home
+  a: music_square
+  b: ruan_home
+  kind: road
+  minutes: 10
+- id: ruan_home__huang_home
+  a: ruan_home
+  b: huang_home
+  kind: road
+  minutes: 10
+- id: library__huang_home
+  a: library
+  b: huang_home
+  kind: road
+  minutes: 10
+- id: library__ocean_park
+  a: library
+  b: ocean_park
+  kind: road
+  minutes: 10
+- id: huang_home__ocean_park
+  a: huang_home
+  b: ocean_park
+  kind: road
+  minutes: 10
+- id: player_home__library
+  a: player_home
+  b: library
+  kind: road
+  minutes: 10
+- id: shipowei__drain_tunnel
+  a: shipowei
+  b: drain_tunnel
+  kind: opening
+  minutes: 10
+  perception: 坞底二十米浅水淤泥，箱涵入口有临时围挡
+- id: drain_tunnel__drain_gate
+  a: drain_tunnel
+  b: drain_gate
+  kind: opening
+  minutes: 5
+  perception: 狭窄的侧向裂隙，只容一人侧身挤过
+- id: shipowei__guardroom
+  a: shipowei
+  b: shipowei_guardroom
+  kind: door
+  minutes: 1
+  perception: AutoKeeper 补充：看守室门窗朝向工地，屋里的人能看到外面的动静，门外说话里面也听得见；具体能看到多远由守秘人裁定
+interior_reviews:
+  ocean_park:
+    fingerprint: aec0e6f186bcf98b0a4065d421d0bf96408cac2f84fbcd5d024fc59f1741a916
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 露天的烂尾乐园，侧门缺口、井盖、旋转木马、长椅、售票亭都是同一片园区里的陈设，作为可调查项就够了，不需要分房间。
+  ruan_home:
+    fingerprint: d6e22fbe5c726f41bb2544e3a48c306bdea18eb6cfe39d5fe35f5c5cbd8d7e90
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 原文虽然写是二层自建房，但整场戏都在门口：阮母堵住门缝，调查员进不去，门随后锁上，阿婆们也在门外巷子里。没有可以进入的室内空间，保持单一地点。
+  library:
+    fingerprint: 89a3e48c15c1f3579da8d1dda75681cd50a7b0abace1d6ac58931ded9cda87ec
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 原文只写了借阅台、书架和报刊架，是同一个馆内空间，没有分区、上锁或私下交谈的需要。
+  music_square:
+    fingerprint: 9e5830aa5eb0aec0f712f3fa608f8dd72ae8e40fa2b46ea56fbc5bc95497c3a2
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 露天的下沉式广场，喷泉、水池和北侧台阶都在同一片视野里，杨纵溪还可能正和流浪汉说话，不需要拆分。
+  drain_tunnel:
+    fingerprint: 18b01f4a2ba8dba1e751f25f2d2926b12f32f8a3312801a2150b0a0a649616e6
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 通道内部按原书 10 个追逐点由追逐机制处理，闸门口已经是独立地点 drain_gate，已有通路 drain_tunnel__drain_gate，现有结构完整。
+  drain_gate:
+    fingerprint: 2b2dc3885bce030058a3c71cb274bed255959ce7bc5a236f4a8b48a8843c6eb5
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 闸门口是通道深处的单一空间，阮施宁、闸板缝隙和卡片纸条都在同一处，不再细分。
+  player_home:
+    fingerprint: 2bb380c45bda9c228ea0f43546a114ab73d0c2a91c32db82be4238304419a888
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: AutoKeeper 补充的伙伴家只用来玩电脑，电脑、电风扇、冰箱都在同一个房间，不需要拆分。
+  huang_home:
+    fingerprint: f2aff979a30facf8eae0dac164ffab6de30f5176c8f0ea3438317fe0e057ea32
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 原文只写了一处会客空间：墙上的戏服、蝴蝶盔、书柜，阿嫲在摇椅上读书招待孩子，黄懿从楼梯口出场。原文提到楼梯口，但没写楼上有什么，也没有哪个人物、物件或线索放在别的房间。日记本跟着黄懿走，偷看只要求“趁黄懿不备”，不需要换房间。楼梯口已经是可调查项，单独拆一间楼上房间不会带来新的调查或通行，所以保持单一空间。
+  night_market:
+    fingerprint: 91dcaf82d4e8ec40fe20dc0d4fefe93ef9e747b4a09929b9b2f1774a18e5f19e
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 夜市是街面上的露天摊区，不是建筑。塑料玩具摊、虾饼海蛎饼摊、扁食拌面摊、春卷摊、柜台、椅子和路中央的人流都是同一片摊区里的局部陈设，原文写它们“挨在一起”，所以都作为可调查项保留。“危险”一段说的狭窄通道是人群中的偶发拦路，不是固定房间。不按建筑拆分。
+  shipowei:
+    fingerprint: 6a4c8005262d3e012544aaa3d803b23419f4bd5be45261045c53a3ae8b997c28
+    source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+    reason: 现有平面图已经有石坡尾工地和老张的看守室，看守室里放着沙袋、水泥袋和老张。坞底、北侧石台阶、东岸坍塌的驳岸和箱涵入口围挡都是露天工地的一部分，原文给的是进入方法和检定（敏捷、潜行、攀爬），已作为可调查项和通往
+      drain_tunnel 的现有通路保留。原文没写别的室内空间，现有平面图已经覆盖。
+
+geography:
+  title: 石头屿
+  subtitle: 闽南沿海 · 2009
+  minutes_across: 33
+  places:
+  - place: shipowei
+    at: [0.13, 0.12]
+    glyph: other
+  - place: drain_tunnel
+    at: [0.24, 0.19]
+    glyph: other
+  - place: ruan_home
+    at: [0.81, 0.16]
+    glyph: house
+  - place: music_square
+    at: [0.46, 0.32]
+    glyph: street
+  - place: huang_home
+    at: [0.82, 0.44]
+    glyph: house
+  - place: night_market
+    at: [0.19, 0.53]
+    glyph: street
+  - place: library
+    at: [0.48, 0.66]
+    glyph: public
+  - place: ocean_park
+    at: [0.52, 0.89]
+    glyph: ruin
+  - place: player_home
+    at: [0.13, 0.85]
+    glyph: house
+  ways:
+  - id: shipowei_night_market
+    kind: main
+    points:
+    - [0.13, 0.13]
+    - [0.07, 0.2]
+    - [0.06, 0.32]
+    - [0.1, 0.44]
+    - [0.18, 0.51]
+    passage: shipowei__night_market
+  - id: drain_opening
+    kind: path
+    points:
+    - [0.15, 0.13]
+    - [0.19, 0.17]
+    - [0.23, 0.19]
+    passage: shipowei__drain_tunnel
+  - id: night_market_music_square
+    kind: main
+    points:
+    - [0.2, 0.51]
+    - [0.24, 0.42]
+    - [0.32, 0.35]
+    - [0.44, 0.32]
+    passage: night_market__music_square
+  - id: night_market_library
+    kind: lane
+    points:
+    - [0.2, 0.56]
+    - [0.22, 0.62]
+    - [0.3, 0.66]
+    - [0.45, 0.66]
+    passage: night_market__library
+  - id: music_square_library
+    kind: lane
+    points:
+    - [0.44, 0.35]
+    - [0.38, 0.45]
+    - [0.37, 0.55]
+    - [0.42, 0.63]
+    - [0.47, 0.65]
+    passage: music_square__library
+  - id: music_square_ruan_home
+    kind: lane
+    points:
+    - [0.5, 0.31]
+    - [0.54, 0.22]
+    - [0.62, 0.17]
+    - [0.79, 0.16]
+    passage: music_square__ruan_home
+  - id: ruan_home_huang_home
+    kind: lane
+    points:
+    - [0.83, 0.19]
+    - [0.87, 0.28]
+    - [0.86, 0.37]
+    - [0.83, 0.43]
+    passage: ruan_home__huang_home
+  - id: library_huang_home
+    kind: lane
+    points:
+    - [0.49, 0.64]
+    - [0.5, 0.55]
+    - [0.58, 0.48]
+    - [0.8, 0.45]
+    passage: library__huang_home
+  - id: huang_home_ocean_park
+    kind: lane
+    points:
+    - [0.84, 0.47]
+    - [0.86, 0.6]
+    - [0.81, 0.75]
+    - [0.7, 0.86]
+    - [0.55, 0.89]
+    passage: huang_home__ocean_park
+  - id: library_ocean_park
+    kind: lane
+    points:
+    - [0.47, 0.68]
+    - [0.39, 0.76]
+    - [0.37, 0.84]
+    - [0.49, 0.89]
+    passage: library__ocean_park
+  - id: player_home_library
+    kind: lane
+    points:
+    - [0.46, 0.67]
+    - [0.38, 0.7]
+    - [0.25, 0.76]
+    - [0.14, 0.84]
+    passage: player_home__library
+  regions:
+  - kind: water
+    shape:
+    - [0.02, 0.04]
+    - [0.27, 0.03]
+    - [0.31, 0.14]
+    - [0.27, 0.23]
+    - [0.14, 0.24]
+    - [0.03, 0.18]
+    near: shipowei
+  houses:
+  - along: night_market_music_square
+    span: [0.05, 0.8]
+    density: dense
+  - along: shipowei_night_market
+    span: [0.5, 0.95]
+    density: dense
+  - along: music_square_ruan_home
+    span: [0.4, 0.95]
+    density: dense
+  - along: ruan_home_huang_home
+    span: [0.1, 0.9]
+    density: dense
+  - along: library_huang_home
+    span: [0.3, 0.9]
+  - along: player_home_library
+    span: [0.3, 0.9]
+  basis: 地点位置和路的走向照原书地图「我们常去的地方」，原图近似正方形，按比例换算到宽图上。排水通道按原文放在石坡尾坞底排洪箱涵旁。有电脑的伙伴家原图没有，按通路只连少儿图书馆推算，放在图书馆西南。
+plans:
+- building: shipowei
+  floors:
+  - name: 地面
+    rooms:
+    - place: shipowei
+      label: 工地边缘
+      size: large
+    - place: shipowei_guardroom
+      size: small
+  basis: 石坡尾本身是露天工地，保持为主厅；原文（第 13、16 页）写明工地有夜间看门人老张的看守室，里面堆着几袋水泥和沙袋，拿这些东西要避免被人发现，所以单独分出看守室。坞底、北侧台阶、东岸驳岸仍按原文作为主厅的可调查项，排水通道的外部通路不变。看守室的大小、门窗和朝向原文没写，属于
+    AutoKeeper 补充。
+  layout:
+    rooms:
+    - {place: shipowei, x: 10, y: 10, w: 40, h: 30}
+    - {place: shipowei_guardroom, x: 50, y: 34, w: 3, h: 3}
+    doors:
+    - {passage: shipowei__night_market, at: [14, 40], width: 2, main: true}
+    - {passage: shipowei__drain_tunnel, at: [44, 40], width: 2}
+    - {passage: shipowei__guardroom, at: [50, 35.5]}
+    windows:
+    - {room: shipowei_guardroom, at: [51.5, 34]}
+    fixtures:
+    - {room: shipowei, feature: 警戒线, label: 警戒线, sketch: mark, x: 16, y: 37.5, w: 26, h: 0.5}
+    - {room: shipowei, feature: 排洪箱涵入口的围挡, label: 箱涵入口围挡, x: 41.5, y: 33, w: 5, h: 1.5}
+    - {room: shipowei, feature: 北侧石台阶, label: 北侧石台阶, sketch: path, x: 26, y: 10.5, w: 3, h: 5}
+    - {room: shipowei, feature: 东岸坍塌的驳岸, label: 坍塌的驳岸, sketch: area, x: 47, y: 18, w: 2.5, h: 10}
+    - {room: shipowei, feature: 坞底淤泥, label: 坞底淤泥, sketch: area, x: 20, y: 18, w: 20, h: 12}
+    - {room: shipowei, feature: 散落的撬棍和钢筋, label: 撬棍和钢筋, sketch: clutter, x: 12, y: 28, w: 4, h: 2}
+    - {room: shipowei, feature: 旁街的杂货铺和理发店, label: 杂货铺理发店, sketch: area, outside: true, x: 14, y: 7.5,
+      w: 8, h: 2}
+    - {room: shipowei_guardroom, feature: 水泥袋, label: 水泥袋, sketch: boxes, x: 51, y: 36, w: 1.4, h: 0.8}
+    - {room: shipowei_guardroom, feature: 沙袋, label: 沙袋, sketch: boxes, x: 52.2, y: 34.6, w: 0.7, h: 1.2}
+    - {room: shipowei_guardroom, feature: 看守室的窗口, label: 窗口, sketch: window, x: 51, y: 34.1, w: 1, h: 0.3}
+    sides:
+    - {side: n, faces: 老街杂货铺和理发店}
+    - {side: s, faces: 去夜市的路, way: shipowei_night_market}
+    - {side: e, faces: 东岸与排水口小路, way: drain_opening}
+    - {side: w, faces: 老城区旧街}
+    basis: 原书没有平面图，照原文描述：石坡尾是露天清淤工地（北侧石台阶、东岸坍塌驳岸、坞底淤泥、排洪箱涵入口），来路在西南、排水口在东南，按全镇地图定方位；看守室的位置、大小和门窗是 AutoKeeper
+      补的，放在工地东南角外，窗朝北对着东岸，门开向工地。

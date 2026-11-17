@@ -1,0 +1,120 @@
+conclusions:
+  - id: k_missing
+    text: 詹姆斯失踪了好几天，连考前最后一课都没来，一定出了事
+  - id: k_enter
+    text: 有办法进入詹姆斯锁着的宿舍
+  - id: k_library
+    text: 便条上的 C 是图书管理员助理凯莱布·莫罗，他向詹姆斯卖过书
+  - id: k_cora
+    text: 詹姆斯去了佛蒙特州勒德洛的科拉阿姨家
+  - id: k_cora_dead
+    text: 科拉阿姨已经死了一段时间
+  - id: k_ritual
+    text: 詹姆斯照着《缟玛瑙石板》进行了一个打破现实界限的仪式
+  - id: k_gate
+    text: 把詹姆斯拉出图形或毁掉他胸口的图形可以关闭裂隙
+
+events:
+  - id: e_risk_exam
+    title: 冒着错过考试的风险
+    when: "!flag:exam_taken & at:players:ludlow"
+    where: ludlow
+    sanity: 0/1
+    read_aloud: 车窗外的波士顿越来越远。明天的考试、哈特曼教授的脸、你们的毕业，一件件压在心头。
+    text: 调查员冒着错过考试的风险去了佛蒙特，理智检定 0/1。守秘人用毕业的风险吓唬他们：事先能提供病假条才能补考，而补考因难度更高而声名狼藉。
+  - id: e_guardian
+    title: 楼梯上的脚步声
+    when: visit:cora_basement
+    where: cora_basement
+    sets: [guardian_risen]
+    sanity: 1/1D8
+    sights: [guardian]
+    fight: [guardian]
+    present:
+    - cora
+    - james
+    read_aloud: 楼梯上传来窸窸窣窣的脚步声，笨拙而响亮，一步一步往下挪。有什么东西跌跌撞撞地下了楼——是科拉阿姨，她腐烂的身体直挺挺地立着，朝地下室走来。
+    text: 调查员在主地下室调查时被打断。脚步声不需要侦查。去查看的人看见科拉阿姨复活的遗体下楼（理智 1/1D8）。在它进门之前，调查员可以躲进杂乱的地下室（潜行获得一个奖励骰）。它进入地下室后袭击平视范围内的调查员；若所有人都躲好，攻击成功等级（或技能）最低的调查员。关闭大门的办法见守秘人须知；成功后守秘人设 gate_closed，守卫者倒下。
+    stakes:
+      - {when: "ended:lost", flags: [party_fallen], note: 调查员全部倒在地下室}
+  - id: e_sirens
+    title: 警笛
+    when: flag:gate_closed & !flag:taken_to_station
+    where: cora_house
+    read_aloud: 科拉的尸体倒了下去，那怪异的蓝光从地下室里消失了。你们还没弄清发生了什么，远处就传来了警笛声，越来越近。
+    text: 警察赶到，问一些很难回答的问题。说服是唯一能让警官相信调查员没犯下这些暴行的社交技能，但他们仍会被带去警局问话（守秘人设 taken_to_station）。侦查成功会发现警察的制服看起来奇怪地陌生。
+    present:
+    - cora
+    - james
+  - id: e_other_world
+    title: 陌生的世界
+    when: flag:taken_to_station & !flag:james_dead
+    sanity: 1/1D8
+    ending: lost_reality
+    sets: [reality_lost_alive]
+    read_aloud: 警车窗外掠过的街道、招牌、行人，全都不对劲。不是哪一处，而是处处都差了一点——或差了很多。你们走出科拉阿姨家地下室的那一刻，就已经不在原来的世界了。
+    text: 调查员意识到周围的世界明显陌生。守秘人自由描述另类现实，着重强调陌生感，以及意识到詹姆斯的仪式把科拉的房子变成了传送门、自己身处陌生现实的迷失与绝望，理智 1/1D8。
+  - id: e_other_world_dead
+    title: 陌生的世界
+    when: flag:taken_to_station & flag:james_dead
+    sanity: 1/1D8
+    ending: lost_reality_dead
+    sets: [reality_lost_dead]
+    read_aloud: 警车窗外掠过的街道、招牌、行人，全都不对劲。不是哪一处，而是处处都差了一点——或差了很多。你们走出科拉阿姨家地下室的那一刻，就已经不在原来的世界了。
+    text: 同 e_other_world，詹姆斯已死。理智 1/1D8。
+
+endings:
+  - id: lost_reality
+    title: 失落的对称
+    condition: flag:reality_lost_alive
+    requires: [flag:gate_closed]
+    text: 裂隙关闭了。科拉阿姨的尸体倒下，詹姆斯在仪式中受到巨大打击，不可挽回地丧失了行为能力。而你们被带进了一个陌生的现实——它也许只是钞票上印着另一位总统，也许满街都是原子能反重力汽车。能否找回原来的世界，取决于守秘人。
+  - id: lost_reality_dead
+    title: 失落的对称
+    condition: flag:reality_lost_dead
+    requires: [flag:gate_closed]
+    text: 裂隙关闭了。科拉阿姨的尸体倒下，詹姆斯死在了血绘的图形旁。而你们被带进了一个陌生的现实。能否找回原来的世界，取决于守秘人。
+  - id: fallen
+    title: 地下室的蓝光
+    condition: flag:party_fallen
+    text: 曾是科拉阿姨的东西站在倒下的调查员们中间，詹姆斯仍悬在淡蓝色的光里。裂隙没有关上。
+
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 考前最后一课
+    prompt: 1920 年代大学阶梯教室，黑板写满公式，矮小乱发的教授站在讲台前，前排一个座位空着，晨光斜照
+  - id: sc_basement
+    kind: 重要场景
+    when: visit:cora_basement
+    title: 淡蓝色的地下室
+    prompt: 潮湿的地下室，架子橱柜被推到墙边，淡蓝色光芒中一个赤裸的青年悬浮在地上血绘的几何图案上方，旁边一本古书和一个桶
+  - id: sc_guardian
+    kind: 怪物
+    when: event:e_guardian
+    title: 楼梯上的脚步
+    prompt: 从地下室门口仰望狭窄的楼梯，一个腐烂的老妇人身影跌跌撞撞地往下走，身上有对称的裂口，只露出半身轮廓，蓝光从下方映照
+  - id: sc_end_lost
+    kind: 结局
+    when: ending:lost_reality
+    title: 陌生的街道
+    prompt: 从警车后窗望出去的 1920 年代风格街道，但招牌、汽车和行人的服装都隐约不对劲，天空颜色微妙地偏移
+  - id: sc_end_lost_dead
+    kind: 结局
+    when: ending:lost_reality_dead
+    title: 陌生的街道
+    prompt: 夜里的警车后座，车窗外的城市灯火排列成陌生的几何形状，街上驶过形状古怪的车辆
+  - id: sc_end_fallen
+    kind: 结局
+    when: ending:fallen
+    title: 熄不灭的蓝光
+    prompt: 地下室地板上散落着倒下的人影，淡蓝色光芒仍然笼罩着空地中央，一个站立的佝偻剪影背对画面
+
+prelude:
+  - art: cover
+    text: 1920 年代，波士顿。大学里的考试季，图书馆彻夜亮着灯。
+  - art: classroom
+    text: 詹姆斯·布莱恩特，哈特曼教授最有前途的学生，痴迷于那些重复自身直至无穷的曲线。
+  - art: classroom
+    text: 离考试只剩一天，他的座位空了。

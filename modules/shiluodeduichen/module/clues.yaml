@@ -1,0 +1,307 @@
+clues:
+  - id: c_absence
+    title: 空着的座位
+    where: classroom
+    feature: 詹姆斯常坐的座位
+    check: {skill: 侦查}
+    points_to: [k_missing]
+    text: 詹姆斯不在教室里。考前最后一课，他从不会缺席。除了你们，似乎没人注意到或在乎他的缺席。
+  - id: c_classmates
+    title: 同学的说法
+    where: classroom
+    feature: 周围的同学
+    points_to: [k_missing]
+    text: 周围的学生最近都没见过詹姆斯。有人建议去图书馆找他，“因为他认为他反正比我们所有人都聪明，甚至不需要哈特曼教授就能通过考试”。
+  - id: c_bernard_unseen
+    title: 邻居几天没见他
+    where: bernard_room
+    feature: 伯纳德站在房门口
+    npc: bernard
+    points_to: [k_missing]
+    text: 伯纳德已经好几天没见到詹姆斯了，也不在意他去了哪里。
+  - id: c_bernard_breath
+    title: 宿醉的邻居
+    where: bernard_room
+    feature: 伯纳德站在房门口
+    npc: bernard
+    check: {skill: 侦查}
+    points_to: []
+    text: 伯纳德的呼吸里有波旁威士忌的味道，他像是想靠睡觉熬过宿醉。
+  - id: c_spare_key
+    title: 门卫的备用钥匙
+    where: bernard_room
+    feature: 伯纳德站在房门口
+    npc: bernard
+    points_to: [k_enter]
+    text: 门卫在公寓的地下办公室里存着各个房间的备用钥匙。
+  - id: c_window
+    title: 微开的窗户
+    where: dorm_yard
+    feature: 一楼的窗户
+    check: {skill: 侦查}
+    points_to: [k_enter]
+    text: 詹姆斯房间的窗户微微开着，正好挨着一根爬满常春藤的排水管。
+  - id: c_second_key
+    title: 门边的钥匙
+    where: james_room
+    feature: 门边的钥匙钩
+    points_to: [k_enter]
+    text: 门边挂着第二把钥匙，可以从里面把房门打开。
+  - id: c_greek_sketches
+    title: 墙上的草图
+    where: james_room
+    feature: 墙上的图形和草图
+    check: {skill: 教育}
+    points_to: [k_ritual]
+    text: 墙上的草图是古希腊几何学研究。但附加的注释和原作不同——是詹姆斯自己画的，和古希腊原作相似，却一层层重复自身直至无穷。
+  - id: c_strange_sigil
+    title: 奇怪的图形
+    where: james_room
+    feature: 书桌
+    handout: h_sigil
+    points_to: [k_ritual]
+    text: 在书桌这堆混乱的正中，有一张纸上画着一个奇怪的图形。
+  - id: c_koch
+    title: 科赫的论著
+    where: james_room
+    feature: 书桌边的乱堆
+    points_to: [k_ritual]
+    text: 乱堆里有一篇瑞典数学家赫尔吉·冯·科赫 1904 年的论著《非切连续曲线上的基本几何构成》。它和詹姆斯手头的东西没有直接关系，却说明了他对方程的分形特征、对数学上无穷的定义、以及这类图形中似乎蕴含的力量的痴迷。
+  - id: c_overdue
+    title: 逾期通知
+    where: james_room
+    feature: 书桌
+    points_to: [k_library]
+    text: 书桌上压着好几张图书管理员霍尔科姆夫人发来的逾期通知。
+  - id: c_manuscript
+    title: 欧几里得的手稿
+    where: james_room
+    feature: 书桌
+    check: {skill: 侦查}
+    core: true
+    handout: h_note
+    points_to: [k_library, k_ritual]
+    text: 一个信封里装着一份打字机手稿，标题是欧几里得的《失落的原理》，据称是这位古希腊数学家、哲学家一本不为人知的著作。手稿讲述欧几里得在读了他称作“缟玛瑙石板”的东西之后，做了一个关于“失落的对称”的梦。手稿前面贴着一张信头印着学校图书馆的手写便条：“你欠我的！C。”
+  - id: c_manuscript_fake
+    title: 手稿是赝品
+    where: james_room
+    feature: 书桌
+    check: {skill: 科学(数学)}
+    requires: [c_manuscript]
+    points_to: [k_ritual]
+    text: 你非常肯定这份手稿是赝品：世界数学界从来不知道欧几里得有这样一部著作。
+  - id: c_postcard
+    title: 科拉阿姨的明信片
+    where: james_room
+    feature: 书桌
+    check: {skill: 侦查}
+    core: true
+    handout: h_postcard
+    points_to: [k_cora]
+    text: 一张明信片半埋在书桌上的图形底下，寄自佛蒙特州勒德洛的科拉阿姨。
+  - id: c_old_letter
+    title: 旧信上的地址
+    where: james_room
+    feature: 一封旧信
+    core: true
+    points_to: [k_cora]
+    text: 在房里翻找几分钟，就找到一封旧信，上面写着科拉阿姨在佛蒙特州勒德洛的地址。
+  - id: c_holcomb_overdue
+    title: 图书管理员的抱怨
+    where: library
+    feature: 霍尔科姆夫人坐在借阅台后
+    npc: holcomb
+    points_to: [k_library]
+    text: 霍尔科姆夫人说：“这个男孩，也许是很才华横溢，但需要学会更尊重一下到期日。我受够了，也厌烦了向他的房间送逾期通知，把我的书讨要回来。”
+  - id: c_holcomb_books
+    title: 找不到的书
+    where: library
+    feature: 霍尔科姆夫人坐在借阅台后
+    npc: holcomb
+    points_to: [k_ritual]
+    text: 詹姆斯一直缠着霍尔科姆夫人找一些她从没听过的晦涩书籍，一本也没找到，连其他图书馆的目录里都没有。
+  - id: c_holcomb_c
+    title: 署名 C 的人
+    where: library
+    feature: 霍尔科姆夫人坐在借阅台后
+    npc: holcomb
+    requires: [c_manuscript]
+    points_to: [k_library]
+    text: 霍尔科姆夫人说她不认识那份手稿和便条。她唯一的猜测是“C”也许是她那毫无用处的助手凯莱布·莫罗，不过要说那个“方脑袋”能在这种事上帮上大忙，她会很惊讶。凯莱布经常在后台办公室整理书籍。
+  - id: c_holcomb_truth
+    title: 她说的是实话
+    where: library
+    feature: 霍尔科姆夫人坐在借阅台后
+    npc: holcomb
+    check: {skill: 心理学}
+    points_to: [k_library]
+    text: 她说的是实话，她确实不认识那份手稿和便条。
+  - id: c_caleb_sale
+    title: 凯莱布的交代
+    where: library_office
+    feature: 凯莱布在工作台前整理书籍
+    npc: caleb
+    core: true
+    requires: [c_manuscript]
+    points_to: [k_library, k_ritual]
+    text: 凯莱布承认：詹姆斯求知若渴，常在图书馆学习，他看出詹姆斯感兴趣的是晦涩书籍，觉得是个商机。他先卖给詹姆斯欧几里得《失落的对称》的手稿，里面讲欧几里得研究《缟玛瑙石板》后梦到了宇宙基本的对称结构。詹姆斯攒够钱后，又从他手里买了非常罕有、晦涩的《缟玛瑙石板》译本。交出那本书之后，他再也没见过詹姆斯。这些书都来自摩尔家族波士顿附近房产的地下墓穴，已故的埃德加·摩尔在那里收藏了晦涩而令人厌恶的书，凯莱布一家几代人都在那里当看管人。
+  - id: c_caleb_aunt
+    title: 阿姨家的打算
+    where: library_office
+    feature: 凯莱布在工作台前整理书籍
+    npc: caleb
+    requires: [c_caleb_sale]
+    points_to: [k_cora, k_ritual]
+    text: 詹姆斯曾提到，他阿姨家足够隐私，是学习《缟玛瑙石板》中一个图章的仪式绘制的合适地方。
+  - id: c_student_record
+    title: 学生档案
+    where: registrar
+    feature: 鲁比坐在柜台后
+    npc: ruby
+    points_to: [k_cora]
+    text: 詹姆斯的学生档案里，近亲属一栏登记着科拉·韦布，住址是佛蒙特州勒德洛。
+  - id: c_spoiled_food
+    title: 变质的食物
+    where: cora_ground
+    feature: 冰箱
+    points_to: [k_cora_dead]
+    text: 厨房里的水果和其他食物都已变质。冰箱里一块用保鲜膜包着的自制烘肉卷已经发霉了。
+  - id: c_stench
+    title: 楼梯上的恶臭
+    where: cora_ground
+    feature: 通往二楼的楼梯
+    check: {skill: 侦查}
+    points_to: [k_cora_dead]
+    text: 一股恶臭是从通往二楼的楼梯那里传来的。
+  - id: c_corpse
+    title: 毯子下的尸体
+    where: cora_bedroom
+    feature: 床上盖着毯子的尸体
+    core: true
+    sanity: 0/1D4
+    points_to: [k_cora_dead, k_ritual]
+    text: 揭开毯子，是一副恐怖的景象：这位老妇人死于钝器造成的暴力外伤，尸体高度腐败，身上遍布深深的切口，形状左右对称。
+  - id: c_humming
+    title: 奇怪的嗡嗡声
+    where: cora_bedroom
+    feature: 床上盖着毯子的尸体
+    requires: [c_corpse]
+    points_to: [k_ritual]
+    text: 一种奇怪的嗡嗡声从通往地下室的楼梯下面传上来。
+  - id: c_footprints
+    title: 楼梯上的脚印
+    where: cora_basement_hall
+    feature: 满是尘土的楼梯
+    check: {skill: 侦查}
+    points_to: [k_ritual]
+    text: 满是尘土的楼梯井上留着脚印。
+  - id: c_james_floating
+    title: 悬浮的詹姆斯
+    where: cora_basement
+    feature: 悬浮的詹姆斯
+    core: true
+    points_to: [k_ritual]
+    text: 詹姆斯赤裸的身体悬在血绘图案上方，似乎还在呼吸。他无法动弹，唯一的反应是眼神会聚焦到叫出他名字的人身上。
+  - id: c_chest_sigil
+    title: 胸口的图形
+    where: cora_basement
+    feature: 悬浮的詹姆斯
+    check: {skill: 侦查}
+    points_to: [k_gate]
+    text: 詹姆斯胸前刻着和地上一样的图形。
+  - id: c_bucket
+    title: 一桶血
+    where: cora_basement
+    feature: 桶
+    sanity: 0/1
+    points_to: [k_ritual]
+    text: 桶里装着血。
+  - id: c_blood_amount
+    title: 过量的失血
+    where: cora_basement
+    feature: 桶
+    check: {skill: 医学}
+    sanity: 0/1D3
+    points_to: [k_ritual]
+    text: 这么多血，一个人失去这么多不可能活下来。
+  - id: c_onyx_book
+    title: 古老的书
+    where: cora_basement
+    feature: 古老的书
+    core: true
+    points_to: [k_ritual]
+    text: 图形旁的旧书是《缟玛瑙石板》的英译本——正是让欧几里得产生跨维度对称幻象的那部书。
+  - id: c_onyx_read
+    title: 阅读《缟玛瑙石板》
+    where: cora_basement
+    feature: 古老的书
+    sanity: 1D6
+    mythos: 4
+    points_to: [k_ritual, k_gate]
+    text: 书里描述了跨维度对称的仪式，这种仪式能唤起巨大的能量，从而打破我们现实的边界。
+  - id: c_gate_hint
+    title: 切断联系的办法
+    where: cora_basement
+    feature: 悬浮的詹姆斯
+    check: {skill: 智力}
+    requires: [c_james_floating]
+    core: true
+    points_to: [k_gate]
+    text: 詹姆斯悬在图形中央，这一切似乎都系在他身上：把他从图形上拉开，或者毁掉他胸口的图形，也许能让它停下来。
+
+handouts:
+  - id: h_sigil
+    title: 书桌上的图形
+    kind: 草图
+    paper: card
+    text: 一张纸上用钢笔画着的奇怪几何图形：一个圆，十字基准线穿过圆心，圆内是锯齿形的折线和一条贯穿的斜线。
+    images: [h_sigil]
+  - id: h_postcard
+    title: 科拉阿姨的明信片
+    kind: 明信片
+    paper: letter
+    text: |
+      亲爱的詹姆斯，你的学业进展如何？
+      如果你能偶尔来看一下我就好了。
+      当然，我会做我拿手的烘肉卷。
+      你最爱的阿姨，科拉。
+    images: [h_postcard]
+  - id: h_note
+    title: 手稿上的便条
+    kind: 便条
+    paper: letter
+    text: |
+      （信头：学校图书馆）
+      你欠我的！C。
+
+items:
+  - id: i_second_key
+    name: 门边的第二把钥匙
+    description: 挂在詹姆斯房门边钩子上的一把黄铜钥匙
+    where: james_room
+    hidden: true
+  - id: i_spare_key
+    name: 门卫的备用钥匙
+    description: 门卫办公室木板上挂着的詹姆斯房间备用钥匙，挂牌上写着房号
+    where: janitor_office
+  - id: i_manuscript
+    name: 欧几里得的打字机手稿
+    description: 装在信封里的一叠打字稿，前面贴着一张图书馆信头的便条
+    where: james_room
+    hidden: true
+  - id: i_koch
+    name: 科赫的论著
+    description: 一篇 1904 年的数学论文抄本，页边写满了詹姆斯的笔记
+    where: james_room
+    important: false
+  - id: i_onyx_tablets
+    name: 《缟玛瑙石板》英译本
+    description: 一本古老的书，书页发黄，放在血绘图案旁边
+    where: cora_basement
+
+sketches:
+  - id: sk_sigil
+    ask: 把书桌上那张纸上的图形画出来
+    target: 一个圆，一条水平线穿过圆心并伸出圆外，左右各一条竖线贯穿上下；圆内是连笔的锯齿形折线，另有一条长斜线从右上贯穿到左下，在圆心交叉
+    threshold: 0.5
+    after: c_strange_sigil

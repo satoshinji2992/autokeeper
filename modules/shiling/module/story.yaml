@@ -1,0 +1,222 @@
+conclusions:
+- id: k_adamson_dead
+  text: 亚当森早已在黑线行动中牺牲，“停机行动”和眼前的亚当森都是幻象
+- id: k_agent_self
+  text: 这两个月追查悖论的其实是特工自己，她 2 月 12 日夜闯进了闹钟酒吧，事后失去了这段记忆
+- id: k_bar
+  text: 悖论的据点是辛普敦大厦负一楼的凌晨十二点闹钟酒吧
+- id: k_paradox
+  text: 悖论由吉姆·格林伍德、约瑟芬·莱特和皮特·戴维斯组成
+- id: k_broadcast
+  text: 皮特劫持了中央广场的四块大屏，2 月 18 日晚会把演出实时转播出去
+- id: k_mansion
+  text: 悖论夜里在罗伯勒多大道的格林伍德宅邸举行仪式
+- id: k_jim_patricide
+  text: 1995 年马里亚诺不是自杀，是 10 岁的吉姆借“剧院”杀了他
+- id: k_site
+  text: 正式演出的地点是海滨公园（前身夜间水上公园 Nocte Waterpark）
+- id: k_stop
+  text: 只有在被腐蚀之地以外杀死吉姆，或在演出最后半小时前于现场击杀他，才能终止仪式
+events:
+- id: e_kandi_arrives
+  title: 门口的联络人
+  when: D1 00:00
+  where: agent_home
+  present:
+  - kandi
+  text: 午夜敲门的是三角洲主管坎蒂（幻象）。他请特工到门口车里谈，关掉引擎和灯后交代“停机行动”（线索 c_halting_brief、c_adamson_email），说完驱车离开。简报不必自洽，可以留下违和感；交给特工的材料之后某个时候会变成乱涂乱画的废纸，发票上的对象写的是特工自己。
+  read_aloud: 门口站着一个不太高、有点驼背的中年男人，眼圈很重，戴着圆形眼镜，表情不太愉快。“晚上好，我无意打搅你。我们还是去车上谈吧。”
+- id: e_first_theatre
+  title: 欢迎来到剧院
+  when: at:players:theatre & !flag:entered_theatre
+  where: theatre
+  sanity: 0/1D6
+  sets:
+  - entered_theatre
+  text: 特工第一次进入剧院，SAN 0/1D6，个体腐化 +6。对被腐蚀者而言剧院稳固、自洽、宁静，不饿不累。
+  read_aloud: 靠窗的走廊铺着厚实柔软的红白图案地毯，另一侧是一扇扇包厢的小门，门上画着海底动植物的工笔画。窗外，不知从哪里喷出的蒸汽状物质在水里漂动，车轴摩擦的“哐当”声在迟钝的液体里规律地回荡。
+- id: e_cellar_trapped
+  title: 被困在地窖
+  when: flag:paradox_noticed_cellar & at:players:bar_cellar & !flag:cellar_locked
+  where: bar_cellar
+  sets:
+  - cellar_locked
+  text: 悖论发现特工进了地窖，在她进去后偷偷锁上门，把她晾到午夜。逃脱途径：通风口附近有手机信号，皮特的电脑连着网线；木门残旧，用钝器并通过力量检定可以破坏；在通风口向路人求救，通过魅力检定让路人同意进酒吧营救或报警（路人可能说“可是这只是一家倒闭了的玩具商店？！”）；叫来的市警可能找不到地窖门，认为是假报警，或约瑟芬宣称不知里面有人、不小心锁上了。营救人员进入酒吧即与黄衣之王接触，是特工开始扩散的征兆，腐化
+    +2。悖论对逃出者最多露出遗憾的表情。待到半夜、环境腐化使特工腐化 ≥30 时，奢华装饰攀上墙壁，石灰墙的裂隙变成透出黑暗的窗，火车轮声渐响；转变持续约半小时，期间可立刻逃回现实，结束时仍未离开即进入剧院（同
+    e_first_theatre）。午夜约瑟芬和吉姆来访，可夺门而出；吉姆呼唤粗壮的蛇绊倒并捆绑特工，特工可用心想事成（意志+腐化对抗）与吉姆对抗，或通过敏捷检定躲过逃出，逃进维多利亚式列车走廊；悖论不追，留在房间继续仪式。没逃脱则进入“八次鞭子”。
+- id: e_feb12
+  title: 二月十二日之夜
+  when: flag:corr_35 & flag:bar_night_seen & at:players:bar & !flag:feb12_done
+  where: bar
+  sanity: 1/1D6
+  sights:
+  - winged_servant
+  sets:
+  - feb12_done
+  text: 叙述时间拨回 2 月 12 日夜，主人公变成那时的特工（真回过去还是幻象由守秘人定）。约 8 点约瑟芬和服务生清空酒吧中央，毕宿五升到天空最高处时预演开始。两个上身赤裸、戴灰色盒子头套的男人（吉姆与达夫）从铁门进入舞池，富鲁格号声加入，光带围成符号的圆圈。此时可以立刻逃离；留下需过意志检定暂免成为观众，失败进入尤里卡时刻（腐化
+    +4，此后可进入彼岸，设 eureka）。通过者看到高潮：空间被低频声震裂，数只有翼仆从飞出，观众混乱交合，持续到毕宿五落下；目击演出 SAN 1/1D6，腐化 +3。留在空间中每两轮需过困难意志检定，失败成为仪式一员进入尤里卡时刻。攻击乘客不终止狂欢，伤口诡异自愈（SAN
+    0/1）；攻击吉姆只会让另一个可能性的吉姆替代（目击 SAN 0/1D4）；攻击达夫见达夫“静止姿态”。此时呼援等于向外传递腐蚀（腐化 +2）。清醒离开则回到叙诡发生前的现实那夜。
+  present:
+  - jim
+  - josephine
+  - peter
+- id: e_pleasure
+  title: 通往愉悦之路
+  when: at:players:theatre_pleasure & !flag:whipped
+  where: theatre_pleasure
+  present:
+  - jim
+  - josephine
+  - peter
+  - adamson
+  sanity: 0/1D4
+  text: 悖论三人的仪式：赤裸的约瑟芬和吉姆蹲坐在台球桌上纠缠，血从佩戴金属饰品的伤口流出，她身上刻满不同形状的符号；皮特以朝圣者的态度递工具。他们不会意识到特工，受攻击也只狂欢大叫；若注意到闯入者，吉姆邀请她加入“八次鞭子”。仪式结束后三人短暂呆滞，亚当森不知从哪冒出来拽特工往门外跑：“不能，他不能直视。”不离开则见达夫分裂而出（线索
+    c_pleasure_duff）。八次鞭子：连续 8 次鞭打，每两次受 1D2 伤害、SAN 0/1，并需体质检定否则晕倒；后背烙下符号形的伤痕；腐化增加等于仪式中失去的理智。撑过后吉姆与约瑟芬邀请一同交媾，皮特摊手鼓励；完成整个仪式
+    SAN 0/1D6，腐化 +2，设 whipped，此后心想事成检定 +20%；发现身上刻的是黄印另 SAN 0/1D3，腐化 +2。可随时终止逃离，无人阻拦；昏迷醒来时三人已不在。
+  read_aloud: 车厢外传来鞭打声和嚎叫。门后几乎就是那间娱乐室：台球桌上两个赤裸的人纠缠在一起，女人在尖叫，另一个男人恭恭敬敬地递上工具。
+- id: e_adamson_other
+  title: 再会亚当森
+  when: at:players:other_home & !flag:met_adamson_other
+  where: other_home
+  present:
+  - adamson
+  sets:
+  - met_adamson_other
+  - entered_other_side
+  text: 进入彼岸的引子。敲门声打断思绪，来访的是亚当森——这里他只是朋友，不是同事。他交出卡片和礼盒（线索 c_adamson_gift）后拥抱告别；跟踪他，他登上电车后就消失了。
+  read_aloud: 敲门声。门口站着亚当森，穿着那件标志性的格子衫，大大落落地拿着一个小礼盒和一张卡片。
+- id: e_peter_plaza_check
+  title: 皮特的最后检查
+  when: D4 12:00
+  where: central_plaza
+  present: []
+  text: 正式演出当天白天，皮特在中央广场中控室做最后检查（具体钟点为 AutoKeeper 补充）。平时他每天远程检查一次屏幕，发现端倪会立刻离开酒吧前来维修。
+- id: e_paradox_arrive
+  title: 悖论抵达海滨公园
+  when: D4 20:00
+  where: seaside_park
+  present: []
+  text: 悖论晚上 8 点抵达海滨公园。除约瑟芬和皮特外，酒吧里见过的所有顾客都在。抵达现场的特工需做“腐化值+10%”检定，成功则腐化 +5 并被拉入彼岸的边缘（建议此时向玩家明示腐化值）。
+- id: e_finale
+  title: 终演开幕
+  when: D4 20:18 & !flag:performance_stopped
+  where: seaside_park
+  present:
+  - jim
+  - josephine
+  - peter
+  sets:
+  - finale_started
+  text: 8 点 18 分正式演出开始。吉姆只身站在中央，观众自发以特殊节奏绕圈，更多旁观者加入，庄严肃穆，没有疯狂；富鲁格号加入明亮的色彩，直播摄像机记录全程。外面无法向吉姆开枪，需挤入人群；挤进去后周围的人都成了灰袍面具人，自己也是，配枪不知所踪，来到彼岸的边缘，吉姆欢迎特工（线索
+    c_jim_plea）。交谈后回到人群，演出继续，吉姆身上的黑线渐渐凝成达夫；达夫完全成型时，人和物永远与彼岸结合。攻击或干扰参与者，他们都不反抗。演出持续 2 小时，中央广场转播被切断则延长到
+    4 小时。起初心想事成的修复速度抵消不了子弹等高杀伤武器，随时间吉姆恢复得越来越快。只要吉姆死亡仪式就结束，参与者立刻瘫倒，只留仍在播放的铜管声（设 performance_stopped）。
+  read_aloud: 公园和往日一样平静，橡胶玩偶里的灯亮着柔光。然后，那个熟悉的节奏响了起来。
+- id: e_plaza_broadcast
+  title: 广场巨幕切换
+  when: D4 20:18 & !flag:broadcast_stopped
+  where: central_plaza
+  sanity: 0/1
+  text: 四块巨幕切到疑似公园的画面，草坪上有巨型章鱼等雕塑，如实转播演出和声音；SAN 0/1，腐化 +1。人群驻足、呼应，在中央围成圈以相仿的节奏踩跺，大厦灯光同频闪烁，只有宠物犬叫了几声。广场环境腐化陡升：火车轨道浮现在空中，物体边缘颤动着黑线，突降的大雨把水平面抬到近十五层楼高。破坏四块巨幕，或闯进中控室破坏电脑、解除皮特控制，可终止转播（设
+    broadcast_stopped）；管理人员一边照着节奏敲电话按键一边慌乱联络皮特，通过说服可让他们开中控室门。终止转播只解燃眉之急，演出仍在海滨公园继续，并顺着互联网蚕食现实。
+- id: e_unkillable_short
+  title: 最后半小时
+  when: D4 21:48 & flag:finale_started & !flag:broadcast_stopped & !flag:performance_stopped
+  where: seaside_park
+  sets:
+  - jim_unkillable
+  text: 演出进入最后半小时，吉姆恢复得如在剧院中一样，无法再被击杀，只能等仪式结束，他们自然从世界上被抹除。
+- id: e_unkillable_long
+  title: 最后半小时（转播已断）
+  when: D4 23:48 & flag:finale_started & flag:broadcast_stopped & !flag:performance_stopped
+  where: seaside_park
+  sets:
+  - jim_unkillable
+  text: 转播被切断后演出延长为 4 小时；进入最后半小时，吉姆已无法被击杀。
+- id: e_ritual_complete_short
+  title: 演出落幕
+  when: D4 22:18 & flag:finale_started & !flag:broadcast_stopped & !flag:performance_stopped & !flag:delta_suppressed
+  where: seaside_park
+  sets:
+  - ritual_complete
+  text: 正式演出顺利完成。现场之人连同整座公园从世界的认知中抹除；中央广场的行人与现场之人同样下场。
+- id: e_ritual_complete_long
+  title: 演出落幕（转播已断）
+  when: D5 00:18 & flag:finale_started & flag:broadcast_stopped & !flag:performance_stopped & !flag:delta_suppressed
+  where: seaside_park
+  sets:
+  - ritual_complete
+  text: 延长后的演出顺利完成。现场之人连同整座公园从世界的认知中抹除；中央广场的行人因转播被关而幸存。
+endings:
+- id: end_shadow
+  title: 历史的阴影
+  condition: 特工杀死吉姆，终止了正式演出（flag:performance_stopped）
+  requires:
+  - flag:performance_stopped
+  sanity_gain: 2D6
+  text: 参与者立刻瘫倒，幻境瞬间坍塌。现场之人成为精神病患者，由奥克兰精神病院受理；其中一部分人（约瑟芬和皮特）会从监禁的房间消失，不做处理的话，精神病院会逐渐被污染成下一个闹钟酒吧。成功关闭转播时中央广场的行人幸存，否则同现场之人。黄印的阴影埋在互联网的角落随时间扩散；当日的群体幻觉得到三角洲注意，但无法将事件和特工联系起来。未把现状暴露给三角洲的特工只接受一次例行询问，否则会被长期监禁盘问，经历被记录为“SILENCE#07”机密文档封存。之后按个体腐化：<25，黄衣之王偶尔造访梦境，随精神治疗潜藏，很久以后黄印又爬上手稿；25–50，勉强以人形生活，间歇的幻象与噩梦靠药品治疗，几年后再见黄印，剧院之门继续敞开；>50，不再区分现实与幻象，以为在记录经历，实际在背诵《黄衣之王》，成为下一个灰暗时刻的源头。
+  reward: 阻止最终演出 +2D6 理智并减少等量腐化；另成功阻止中央广场转播再 +1D6 理智并减少等量腐化（由守秘人追加）；找到《黄衣之王》而未读者 -1D8 腐化。
+- id: end_delta
+  title: 历史的阴影：三角洲镇压
+  condition: 三角洲小队赶到现场，用催泪弹打断仪式（flag:delta_suppressed）
+  requires:
+  - flag:delta_suppressed
+  text: 小队抵达后立刻镇压，催泪弹打断了仪式，当地警署控制了现场人员。此后绿色三角洲长期暗访涉事人群，带来更多牺牲。其余后果同“历史的阴影”，特工的经历被记录为“SILENCE#07”封存；按个体腐化决定她之后的生活（<25
+    / 25–50 / >50）。
+  reward: 成功阻止中央广场转播 +1D6 理智并减少等量腐化；找到《黄衣之王》而未读者 -1D8 腐化。
+- id: end_bliss
+  title: 持续到永恒的愉悦
+  condition: 特工接受吉姆的提议，留在现场参与演出，忽视组织联络（flag:joined_other_side）
+  requires:
+  - flag:joined_other_side
+  text: 意识滑入彼岸，存在从现实中抹除。特工投身彼岸，乘剧院前往宫廷，享受极乐，直到可能性的尽头；亲友只短暂地疑惑了一下。或许有一天，她会借另一条通道再次出现。若特工完全疯狂，守秘人可让玩家短暂扮演失忆后的马蒂亚，以她的视角描述特工的结局。
+- id: end_remember
+  title: 铭记者
+  condition: 正式演出顺利完成，特工仍留在现实（flag:ritual_complete）
+  requires:
+  - flag:ritual_complete
+  text: 世界忘记了受害者的存在，连同整座公园一起从认知中抹除；一两年后，那里被唐突地改建成新的游乐设施，可能成为新的通道。特工若留在现实，会记得这些人，成为铭记者。中央广场的行人若未被关掉转播，同现场之人一起消失。按个体腐化决定她之后的生活（<25
+    / 25–50 / >50，同“历史的阴影”）。
+
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 午夜的敲门声
+    prompt: 2008 年的卧室，床头电子钟显示 00:00，窗外夜色，楼下门口一线灯光。
+  - id: sc_theatre
+    kind: 重要场景
+    when: event:e_first_theatre
+    title: 湖底的列车
+    prompt: 维多利亚式豪华列车的走廊，红白地毯，窗外是幽暗的液体与漂动的蒸汽，车灯昏黄。
+  - id: sc_finale
+    kind: 危机
+    when: event:e_finale
+    title: 公园里的圆圈
+    prompt: 夜晚的海滨公园，巨型橡胶玩偶内亮着柔光，人群沉默地绕着中央一人转圈。
+  - id: sc_end_shadow
+    kind: 结局
+    when: ending:end_shadow
+    title: 寂静的公园
+    prompt: 人群瘫倒在草坪上，铜管声仍在某处播放，远处警灯闪烁。
+  - id: sc_end_delta
+    kind: 结局
+    when: ending:end_delta
+    title: 催泪烟雾
+    prompt: 白色烟雾弥漫公园，戴防毒面具的小队穿过倒下的人群。
+  - id: sc_end_bliss
+    kind: 结局
+    when: ending:end_bliss
+    title: 驶向宫廷
+    prompt: 湖底的列车驶向远方若隐若现的巨大城堡，车窗里灯火温暖。
+  - id: sc_end_remember
+    kind: 结局
+    when: ending:end_remember
+    title: 空无一物的草坪
+    prompt: 清晨空旷的草坪，没有设施也没有人，只有一个人独自站着。
+prelude:
+- text: 2008年，加利福尼亚州奥克兰。冬夜，海湾的雾压着城市的灯火。
+- text: 有个组织不在任何档案里，名叫绿色三角洲。它的人从不寒暄，只在用得着你的时候出现。
+- art: agent_home
+  text: 2月15日，将近午夜。你的家里很静，书架投下长长的影子，茶几上的座机一整晚都没响。
+- art: agent_home
+  text: 门廊外传来敲门声。这个钟点来敲门的，不会是邻居。

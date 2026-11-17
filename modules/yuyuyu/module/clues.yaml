@@ -1,0 +1,472 @@
+items:
+- id: diary
+  name: 阮施宁的日记本
+  description: 硬质塑料封皮的密码本，右侧固定着一排 8 个按钮和一个中央解锁键
+  where: huang_home
+  owner: huang_yi
+  equipment: concealed
+- id: jianfu_shovel
+  name: 铁锹
+  description: 一把旧铁锹
+  where: night_market
+  owner: jianfu
+  hidden: true
+- id: jianfu_rope
+  name: 绳索
+  description: 一捆结实的绳子
+  where: night_market
+  owner: jianfu
+  hidden: true
+- id: jianfu_lamp
+  name: 防水灯
+  description: 一盏防水的手提灯
+  where: night_market
+  owner: jianfu
+  hidden: true
+- id: abao_flashlight
+  name: 手电筒
+  description: 阿宝的旧手电筒
+  where: shipowei
+  owner: abao
+- id: abao_keys
+  name: 一串钥匙
+  description: 挂在阿宝腰间的一串钥匙
+  where: shipowei
+  owner: abao
+  equipment: worn
+  important: false
+- id: crowbar
+  name: 撬棍
+  description: 工地上散落的几根撬棍和钢筋
+  where: shipowei
+  quantity: 3
+- id: sandbags
+  name: 沙袋和水泥袋
+  description: 老张看守室里堆着的几袋水泥和沙袋
+  where: shipowei_guardroom
+  quantity: 6
+- id: press_card
+  name: 记者证
+  description: 《石头屿晚报》的记者证
+  where: music_square
+  owner: yang_zongxi
+- id: rare_cards
+  name: 湿透的稀有小浣熊卡片
+  description: 几张湿透了的稀有小浣熊卡片
+  where: drain_gate
+  hidden: true
+  status: 湿透
+clues:
+- id: c_directions
+  title: 伙伴们商量的去处
+  where: ocean_park
+  feature: 伙伴们商量的去处
+  handout: h_town_map
+  points_to:
+  - k_ruan_crawled
+  text: 阮施宁的家、她最好的朋友黄懿的家，还有她常去的少儿图书馆，是最先能去找的地方；附近还有音乐广场和晚上才开的夜市。穿过四通八达的小巷，各处之间走路十分钟左右。
+- id: c_park_tracks
+  title: 侧门外的两组痕迹
+  where: ocean_park
+  feature: 侧门附近的泥地
+  check:
+    skill: 侦查
+  core: true
+  points_to:
+  - k_ruan_crawled
+  text: 侧门附近的泥地上有两组不同的痕迹：一组是孩子的鞋印，从入口方向一路延伸到乐园入口；另一组是爬行的痕迹，从乐园入口延伸出来，上面残留着已经半干的黏液。园区里是水泥地，找不到脚印。
+- id: c_park_manhole
+  title: 井盖下的死鱼
+  where: ocean_park
+  feature: 井盖
+  points_to:
+  - k_seawater
+  text: 乐园的井盖有海水倒灌的痕迹，能看到几条死鱼。
+- id: c_park_bubbling
+  title: 井盖里的咕嘟声
+  where: ocean_park
+  feature: 井盖
+  check:
+    skill: 聆听
+  points_to:
+  - k_seawater
+  text: 井盖里听不到城市下水道该有的流水声，取而代之的是极微弱的、粘稠的咕嘟声。
+- id: c_park_vision
+  title: 旋转木马上的不适
+  where: ocean_park
+  feature: 旋转木马平台
+  sanity: 0/1D4
+  points_to:
+  - k_city_below
+  text: 一登上还算完好的游乐设施，眼前的东西仿佛一下子退到了很远的地方，一阵说不出的不适。
+- id: c_ruan_mother_says
+  title: 阮母的回答
+  where: ruan_home
+  feature: 门缝里的屋子
+  npc: ruan_mother
+  points_to:
+  - k_ruan_crawled
+  text: 阮施宁的妈妈说，阿宁回家了，回奶奶那里了。
+- id: c_ruan_father_warns
+  title: 阮父的告诫
+  where: ruan_home
+  feature: 门缝里的屋子
+  npc: ruan_father
+  text: 阮施宁的爸爸从屋里走出来，告诫你们近段时间不要再来找阮施宁玩。
+- id: c_ruan_calm
+  title: 平静得出奇的语气
+  where: ruan_home
+  feature: 门缝里的屋子
+  npc: ruan_mother
+  points_to:
+  - k_hybrids
+  text: 阮施宁的爸爸妈妈说话时语气非常平静，他们似乎真的相信自己说的是实话。
+- id: c_grannies
+  title: 阿婆们的话
+  where: ruan_home
+  feature: 剥豆的阿婆们
+  npc: grannies
+  core: true
+  points_to:
+  - k_drain
+  text: 阿婆们说，昨天看到阿宁的时候，她盯着排水沟里的水看了很久，叫她都没听见。“阿宁仔最爱吃夜市那家的虾饼，每次去都缠着她妈妈买。你们要是找她，晚上去问问那个卖虾饼的阿伯，阿宁跟他很熟，说不定知道她去哪里了。”
+- id: c_huang_hands
+  title: 发抖的手
+  where: huang_home
+  feature: 楼梯口
+  npc: huang_yi
+  text: 黄懿说，昨天和阮施宁一起写作业的时候，阮施宁握笔的手指在发抖，字比平时歪斜。但她不相信阮施宁会爽约。
+- id: c_diary
+  title: 阮施宁的日记本
+  where: huang_home
+  feature: 阮施宁的日记本
+  npc: huang_yi
+  handout: h_diary
+  core: true
+  points_to:
+  - k_drain
+  - k_hybrids
+  text: 黄懿说出了密码。日记本前半部分是阮施宁的日常记录，有一幅画满了你们的涂鸦，旁边工整地写着“好朋友们！”；后半部分有几幅涂鸦：一条人鱼；妈妈爸爸变成巨大的、长着眼睛的鱼，围着她；一条通向洞口的道路，布满了奇怪的符号。
+- id: c_diary_peek
+  title: 偷看日记本
+  where: huang_home
+  feature: 阮施宁的日记本
+  check:
+    skill: 智力
+  handout: h_diary
+  points_to:
+  - k_drain
+  - k_hybrids
+  text: 你想起了密码，趁黄懿不注意打开了日记本。前半部分是阮施宁的日常记录，有一幅画满了你们的涂鸦，旁边工整地写着“好朋友们！”；后半部分有几幅涂鸦：一条人鱼；妈妈爸爸变成巨大的、长着眼睛的鱼，围着她；一条通向洞口的道路，布满了奇怪的符号。
+- id: c_diary_drain
+  title: 涂鸦里的路
+  where: huang_home
+  feature: 日记本最后一张涂鸦
+  check:
+    skill: 灵感
+  requires:
+  - c_diary
+  core: true
+  points_to:
+  - k_drain
+  text: 日记里那条通向洞口、布满奇怪符号的路，画的是工地的排水通道。
+- id: c_diary_drain_peek
+  title: 涂鸦里的路（偷看）
+  where: huang_home
+  feature: 日记本最后一张涂鸦
+  check:
+    skill: 灵感
+  requires:
+  - c_diary_peek
+  core: true
+  points_to:
+  - k_drain
+  text: 日记里那条通向洞口、布满奇怪符号的路，画的是工地的排水通道。
+- id: c_diary_compare
+  title: 比对报纸和日记
+  where: huang_home
+  feature: 日记本最后一张涂鸦
+  requires:
+  - c_diary
+  - c_newspaper
+  core: true
+  points_to:
+  - k_drain
+  text: 日记里那条通向洞口、布满奇怪符号的路，画的是工地的排水通道。
+- id: c_diary_compare_peek
+  title: 比对报纸和偷看的日记
+  where: huang_home
+  feature: 日记本最后一张涂鸦
+  requires:
+  - c_diary_peek
+  - c_newspaper
+  core: true
+  points_to:
+  - k_drain
+  text: 日记里那条通向洞口、布满奇怪符号的路，画的是工地的排水通道。
+- id: c_grandma_wish
+  title: 阿嫲的心愿
+  where: huang_home
+  feature: 摇椅上的阿嫲
+  npc: huang_grandma
+  points_to:
+  - k_hybrids
+  text: 你们要走的时候，阿嫲说，她希望阿懿远离这座城市，远离她所熟悉的一切，去做一个普通的孩子，读书，学习，学着把陌生的字母串成句子，再让句子载着她，像一只纸船顺着雨水的沟壑那样，漂向更远、更远、远到她闭上眼睛也想象不出的世界边缘去。她还叮嘱你们近期不要靠近海边，夜里早点回家。
+- id: c_librarian
+  title: 管理员的话
+  where: library
+  feature: 借阅台
+  npc: librarian
+  text: 管理员说，昨天见到阮施宁的时候，阿宁有些魂不守舍，话都说不利索。
+- id: c_picture_book
+  title: 崭新的深海绘本
+  where: library
+  feature: 新到的绘本
+  check:
+    skill: 图书馆使用
+  handout: h_picture_book
+  points_to:
+  - k_hybrids
+  - k_gate
+  text: 书架上有几本崭新的深海绘本，画着一群笨拙可爱的鱼类生物，书里写着：“鱼从海边来，潮水为它们开门啦！”
+- id: c_newspaper
+  title: 今天的《石头屿晚报》
+  where: library
+  feature: 报刊架
+  handout: h_newspaper
+  core: true
+  points_to:
+  - k_gate
+  - k_tide
+  text: 今天的《石头屿晚报》报道，石坡尾清淤时发现一道没标在任何图纸上的老旧闸门，闸板歪斜出现缝隙，海水和淤泥涌进排水设施，预计 9 日封堵；天气栏说第 10 号强热带风暴正在逼近；明日潮汐表上，第一次满潮在凌晨
+    02:24。
+- id: c_newspaper_where
+  title: 报道里的闸门位置
+  where: library
+  feature: 报刊架
+  check:
+    skill: 智力
+  requires:
+  - c_newspaper
+  core: true
+  points_to:
+  - k_drain
+  - k_gate
+  text: 对照报道，你们弄明白了：那条旧排水通道在石坡尾工地的排洪箱涵里，闸门就在通道深处。
+- id: c_newspaper_where_site
+  title: 报道里的闸门位置（工地对照）
+  where: shipowei
+  feature: 排洪箱涵入口的围挡
+  check:
+    skill: 智力
+  requires:
+  - c_newspaper
+  core: true
+  points_to:
+  - k_drain
+  - k_gate
+  text: 对照报道，你们弄明白了：那条旧排水通道在石坡尾工地的排洪箱涵里，闸门就在通道深处。
+- id: c_busker_talk
+  title: 喷泉边的深夜访客
+  where: music_square
+  feature: 弹唱的流浪汉
+  npc: busker
+  points_to:
+  - k_infection
+  text: 流浪汉说没见过阮施宁那样的小孩，但最近几天，广场上多了些深夜逗留的人，他们不唱歌也不跳舞，只是坐在喷泉边，把手伸进水里，一坐就是几个小时，直到凌晨才陆续散去。
+- id: c_busker_ear
+  title: 掏出来的黏稠物
+  where: music_square
+  feature: 弹唱的流浪汉
+  npc: busker
+  points_to:
+  - k_infection
+  text: 流浪汉一边说话一边掏耳朵，从耳道里带出一大团混浊的黏稠物。
+- id: c_busker_breath
+  title: 费力的喘息
+  where: music_square
+  feature: 弹唱的流浪汉
+  npc: busker
+  check:
+    skill: 侦查
+  points_to:
+  - k_infection
+  text: 他唱歌时频繁停下来喘气，每次都剧烈地张开嘴，急促而费力。
+- id: c_yang_dogs
+  title: 工地的狗
+  where: music_square
+  feature: 北侧台阶
+  npc: yang_zongxi
+  points_to:
+  - k_infection
+  - k_drain
+  text: 杨纵溪说，她早上听工人们讲，昨天他们养在工地附近的几条狗喝了排水通道里冒出的水，当天晚上就开始喘不上气。
+- id: c_yang_interview
+  title: 今晚的采访
+  where: music_square
+  feature: 北侧台阶
+  npc: yang_zongxi
+  points_to:
+  - k_drain
+  text: 杨纵溪在做清淤工程的专题报道，笔记本上记着今天的采访对象——石坡尾清淤项目的现场负责人陈工，两人约好晚上七点多在石坡尾碰面。她邀请你们一起去看看。
+- id: c_toy_ears
+  title: 玩具摊主的耳朵
+  where: night_market
+  feature: 塑料玩具摊
+  npc: toy_vendor
+  check:
+    skill: 侦查
+  points_to:
+  - k_infection
+  text: 玩具摊的女摊主呼吸有点急促，两只耳朵里塞满了一种混浊的粘稠物，正沿着耳廓慢慢往下滑。她说只是中耳炎，自己买了药水在滴。
+- id: c_jianfu_help
+  title: 建福阿伯的嘱咐
+  where: night_market
+  feature: 虾饼和海蛎饼摊
+  npc: jianfu
+  core: true
+  points_to:
+  - k_gate
+  - k_drain
+  text: 建福阿伯压低声音告诉你们，排水通道里的闸门开了，必须关上；他含糊地讲了讲通道里的样子，但说自己不能陪你们去。
+- id: c_webbed_hand
+  title: 排队大人的手
+  where: night_market
+  feature: 扁食拌面摊前排队的人
+  sanity: 0/1D3
+  points_to:
+  - k_hybrids
+  text: 排在前面的大人把手垂在你们眼前，伸开手掌时，手指之间连着一层不该长在人身上的蹼状皮肤。
+- id: c_liying_talk
+  title: 丽英的话
+  where: night_market
+  feature: 春卷摊
+  npc: liying
+  points_to:
+  - k_gate
+  - k_hybrids
+  text: 丽英说，排水闸门开了。她讲起阮施宁、海边和排水通道时，好像那些还没发生的事早就注定了；说到排水通道时，她仿佛和那肮脏、潮湿、不断冒着腥臭水汽的地方变成了分不开的东西。
+- id: c_market_rumors
+  title: 夜市里的零碎谈话
+  where: night_market
+  feature: 摊位间的零碎谈话
+  points_to:
+  - k_hybrids
+  - k_tide
+  text: 摊位间零碎的谈话里，有人说着“变化”“回归”“留下”和“选择”。有人觉得身体的变化是血脉醒了，通道就该开着，“只要过了今晚两点……”；也有人担心通道开着会让所有人变得更快，让还没准备好的人没得选。
+- id: c_tide_rhyme
+  title: 阿宝的涨潮口诀
+  where: shipowei
+  feature: 坞底淤泥
+  npc: abao
+  core: true
+  points_to:
+  - k_tide
+  text: 阿宝耐心地教你们推算涨潮：“今仔日是初几？……十七喔，明仔载两点四个字涨潮。初一十五，中午满肚——初一、十五那天，大潮在中午 12 点；除了初一和十五这两天，上半月用农历日子乘以 8；下半月用农历日子减去
+    15，再乘以 8。明天是农历十八，（18-15）×8=24，2 点 4 个字，就大概是 2 点 20 分涨潮。”（一个字是五分钟。）
+- id: c_chen_seal
+  title: 陈工的施工安排
+  where: shipowei
+  feature: 警戒线
+  npc: chen_gong
+  requires:
+  - flag:yang_joined
+  points_to:
+  - k_gate
+  text: 陈工向记者介绍施工内容，说等台风过后会浇筑水泥封住排水通道。
+- id: c_chen_strange
+  title: 清出来的怪东西
+  where: shipowei
+  feature: 警戒线
+  npc: chen_gong
+  requires:
+  - flag:yang_joined
+  points_to:
+  - k_drain
+  text: 记者问到施工中有没有发现异常，陈工提到曾清出来一些“奇怪的东西”：旧衣服、鞋，还有一些她不愿说清楚的东西。追问时她只是摆摆手：“都清走了，没什么好看的。”
+- id: c_gate_gap
+  title: 闸板的缝隙
+  where: drain_gate
+  feature: 闸板与轨道的缝隙
+  check:
+    skill: 侦查
+  core: true
+  points_to:
+  - k_gate
+  text: 旧闸板没有完全脱离结构，一侧仍卡在轨道里，形成一道仅容一人勉强通过的缝隙，海水正从这里渗进来。要解决问题，得把这道缝隙彻底封死：清理卡槽把滑脱的一侧推回原位，或者用别的东西堵住缝隙撑过台风。
+- id: c_ruan_note
+  title: 湿透的卡片和纸条
+  where: drain_gate
+  feature: 阮施宁坐过的地方
+  requires:
+  - flag:ruan_gone
+  handout: h_note
+  text: 阮施宁原来坐着的地方留下了几张湿透的稀有小浣熊卡片，还有一张字迹歪歪扭扭、几乎无法辨认的纸条。
+handouts:
+- id: h_town_map
+  title: 我们常去的地方
+  kind: 地图
+  paper: card
+  images:
+  - town_map
+  text: 石坡尾、夜市、音乐广场、少儿图书馆、阮施宁的家、黄懿的家、废弃的海洋乐园（起始点），之间由小巷相连。
+- id: h_newspaper
+  title: 《石头屿晚报》2009 年 8 月 7 日
+  kind: 报纸
+  paper: news
+  images:
+  - newspaper
+  text: '石头屿晚报 · 2009 年 8 月 7 日 星期五 · 己丑年六月十七
+
+    【石坡尾清淤现老旧闸门渗漏 紧急处置后预计 9 日封堵】本报讯（记者 杨纵溪）石坡尾附近工程施工现场发生一起意外。4 日凌晨，施工人员在清理一处深层淤泥时，发现了一道此前未被标记于任何工程图纸上的老旧闸门结构。因闸门固定结构年久锈蚀，加之近期海水涨大潮，闸板发生倾斜并出现缝隙，大量淤泥与海水混合物从闸板后方涌出，涌入排水设施中。市政公司项目负责人沈经理表示，4
+    日凌晨接到现场报告后立即要求停止相关施工。截至 4 日下午 5 时许，现场渗漏已作临时处置，预计将在 9 日前后对这条旧排水通道进行永久封堵。
+
+    【我们的城事】昨天本报刊发的《涵涵反复发作的呼吸困难令全家紧张》引发广泛关注……
+
+    【石头屿天气】明天 26°C～31°C：随着今年第 10 号强热带风暴逐渐逼近，我市风力将明显增强，天气转为阴有阵雨，沿海风力可达 6 级，阵风 7-8 级。
+
+    【明日潮汐】满潮 02:24　干潮 08:48　满潮 14:48　干潮 21:12
+
+    '
+- id: h_diary
+  title: 阮施宁的日记本
+  kind: 日记
+  paper: diary
+  text: '（前半本是阮施宁的日常记录。有一页画满了你们每一个人，几笔就画出了各自的样子，旁边用工整的字写着：）好朋友们！
+
+    （后半本是几幅涂鸦。）
+
+    第一张：一条人鱼。
+
+    第二张：妈妈爸爸变成巨大的、长着眼睛的鱼，围着她。
+
+    第三张：一条通向洞口的道路，路上布满了奇怪的符号。
+
+    '
+- id: h_picture_book
+  title: 崭新的深海绘本
+  kind: 绘本
+  paper: book
+  text: '绘本用了大量不真实的鲜明色彩，连阴影也画成深蓝、靛青与紫色。天空大得不像真的；月亮、星星、窗户、门洞，还有圆形、螺旋形和重复排列的图案，被放在奇怪的位置——角落里、边沿上、海平线下面、屋顶上方。远处画着一些看不懂的东西。
+
+    主角是一群笨拙可爱的鱼类生物：圆钝的身体、大大的眼睛、短短的手脚，有时蹲在水里，有时从窗户后面探出脑袋，有时排成一列，像做游戏一样沿着海岸慢慢走过去。
+
+    “鱼从海边来，潮水为它们开门啦！”
+
+    '
+- id: h_note
+  title: 湿透的纸条
+  kind: 便条
+  paper: letter
+  text: ……好朋友再见……卡片……你们……
+sketches:
+- id: sk_diary_road
+  ask: 把阮施宁日记里那条通向洞口的路画出来
+  target: 一条弯弯曲曲通向一个黑色洞口的路，路两边和路面上画满了圆圈、螺旋和重复排列的奇怪符号
+  threshold: 0.6
+  after: c_diary
+- id: sk_tracks
+  ask: 把侧门泥地上那两组痕迹画出来
+  target: 一串小孩的鞋印从外面走向乐园入口；另一道从入口拖出来的爬行痕迹，宽而连贯，上面有一摊摊半干的黏液
+  threshold: 0.6
+  after: c_park_tracks

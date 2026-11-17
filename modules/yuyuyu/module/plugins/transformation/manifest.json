@@ -1,0 +1,337 @@
+{
+  "id": "transformation",
+  "name": "深潜者血统转变",
+  "description": "原书规则：调查员接触喷泉、井水、潮湿地下水道或任何食物与水源时过体质检定，失败转变 +1 级；1 级起皮肤长时间湿润，视为已开始转变（pc_transforming）；3 级时开始听到大海的呼唤。另记录到过的调查地点，到过两个不同地点后设 outbreak_ready（异变可在 2-3 个地点后发生，守秘人可推迟到第三个）。另记闸门封堵失败次数：每次失败提醒额外耗去 1 小时（时间由守秘人推进）；可选规则下每第三次失败暗骰 1D3，结果为 1 时出现 1 只巡逻深潜者。",
+  "api_version": 1,
+  "version": "0.1.0",
+  "hooks": [
+    "start",
+    "visit",
+    "action"
+  ],
+  "capabilities": [
+    "dice",
+    "flag",
+    "condition",
+    "hint"
+  ],
+  "actions": [
+    {
+      "name": "contact_water",
+      "description": "调查员接触喷泉、井水、潮湿地下水道或食用、饮用任何食物与水源时调用。arguments: who（调查员 id，字符串；不写则为正在行动的人）"
+    },
+    {
+      "name": "gate_fail",
+      "description": "闸门复位或临时封堵的一次尝试失败后调用。arguments: patrol（布尔，守秘人是否启用每三次失败暗骰 1D3 遇巡逻深潜者的可选规则，默认 false）"
+    }
+  ],
+  "commands": [],
+  "flags": {
+    "outbreak_ready": "调查员已到过两个调查地点，异变可以发生",
+    "pc_transforming": "有调查员开始转变（转变至少 1 级）"
+  },
+  "initial": {
+    "seen": [],
+    "levels": {},
+    "gate_fails": 0,
+    "ready": false,
+    "transforming": false
+  },
+  "tests": [
+    {
+      "name": "启用",
+      "event": {
+        "hook": "start"
+      },
+      "state": {},
+      "context": {},
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "seen": [],
+        "gate_fails": 0
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "第一个地点不触发",
+      "event": {
+        "hook": "visit"
+      },
+      "state": {
+        "seen": [],
+        "levels": {},
+        "gate_fails": 0,
+        "ready": false,
+        "transforming": false
+      },
+      "context": {
+        "location": "ruan_home"
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "seen": [
+          "ruan_home"
+        ],
+        "ready": false
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "起始乐园不计",
+      "event": {
+        "hook": "visit"
+      },
+      "state": {
+        "seen": [
+          "ruan_home"
+        ],
+        "levels": {},
+        "gate_fails": 0,
+        "ready": false,
+        "transforming": false
+      },
+      "context": {
+        "location": "ocean_park"
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "seen": [
+          "ruan_home"
+        ]
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "第二个地点触发异变",
+      "event": {
+        "hook": "visit"
+      },
+      "state": {
+        "seen": [
+          "ruan_home"
+        ],
+        "levels": {},
+        "gate_fails": 0,
+        "ready": false,
+        "transforming": false
+      },
+      "context": {
+        "location": "library"
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "seen": [
+          "ruan_home",
+          "library"
+        ],
+        "ready": true
+      },
+      "expected_effects": [
+        {
+          "kind": "flag",
+          "key": "outbreak_ready"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "接触水源检定成功",
+      "event": {
+        "hook": "action",
+        "action": "contact_water",
+        "arguments": {
+          "who": "lin_xiaozhou"
+        }
+      },
+      "state": {
+        "seen": [],
+        "levels": {},
+        "gate_fails": 0,
+        "ready": false,
+        "transforming": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiaozhou"
+          }
+        ]
+      },
+      "dice": [],
+      "checks": [
+        true
+      ],
+      "expected_state": {
+        "levels": {}
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "接触水源失败开始转变",
+      "event": {
+        "hook": "action",
+        "action": "contact_water",
+        "arguments": {
+          "who": "lin_xiaozhou"
+        }
+      },
+      "state": {
+        "seen": [],
+        "levels": {},
+        "gate_fails": 0,
+        "ready": false,
+        "transforming": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiaozhou"
+          }
+        ]
+      },
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "levels": {
+          "lin_xiaozhou": 1
+        },
+        "transforming": true
+      },
+      "expected_effects": [
+        {
+          "kind": "condition",
+          "who": "lin_xiaozhou",
+          "key": "皮肤湿润",
+          "amount": 1
+        },
+        {
+          "kind": "flag",
+          "key": "pc_transforming"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "转变到三级听见呼唤",
+      "event": {
+        "hook": "action",
+        "action": "contact_water",
+        "arguments": {
+          "who": "lin_xiaozhou"
+        }
+      },
+      "state": {
+        "seen": [],
+        "levels": {
+          "lin_xiaozhou": 2
+        },
+        "gate_fails": 0,
+        "ready": false,
+        "transforming": true
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "lin_xiaozhou"
+          }
+        ]
+      },
+      "dice": [],
+      "checks": [
+        false
+      ],
+      "expected_state": {
+        "levels": {
+          "lin_xiaozhou": 3
+        }
+      },
+      "expected_effects": [
+        {
+          "kind": "condition",
+          "who": "lin_xiaozhou",
+          "key": "听见大海的呼唤",
+          "amount": 1
+        },
+        {
+          "kind": "hint",
+          "text": "这名调查员开始隐约听见大海的呼唤。"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "闸门第三次失败遇巡逻",
+      "event": {
+        "hook": "action",
+        "action": "gate_fail",
+        "arguments": {
+          "patrol": true
+        }
+      },
+      "state": {
+        "seen": [],
+        "levels": {},
+        "gate_fails": 2,
+        "ready": false,
+        "transforming": false
+      },
+      "context": {},
+      "dice": [
+        1
+      ],
+      "checks": [],
+      "expected_state": {
+        "gate_fails": 3
+      },
+      "expected_effects": [
+        {
+          "kind": "hint",
+          "text": "这次封堵没有成功，又额外耗去了一小时。"
+        },
+        {
+          "kind": "hint",
+          "text": "通道深处，一只巡逻的深潜者朝闸门口过来了。"
+        }
+      ],
+      "expected_panels": null
+    },
+    {
+      "name": "闸门失败不启用巡逻",
+      "event": {
+        "hook": "action",
+        "action": "gate_fail",
+        "arguments": {}
+      },
+      "state": {
+        "seen": [],
+        "levels": {},
+        "gate_fails": 2,
+        "ready": false,
+        "transforming": false
+      },
+      "context": {},
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "gate_fails": 3
+      },
+      "expected_effects": [
+        {
+          "kind": "hint",
+          "text": "这次封堵没有成功，又额外耗去了一小时。"
+        }
+      ],
+      "expected_panels": null
+    }
+  ]
+}

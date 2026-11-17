@@ -1,0 +1,718 @@
+mechanics:
+  - name: 阿博加斯特的咒语
+    runs: 守秘人
+    why: §40/§50/§270
+    rules: 只有学会了咒语（learned_chant）、被锁在灯塔上且火已点燃时才可以念。连呼三遍 “Ph'nglui mglw'nafh Cthugha Fomalhaut n'ghaghaa naf 'l thagn! Iä! Cthugha!”，不掷骰，必定生效：火舌停在半空，第二颗太阳升起，方圆十六英里被毁，调查员也死去（§270，设 chant_cast）。
+  - name: 召唤天之火
+    runs: 守秘人
+    why: §80/§197
+    rules: 抄记了“召唤天之火”的调查员（knows_fire_rituals）在灯塔上念诵约二十秒；它只在“群星归位时”有效，此时不是，不掷骰：村民同声吟诵，群星坠落，调查员被烧死（§80，设 summon_cast）。
+  - name: 号令天之火
+    runs: 守秘人
+    why: §90/§198/§209
+    rules: 抄记了“号令天之火”的调查员在灯塔上念诵约二十秒，自选消耗魔法值，最多 10 点；魔法值不足可用生命值代替，但生命值不能降到 0。成功率为每点 10%，掷出 96–100 必定失败。失败按 §65 处理（1D6 火伤，归零烧死，否则力量检定）。成功（§209）群星看见他，失去 1D3 理智，理智归零即 §220（设 star_madness）；否则他可选择号令群星返回原位（§255）、放他解脱（§243）或烧尽村民（§231），三者都以他的死亡告终。
+  - name: 惩罚骰之日
+    runs: 守秘人
+    why: §26/§52
+    rules: 吸入莨菪烟醒来，或彻夜不眠且体质检定失败，当天所有技能检定加一颗惩罚骰；幸运、理智和伤害骰不受影响。设 drugged，第二天清除。
+  - name: 暗中调查三处后被围
+    runs: 守秘人
+    why: §120/§98
+    rules: D3 白天在搜梅卧室、独去村会堂、工匠工坊、窥探灯塔四项中做过三项后，四个盯梢村民围拢上来（设 suspicion_high）。调查员可绕建筑甩掉（潜行），或直接逃往教堂。
+
+ties:
+  - id: t_arkham_job
+    hook: 调查员在阿卡姆的新工作有确定的报到日期，耽误不得
+    fits: [职业]
+  - id: t_ruth_child
+    hook: 露丝的年纪和神情让调查员想起家里的某个孩子
+    npc: ruth
+    fits: [重要之人]
+
+relations:
+  - {a: may, b: ruth, kind: 亲属, value: 70, why: 女儿，要护着她，也要管住她的嘴}
+  - {a: ruth, b: may, kind: 恐惧, value: -30, why: 妈妈，怕她，也替她难过}
+  - {a: arbogast, b: winters, kind: 敌对, value: -80, why: 认定他是只会花言巧语的蠢材，夺走了自己的位置}
+  - {a: may, b: silas, kind: 盟友, value: 40, why: 开车太快的老相识，村子唯一的对外联系}
+preparation:
+  closeups:
+    hometown_stop:
+      fingerprint: 5ce1422ded53b5389f681b9e4210b1e8afb2beb64c5e42f2ccb7a456a974c59f
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: hometown_stop;§8/§23/§38
+    coach:
+      fingerprint: a7401176ab54098f05aafb2a8d458a2cb333c56fa93e9c0ee22eaf1baecbeb06
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: coach;§128
+    village_edge:
+      fingerprint: 731e74a213dd9c1eb45792dcda0a22ecc09c95a9073772209bc361f941b15901
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: village_edge;§144;c_breakdown_trick
+    central_street:
+      fingerprint: 518f2a78e0e33c24a5cf62c9f6b43dcce5aadb9dbe0fa70b61c60e9d9bda46e5
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: central_street;§6/§34;c_village_overview
+    ledbetter_house:
+      fingerprint: 11354f9293f0eb5282735f4ed3992e438bce2be7af6d2aca1698804b6a6e4123
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: ledbetter_house;§4/§22
+    guest_room:
+      fingerprint: ec1bee893225be2a336714f1a2a889f9c792cf7228a54a881a78bbb06615f5e6
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: guest_room;§154/§266
+    may_bedroom:
+      fingerprint: edd792fbe57685f370f2ef5fa9347063fd5ea5a23454f89ab58f99b4960946d8
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: may_bedroom;§83/§95
+    cellar:
+      fingerprint: 8c33de16bb34f2a000414cced33702d764a899141646f3579a4b2687cc89fd1d
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: cellar;§114
+    general_store:
+      fingerprint: 61e60686752efb4f1031af63402ef1bc829286e991cd3384594fc38ce2ea1a06
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: general_store;§16
+    village_hall:
+      fingerprint: 453351b179fc7270cfb9c66249edd1d3e927680c6ab8d6ba29ee807e110be5f6
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: village_hall;§17
+    private_room:
+      fingerprint: ad8eb5c16a34937f9be350fc818c8429da9f548c594f28442a1d6fb0f12fdfc8
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: private_room;§81
+    hidden_alcove:
+      fingerprint: b3ebb567985602b64981e303ccce9128f7754dde790bf49a069f785d9939a7af
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: hidden_alcove;§153/§165
+    workshops:
+      fingerprint: c89f9f3d46c5e5be78ef57ab64f11a2ef58f9d8304726dcd247d3fb748c1aa84
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: workshops;§219/§225
+    locked_workshop:
+      fingerprint: 2be4de689cd08e68d5ebc86245cb3060a39fef4c775c7c73cbbbf68ecf730f7f
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: locked_workshop;§250/§256
+    beacon:
+      fingerprint: b0faa0c0aece5b909ef8be62e1c34611d2353d81935bf37b49b68a05e068d225
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: beacon;§57;§78
+    old_church:
+      fingerprint: d35529887dd53295c6de2f3f89b4298e1d95fb14110b984767a4b6d63930bc42
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: old_church;§34;§176
+    school_alcove:
+      fingerprint: 03f62bd7f6362ce123e00518ccd71fd3dfa2030cc1493eaad340b31588b4abf3
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: school_alcove;§70
+    cell:
+      fingerprint: 10305a3120cb8eb2bcb1eb2aaf05df01e7f8e3c716bdf2f30cbd7ed53eb52a9a
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: cell;§108/§205
+    cliff_foot:
+      fingerprint: 08247fbd9d6462fee3d65009e80eaae41d2b156613e88ba094204e42e4d8c304
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: cliff_foot;§107;§112
+    east_road:
+      fingerprint: 4642babbfc5103df0c95fb9897c660441cc67ef21da720fc35e8f6cb164c2eee
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: east_road;§142;§181
+    arbogast_cave:
+      fingerprint: e381d5f0e567790526acfb10e40779ef6843540a51adeae0c0eb3fa416fc4f54
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: arbogast_cave;§142;§221
+    forest_road:
+      fingerprint: 1b9e6c11e63731d31f135fb9a39dcb9f4ec302937cd193deb0bb18d5b09ff0d1
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: forest_road;§85
+    hilltop:
+      fingerprint: 4e7b9ec31f50df572013098d57c067bf165e75c4b3c18279421a08c1b48be14a
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: hilltop;§60;§223
+    beacon_platform:
+      fingerprint: 0ae3dc582fd6595fb93afd90c0d260f3aacae8611f887fa530f744314609ec3c
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: beacon_platform;§18
+  scenery:
+    place:hometown_stop:
+      fingerprint: 602d20bbd6f6d3fce91a05de581004bcce42a1fc89e8f0223ae2ff79fa7bfc0f
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 路边车站，已有露天、街道，原文未写天气（只提到夏末烈日，无雨雪雾），保留原状
+    place:coach:
+      fingerprint: 889f7005eee8904782a13ba0e2347ad1a3a9e66915e4292f90d41a9e98d0afa6
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 车厢内部，已有室内、building，保留
+    place:village_edge:
+      fingerprint: ba1ad7644fdd42778d62b1ecd559199340e4f5163cff7272371dc63c73042fc9
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 村口空地，露天街道，傍晚无特殊天气，保留
+    place:central_street:
+      fingerprint: d8c8e291eb473cfa6fc1d1f214de3073338a079d557bd0867ff99c0b4feef3bb
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 露天街道，夜间浓云只是暗，未写雨雾，保留
+    place:ledbetter_house:
+      fingerprint: 4662a6aa8834cc223fa03ee06d18333388278b7500de05443d5743418c2a4651
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内房屋，保留
+    place:guest_room:
+      fingerprint: 5fa1e5790c077b87ef47482b3e9b73495d21d1ef36efc11a2ef93d269fedf4d4
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内客房，壁炉火是梦或药烟，非一眼可见的天气，保留
+    place:may_bedroom:
+      fingerprint: c37eec661dbeddc5330f4a1b86f809f13ace1235710a9ce62702d144f86f3d22
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内，保留
+    place:cellar:
+      fingerprint: 5b98fb8b54977a60bc2bd9486376df13b7cfe179907c7a92edbdb9d41659a959
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 地下室内，保留
+    place:general_store:
+      fingerprint: 1090d42d4e253410e44a9e3e7aacf6d48e2ad32f473bc66a7dc7ce99fadba8c2
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内店铺，保留
+    place:village_hall:
+      fingerprint: 5f519ea687aeb3cfdc29b39f03e4508bf1dd85d2af59bb8485c3b9aa274316ec
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内大建筑，保留
+    place:private_room:
+      fingerprint: e6690592d2f9afd29293ea4a04d771ec1294a4f311de1ce14a6aaf7d70d1be0c
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内，保留
+    place:hidden_alcove:
+      fingerprint: 287f39dffb6e3785dbf47d9ec07f3aa27b8924943ac59aaec26888fe44ee48cb
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内暗室，保留
+    place:workshops:
+      fingerprint: 5ba24ba616239f351879af276be29e569875ba0d506fd83ebf830d598fc89dcd
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 露天大院，周围是工坊建筑，现有设置符合原文，保留
+    place:locked_workshop:
+      fingerprint: 7c6bd0190e925ba4cccdba547698b61660420c2cb3c9f30e5379be6ae2a7bd47
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内工坊，保留
+    place:beacon:
+      fingerprint: d01ad9699a0beccd1876f7b6030811020d777bebe288f84052fb029586acbb0e
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 露天，街道交汇处；火光只在D3夜晚仪式时出现，白天不适用，不加天气
+    place:old_church:
+      fingerprint: 17323ba1677eaa73e6174e81ab2be464dca70911b435f7f3fcdf32a1e5f267bc
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 半塌教堂与悬崖墓地，现有露天、墓地设置合适，保留
+    place:cell:
+      fingerprint: 2ae67146129673ccec5272d6f04b38f76534958ce5acd1aa8010aed04a521d1d
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 室内囚室，保留
+    place:cliff_foot:
+      fingerprint: a1a4b0f139b3e998e40fe81503f188fcbd637a507841c2b76c2a030da1dbbf75
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 崖下岩盘露天，保留
+    place:east_road:
+      fingerprint: 4cb0fc8759bbaf690b4aefddb66db1685965786749d52682a466e9edb3f5278b
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 露天田野山路，保留
+    place:arbogast_cave:
+      fingerprint: 6a6b16bd3f3532e13f65c25c94ae29b9c1b9b7f981999c82038c233bf8fb9b70
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 天然山洞，室内，保留
+    place:forest_road:
+      fingerprint: 16b72ef5227725ce53ddd83d009b7a4b852f11f5486a5d001bed247766eda9b0
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 露天林间路，原文有落叶秋色，无具体天气条目指向，保留
+    place:hilltop:
+      fingerprint: 59b4da0e3539e65be474f8d57541c09e30117b0ba743ec7525f630fb4428aecd
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 露天山顶，保留
+    handout:h_bus_ticket:
+      fingerprint: 36e1435b7ac61256c57af2424bab908ff7eebc84d6431dcd9c9f6134a82e4f9b
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 车票，现为card合适
+    handout:h_village_map:
+      fingerprint: 479587d9151393205d41ca505b397abbfe8bc6b2f195177051379a8e5a1bbb23
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 地图，card合适
+    handout:h_fomalhaut:
+      fingerprint: 76c36dc68b68501f3a2de16736e67802179e83e80f3f65556a15b7841ce74385
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 星图，card合适
+    handout:h_manuscript:
+      fingerprint: a0e73b2358193e817ccfe46cfc518a2a99f6e7af96838e86114e6a6bbddf6b44
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 手写论文手稿，现为diary合适
+    handout:h_fire_tome:
+      fingerprint: dd9b85e3eaa1efcecfad2a0e69ab0e9a372cbc7c2af04109a9749b544b990260
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 典籍书末注释，book合适
+    place:beacon_platform:
+      fingerprint: 87245448811232c43324bd6ed0f2bce216545bea94740713487ff3cad434112a
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已核对露天、地面与原作天气
+    place:school_alcove:
+      fingerprint: 5dde96f548e443a7f13bbe28189525db7e907b3a8d1b7b005919a496be0485ae
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已核对露天、地面与原作天气
+  npcs:
+    may:
+      fingerprint: 3b04f06fd0d22de595f516a172dda2a917517401afe6607a0951ecf4b94dd0b6
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 未通名短称呼（卷发的妇人）、想要、性格、说话方式、知道（§14/§21/§31/§138/§3/§218）都已写好，没有标“缺”的字段，按原样保留。
+    ruth:
+      fingerprint: bebdabfe7a6b8f588df5b8c917d4d0f0523841a2992254c62d871264ccbdae68
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 各字段均已完整，保留原状
+    silas:
+      fingerprint: c7aa9c2dd6f9599dae01af3323295e22854a4a4093ee0268383be287b7ae37ef
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 未通名短称呼（瘦削的长途车司机）、想要、性格、说话方式都已写好；知道一栏已有去奥西皮的路线，还有§71里他说没听说过阿卡姆、只去过一次波士顿。没有空字段。他装故障、到灯塔上露面这两件事已写进秘密，不再重复补进知道一栏，按原样保留。
+    winters:
+      fingerprint: f02378bfee105f00fe2ca2c44a998225006d2885bcca545f0e2f325bc981bfab
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 各字段均已完整，保留原状
+    arbogast:
+      fingerprint: d12755c5f35dd7896ea670f23db342e277d276679474f1478c9a0fd644a30dde
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 未通名短称呼（用布裹着头的老人）、想要、性格、说话方式、知道（§169/§221/§237/§245）都已写好，没有空字段。咒语的念法已写进秘密（§175），按原样保留。
+    craftsman:
+      fingerprint: 7a3a936d43c91918deb15c433c6762a9a766d9225fd18abda4d5a72de5a12970
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 未通名短称呼（系深色围裙的大胡子）、想要、性格、说话方式、知道（§20 尸体是村民、自然死亡、节日要用；§96 让西拉斯捎包裹）都已写好，没有空字段，按原样保留。
+    store_keeper:
+      fingerprint: 300b4be2b641ab0bcd9c2f2bf3b22bbb435874542080ce199397214662219a02
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+    old_gentleman:
+      fingerprint: 7dce0b6f18b7e06ca609f756b9b4a816d4289be84b3486e587aa94a9ac9bd2cf
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+    grey_woman:
+      fingerprint: ba300823011dc14e5e6daff929cf6a2d8a5ffd48b56b3544df8b8514ec1adb39
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+    watchers:
+      fingerprint: 7efb55a8ad8cfa6e7ecc6724e7657b8094ed828b44a10e597fb3bb10cb0441ff
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+    village_guards:
+      fingerprint: a377f6ccd1bb42ef45b71847fc987964886e8cc392217465c75eb4b6fc53a001
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+    crone:
+      fingerprint: 36be0761e113826911039bb3c31c2b39a1abaf6c7961f0efcc700e1ad103ee51
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: called、性格、说话方式、目标均已有；knows 为“缺”，原作 §108 只写她端水到囚犯嘴边、视线不看人，没有写她知道任何案情，不编造，保留原状。
+    assassins:
+      fingerprint: 8b53a9472159938227152d940fa1da061bc191d26ab9998547ec2870e12c7ca9
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+    coachman:
+      fingerprint: 237b838e08b5f0c1a73f1c0934a707aa4780fb6e056f70f182a44a2f726da783
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+    old_coachman:
+      fingerprint: 009c83d21d315f51c84fd1dda0ba8ff3463d247d3f9dbe2c0e339a889bf6e363
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已整理人物资料及认知依据
+  variants:
+    hometown_stop:
+      fingerprint: 199992b1d9b62ce36ab4f36a93b96c7c8eed33a087afc1c392f7125f384c9ce8
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 原文只写长途车到站和司机进出烟草店，司机上车后即离开，没有需要另画的来去之物；无以人物在场为条件的稳定差分。
+    coach:
+      fingerprint: 29306104176c11325f7d892a428d795066619b399d8ea6efed759e398516400a
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 车厢是西拉斯驾驶的固定场所，原作只有拖拉机急转（事件、不改变车厢画面），无来去之物。
+    central_street:
+      fingerprint: 23c577de83a1d18e85da4d45aeaad9a1734e596d1d5ff066b4598f3321f0d4cb
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: D3 盯梢村民、游行人群虽出现，但盯梢者四人是追逐而非固定场景，游行画面已由灯塔差分覆盖；黑影只一瞬，不画。
+    ledbetter_house:
+      fingerprint: b3b6e7839f8b2ddf4ad20f713d4ac6581fe22cf0183ae88262436155dfec8ce1
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 原文只有梅的日常炊事、寄存行李，没有时有时无的明显画面变化。
+    guest_room:
+      fingerprint: 44ed382b8719016e9244ce82f095f45d2551829b28582a2507aeed13f932ef09
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 壁炉点黑粉末只有淡淡烟气，原作未写可画的明显变化；梦中火焰是幻觉，不画。
+    may_bedroom:
+      fingerprint: 1f2b816533dff70c6c33914099d16c01a65c977f435159bf2a71e8a8b14024e0
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 床被拖开露出活板门是调查员行动造成，非来去之物，且涉及线索，不画。
+    cellar:
+      fingerprint: 430c2c478f96e52237a71701b6029538e0a266978c1202bd6bfbb43f5095f6a1
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 行李堆固定存在，不是时有时无的东西。
+    general_store:
+      fingerprint: 0e765f4459658c41ca56df23ba9577c9ea1aac661f43461e599c50c024bf5158
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 'D3 晚墙边的自行车原作写到，但条件只能写成某人在场，缺少合适的人物在场依据（店主不在场也成立），无法用 at: 条件准确表达，保留原状。'
+    village_hall:
+      fingerprint: fb1b796deec101949db764e9a05799e217b77a030415f83681410b0ae3f42521
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 上午锁门、下午开门，画面差异小，且依赖灰衣女人/文特斯的在场，不构成明显差异。
+    private_room:
+      fingerprint: 64762b5ae30206c50ca55e48e0c7ea8f927e96b24deccfb846065f30b8b608e3
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 书架、电报机固定；暗门打开属于调查员行动。
+    hidden_alcove:
+      fingerprint: 721a18c69dda9012909c3c984c3932c575535409a32c22cbdeef164f80b12a15
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 窗户打开与否由调查员行动决定，无来去之物。
+    workshops:
+      fingerprint: e7c92633adc178d8e778f8cf5867c682e072ced4ef6f96e443852e53b3b73b92
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: D2 工匠劳作与 D3 空无一人的差异原作写到，但人物的脸/身影不属于必画内容，且工匠常驻，条件无法区分，保留原状。
+    locked_workshop:
+      fingerprint: a24e0cd77da1533c66c55d81c71bad7860b95b7b5de7fde87e7840e434f95ba0
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 红布人体与石板一直在，且不得剧透其真身。
+    old_church:
+      fingerprint: 422f472e1cd456476d990910bd2293d4adf740921e8337555e95c0bbafc7d617
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 马的痕迹微小，不成明显画面；屋顶坍塌是永久变化。
+    school_alcove:
+      fingerprint: 21893ff18627b7059cad66fc7a5aa74a0fae0bd61b920c33619a627b8e6313e5
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已有差分 alcove_scorch：条件是知道线索 c_school_scorch，画面是草地上凝固发黏的斑块和熏黑的线条，对应原作 §70。原作写到在这里来来去去的，只有 D2
+        晚阿博加斯特讲咒语和遇刺（§169/§188）。这是人物在场的一次性场面，人物由场景角上的小像显示，壁凹本身的样子不变。每个地点最多一条差分，所以保留原状。
+    cell:
+      fingerprint: acabf11c7a9272eab4f642a04dc712ef0af2157a9b186f33b3f6ccd6edbc1c76
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 囚室只有床和窄窗，老妪送水短暂，无画面差分。
+    cliff_foot:
+      fingerprint: 77344181c09c12cbfea10c57b8ff7b09a77033261c7fbe7b9802e828a1ee0037
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 原文只写梯子、棚屋和巡逻的人，未写固定的来去之物。
+    east_road:
+      fingerprint: 5188131c179c4037a343bb5f3ffaa374439d80f6489f3fc35b1bc3e473cba3a5
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: D3 守卫把守村口原文写到，但村口守卫是人物，脸由小像显示，另画农具人群条件依据不足，保留原状。
+    arbogast_cave:
+      fingerprint: 4e7ffd09ad4470ec89467591449f91b419280e5349377053a07a77fc7374ba31
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 山洞内景固定，只有老人在场，人物不必画进。
+    hilltop:
+      fingerprint: 80bc3ca4898602aad62fd130aad10ba2ebdbcf8a1edc0192bf2f55f8bd100513
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 远处灯塔燃烧是逃脱结局的一次性画面，不属于可反复成立的状态。
+    beacon_platform:
+      fingerprint: 536bd242b6c0a55ba233c71fd0db354c1470200d44180cac6468cb957672c66d
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 点火、锁链是仪式事件的一次性场面，已由 e_ignite 处理，且燃烧不作永久差分。
+    village_edge:
+      fingerprint: 8e4d192a0e3121867bec24ea8e8e73452ed064a23e7aeb1f99ce721378e8113c
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: e_breakdown
+    beacon:
+      fingerprint: c28931018bbf493997f0062063c98cfc033f4ae7679829f728f172445060877b
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: e_procession
+    forest_road:
+      fingerprint: 0027a128a1196a37c17a3832beafccb17f60f1fc4251ab355d2f35761118b584
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 已有差分：车夫在林间路时（at:coachman:forest_road），画面上多一辆双马马车和一盏提灯，对应原作 §152/§211/§216 的马车遭遇。原作在这里的另一个场面是燃烧的兽群（§264/§5）。那是怪物，而且兽群事件已经用
+        sights 单独显示，不画进背景，以免剧透。每个地点最多一条差分，所以保留原状。
+  present:
+    e_tractor:
+      fingerprint: dbf08e8bcdd506cfa62812cfea464152d7148a7ceee65e6264ecb076aafcb777
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §59/§261/§71：西拉斯开车，猛打方向躲开拖拉机，随后道歉并开始和调查员搭话，人就在车上。开拖拉机的农民不是 NPC，不写。
+    e_breakdown:
+      fingerprint: 42aeeec61db9e997bb62f73a715c6ec7d6b7fbef3a6b2c3ab20fc48f52019134
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §144/§194：西拉斯把车停在空地上，下车掀开发动机舱当面检查，还当面向调查员解释故障。
+    e_watcher:
+      fingerprint: da0527385d03504dbd17628763f8c65f55b14b60834b09ac81ec5a4698eca116
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §86/§121/§141：二十码外漆黑的身影原文没写是谁，只说“它的脸好像有哪里不对劲”。它也不是 D3 才出现的四个盯梢村民（watchers，§98）。原文没给身份，所以不推断成任何
+        NPC。
+    e_bus_leaves:
+      fingerprint: 45ae4924a80e5ba07afe13def6e236b52a76b2271f83ed500a14d466ad0e11ee
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §192：西拉斯天刚亮就开车走了，调查员不在场，事后才听过路村民说起。那个过路村民不是 NPC。
+    e_lunch:
+      fingerprint: 716e433cb3724d5b14a9b1671dcc90968f5b31229f151c26494b2e1f1824cc27
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §3：梅带着露丝在街上碰见调查员。露丝跑过来耳语，梅当面搭话、邀他回家吃饭。
+    e_arbogast_night:
+      fingerprint: 39730b6f6fcbc0f1ee9458bab73b2db5a88d93975bf4673de6f9e2c4cc67c202
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §200：等了十分钟后，阿博加斯特从门里伸手抓住调查员，当面说“他们有人过来了，跟我来”。
+    e_assassination:
+      fingerprint: 8eb497bef4323999318b2711f67b9fdf2fc09e8bffd4edc62453ddff7646e327
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §188/§195/§203：刺杀者当面扑上来，抱住阿博加斯特的咽喉，另一个持钝器的黑影攻击调查员。阿博加斯特就在调查员眼前被刺。
+    e_arbogast_cry:
+      fingerprint: e4cba2c729722127fc2937a1b184e217f0acbeb4cea76b95eebf39781c51bf6a
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §182：阿博加斯特已经往东盘山路走了，调查员只在回梅家的路上听到远处模糊的叫声，没有人在眼前。
+    e_may_night:
+      fingerprint: f928737883155e0718768632747e95498a2884dca6050d49a60d694454e61aab
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §230/§248/§254/§260：门把手转动，是梅进客房到壁炉边摆弄东西。调查员拉开门就和她当面说话，假睡也能看见她蹲在壁炉边。事件条件要求调查员在客房，梅当场进了这间屋子。
+    e_d3_guards:
+      fingerprint: 566c7bd7a389fd6bd0a5ff829c47093d62f61defe2d2ed96d6b56d9124e1b695
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §7/§78：事件只是交代 D3 一早村口有人把守，没有要求调查员在场。村口守卫要调查员自己走到村口（§7）才看得见，所以本事件不写。
+    e_capture:
+      fingerprint: 87ad7c0128811520100962933861f538325a53b7b8797e152d093c1f8280e07a
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: 这是 AutoKeeper 归并出来的抓人事件，原作有多种途径（§2/§82/§101/§139 等）。动手的是没有点名的村民，不能对应到某个具体的 NPC。囚室老妪（§108）是关进囚室以后的下一场才进来，不算在这件事里。
+    e_procession:
+      fingerprint: a55ef4e917cbab365972088a63038e3e81d2c06f6ed01663e3c8a45df78a9085
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §117/§10/§33：露丝扮作第三个舞者，当面亲吻调查员并耳语。调查员在人群里认出梅和站在她旁边的西拉斯。戴眼镜的文特斯登上高台，当场演说。
+    e_ignite:
+      fingerprint: 5fd1ad874644b0f5cf5388845649ff37fb154bb96aae24058feb083c42168525
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §33/§53：点火时梅和西拉斯仍在灯塔前的人群里，原文写调查员看得见他们。高台上的男人（文特斯）喊来两个年轻人扑向调查员。那两个年轻人和举火者不是 NPC。
+    e_carts:
+      fingerprint: ca695c5f122917b1924df15e682c6706a16c409571a1710a444d97717eb33454
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §211/§216/§235/§241：两个车夫驾马车从身后赶来。潜行成功时，调查员看着举提灯的车夫驾车驶过；失败时年轻车夫喊话、下车搏斗，年长车夫当面说“你赢了”。
+    e_beasts:
+      fingerprint: 0b1425b480827ac5d805773ae2889c751f53a1bed9a30d37a169138cb92272af
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §215/§264/§5/§269：拦路的是发荧光、会自燃的兽群，是怪物不是 NPC。后来把人送回去的农夫（§13）也不是 NPC。
+    e_tree_dream:
+      fingerprint: b316f333d52df782980df3e14e00abd32465389b2c36901ebe6f3985b5ff958b
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §228/§252/§258：调查员一个人在树上做火焰之梦，没有 NPC 在场。农夫不是 NPC。
+    e_hilltop:
+      fingerprint: f3542d3eaf7608085991bc6e8e50f1b68e23cdfec6bd5a38b8c5d66bc3fcc491
+      source: 8bc1bde32ec99f42e272fd64ddd13079d2f8f187e5ee477c66393ab28e6430cd
+      reason: §223：调查员一个人在山顶回望燃烧的灯塔和移动的星星，没有 NPC 在场。
+history:
+- when: 四十年前
+  text: 据阿博加斯特所说，烬头村在四十年前就已被来自群星的火焰毁灭、被星星吞噬；火焰被“送走”，此后必须的牺牲一年又一年地推迟，演变成每年的火焰节。村民的父母辈知道这个真相。这是阿博加斯特的说法，原作没有第二个来源。
+  who:
+  - arbogast
+  where: beacon
+- when: 多年前（原作未写具体年份）
+  text: 阿博加斯特原是村里的“中转者，也是解密者”，后来文特斯用花言巧语改变了仪式，夺走了他的位置。村里人对他说要么滚要么死，他带走了古老的咒语，躲进崖下山洞。他自己试过用咒语，因此失去了集中力。
+  who:
+  - arbogast
+  - winters
+  where: arbogast_cave
+  known_by:
+  - winters
+- when: 多年前（原作未写具体年份）
+  text: 梅的丈夫被村里人带走，这是露丝的原话；原作没有说明他是否也是在节日上被献祭。梅对外只说自己是寡妇、没有丈夫。
+  who:
+  - may
+  - ruth
+  where: ledbetter_house
+  known_by:
+  - may
+  - ruth
+- when: 历年（西拉斯跑这条线已十五年）
+  text: 西拉斯故意让长途车在节日前夕抛锚，把孤身旅客留在烬头村。梅收留这些旅客、寄存行李，行李堆进卧室床下活板门通往的地窖，现有二十来件，标签上有八九个不同的名字；这些前人都没能离开。
+  who:
+  - silas
+  - may
+  where: cellar
+  known_by:
+  - silas
+  - may
+  - winters
+- when: 今年一月到八月
+  text: 三名村民先后死去：本杰明·克拉默（1月19日）、亚伯拉罕·霍林斯沃思（4月22日）、玛利安·菲普斯（8月6日）。遗体被防腐、用绷带裹好，脚趾挂着标签，藏在村西北角上锁的工坊里，红布盖着，留作今年节日仪式用。工匠说他们是自然死亡。
+  who:
+  - craftsman
+  where: locked_workshop
+  known_by:
+  - craftsman
+  - winters
+agendas:
+- npc: may
+  goals:
+  - 把外来人安顿在家里，平平稳稳留到节日那天
+  - 护住露丝，也管住她的嘴
+  steps:
+  - id: may_take_in
+    text: D1 傍晚调查员按西拉斯指的路来敲门，她应门，请他进屋喝茶，报个公道的价钱留宿，顺着话头聊西拉斯、节日；问到节日时直说是后天晚上的火把游行与灯塔
+    meet: true
+    once: true
+    only_if: 调查员来到她家门口
+    source: ledbetter_house §4/§14/§21/§267
+  - id: may_hospitality
+    text: 调查员想多聊时，她热情应对：谈自己是寡妇、有点积蓄、欢迎旅客；取悦成功才说出村里“不排斥任何人，只刨掉自己选择离开的人”；取悦失败她转成导游式介绍村子（工坊、面包），然后打呵欠去睡
+    meet: true
+    once: false
+    only_if: 调查员与她闲谈；取悦检定的结果由守秘人裁定
+    source: ledbetter_house §31/§39/§51；c_may_life
+  - id: may_morning_out
+    text: D2 早晨她留纸条带露丝出门几个小时；调查员带行李回来时她在洗衣服，让他寄存行李，说村里没人有车，可问文特斯或工匠，“不管你有没有钱，我都不会让你睡在马路上”
+    when: D2 05:30
+    meet: true
+    once: true
+    only_if: 调查员D2早上回到她家
+    source: ledbetter_house §64/§166/§218
+  - id: may_lunch
+    text: D2 中午在街上碰到饿了的调查员，邀他回家吃饭，说文特斯下午才在会堂，“房门没有锁”，把话岔开不让露丝多说
+    when: D2 12:00
+    meet: true
+    once: true
+    source: e_lunch §3
+  - id: may_go_out_ruling
+    text: D2 晚洗碗时调查员以西拉斯朋友特洛伊为由请她出门：取悦、说服、话术择一，成功她半信半疑地出门（设 ruth_alone），失败她说明早再说并要管教露丝
+    meet: true
+    once: true
+    only_if: 调查员当面向她提出，并选定一种交涉方式
+    source: ledbetter_house §138/§145/§151
+  - id: may_go_out_result
+    text: 该次交涉检定成功后，梅出门几分钟，露丝可单独说话
+    only_if: 调查员当面提议后，守秘人裁定取悦/说服/话术成功
+    ruling: true
+    source: ledbetter_house §145
+  - id: may_powder
+    text: D2 夜她到客房壁炉点燃含莨菪的黑色粉末让客人昏睡；调查员不睡并撞见，她说“怕你冷想生个火”，被堵住时说那是帮助睡眠的东西、“明天对你很重要”、“我还要照顾女儿，我没有丈夫”；被吓住失败则大怒，说街上住着十八个人
+    when: D2 23:00
+    meet: false
+    source: e_may_night §157/§230/§254/§260/§19/§32；c_may_drug_claim
+  - id: may_at_beacon
+    text: D3 晚她涂黑脸，随游行到灯塔，站在人群里看调查员被烧
+    when: D3 20:00 & flag:captured
+    does: at:may:beacon
+    source: e_procession §33
+- npc: ruth
+  goals:
+  - 让外来人在节日前逃走
+  - 自己几年后也会被带走，怕母亲
+  steps:
+  - id: ruth_overheard
+    text: D1 夜梅起身时她在门后偷听，被叫出来问好，说“很高兴见到你”后被打发回屋
+    meet: true
+    once: true
+    source: ledbetter_house §63
+  - id: ruth_street_warning
+    text: D2 中午在街上先高兴地跑向调查员，又忽然收起笑容，低声要他节日前就走，随后躲到母亲身后，用眼神恳求他别说；调查员当面问她，她只说节日又亮又热到处是火
+    when: D2 12:00
+    meet: true
+    once: true
+    source: e_lunch §3/§9；c_ruth_warning；c_ruth_fire
+  - id: ruth_truth_alone
+    text: 只有梅不在场时才从门缝后低声说实话：是明天（D3晚）、每年都有、他们带走了她爸，也会带走你，你一来就被盯上，过几年轮到她
+    when: flag:ruth_alone
+    meet: true
+    once: true
+    only_if: 调查员当面与她单独说话，梅确实不在
+    source: c_ruth_truth §145
+  - id: ruth_third_dancer
+    text: D3 晚她扮第三个舞者亲吻调查员并耳语：外貌检定成功时说已放松锁链、火高到能藏住你之前别逃（设 chain_loosened）；失败时只听见祝福的套话
+    when: D3 20:00 & flag:captured
+    only_if: 调查员被押到灯塔前，外貌检定由守秘人裁定
+    ruling: true
+    source: e_procession §10/§148
+- npc: silas
+  goals:
+  - 把孤身乘客留在烬头村，天亮就走
+  steps:
+  - id: silas_breakdown
+    text: 在村口假装故障，说是油压或摔坏，要等气缸凉，让他去梅家过夜、明早八点回来；被质疑就大怒摔下行李走进黑暗
+    when: flag:breakdown_done
+    meet: true
+    once: true
+    source: village_edge §194/§251/§257；c_silas_stay
+  - id: silas_leaves
+    text: D2 天刚亮独自开车离开，三四天后才回
+    when: D2 05:30
+    source: e_bus_leaves §192
+    meet: false
+  - id: silas_at_beacon
+    text: D3 晚他站在梅身旁，涂黑脸出现在灯塔前的人群里
+    when: D3 20:00 & flag:captured
+    does: at:silas:beacon
+    source: e_procession §33
+- npc: winters
+  goals:
+  - 让节日照常举行，把外来人稳在村里
+  steps:
+  - id: winters_closed_morning
+    text: D2 上午会堂锁门，由灰衣女人打发调查员下午再来
+    meet: true
+    once: false
+    source: village_hall §84
+  - id: winters_coffee
+    text: D2 下午调查员敲“私用”门或看布告板时他出来，请喝咖啡，聊村子是“交易”、父亲留下的责任、夕阳后看星空；问到电报就说线坏了两周、后天或有人来修、长途车三天后往西走，可托维修队捎人
+    meet: true
+    once: true
+    only_if: 调查员下午来会堂
+    source: village_hall §11/§24/§37/§49/§56；c_telegraph；c_winters_trade
+  - id: winters_library
+    text: 被问藏书室时说书属于全村，“私用”牌只防集会时进出；允许调查员选一类书读一个下午；太阳将落时站起，信用评级成功再留半小时（不带书走），失败则请次日再来并一同离开锁门
+    only_if: 调查员询问藏书室；信用评级由守秘人裁定
+    ruling: true
+    source: private_room §62/§68/§99/§105/§111
+  - id: winters_speech
+    text: D3 晚在灯塔高台上致辞，感谢拯救村庄的人，称调查员将代替村民被从天而降者带走
+    when: D3 20:00 & flag:captured
+    does: at:winters:beacon
+    source: e_procession §33
+- npc: arbogast
+  goals:
+  - 找一个能把咒语念出来的人，结束烬头村
+  steps:
+  - id: arbogast_cave_meet
+    text: D2 白天在东盘山路被调查员撞见，或招手或逃跑；进洞后拉下头巾，自称阿博加斯特，听调查员说来意后讲四十年前的毁灭、阿布纳基人、旧日支配者、村民父母知道真相；情绪突变时可能抓石头砸人
+    meet: true
+    once: true
+    only_if: 调查员在D2与他相遇并跟进山洞；是否追上由幸运/对抗敏捷裁定
+    source: east_road §115/§127/§135；arbogast_cave §191/§199/§221
+  - id: arbogast_appointment_offer
+    text: 他看出调查员“有以前那些人没有的东西”，约晚九点在另一边的坟地见面，要他别被跟踪、别想逃走
+    meet: true
+    once: true
+    source: c_appointment；arbogast_cave
+  - id: arbogast_pickup
+    text: D2 21:00 他不在坟地，等十分钟后从门里伸手拉住调查员，带他去学校后的壁凹
+    when: D2 21:00 & flag:arbogast_appointment
+    meet: true
+    once: true
+    only_if: 调查员在约定时间到过教堂墓地
+    source: e_arbogast_night §200/§169
+  - id: arbogast_teach
+    text: 在壁凹讲控制的仪式，并教咒语；咒语核心要连念三遍，叮嘱“只要你还有活路就别念”；调查员拒绝则憎恨地说“记得我曾给你触碰永恒的机会”，往东盘山路离去
+    meet: true
+    once: true
+    only_if: 调查员已在晚间与他会合
+    source: school_alcove §169/§175/§182；c_control_ritual；c_chant
+  - id: arbogast_killed
+    text: 咒语课结束后被村里派来的刺杀者袭击身亡
+    meet: false
+    source: e_assassination §188–§236
+foreshadow:
+- id: fs_edge_glance
+  hint: 西拉斯掀开发动机舱盖，嘴里骂着，眼睛却先朝巷口瞟了一下，才低头看机器。
+  where: village_edge
+  pays_off: k_silas
+- id: fs_street_windows
+  hint: 低矮的窗后总有人影站着不动，你一抬头，窗帘便落了下来。
+  where: central_street
+  pays_off: k_trap
+  stages:
+  - hint: 街上的人比昨天少，可每扇窗后的目光都更重了，没有人和你对视。
+    when: D2 12:00
+  - hint: 一早街上满是人，个个抱着柴捆，脚步安静而整齐，都朝同一个方向走。
+    when: D3 06:00
+    flag: sign_fs_street_windows_2
+- id: fs_house_footsteps
+  hint: 夜里，门外的木地板偶尔轻响，有人在你的房门外站了一会儿，才慢慢走开。
+  where: ledbetter_house
+  pays_off: k_may
+  stages:
+  - hint: 梅洗碗时把同一只盘子擦了很久，目光总落在你的鞋和放行李的角落。
+    when: D2 17:00
+- id: fs_beacon_warmth
+  hint: 秋天的傍晚冷风刺骨，那座黑铁的灯塔远看却像比四周的空气暖一些，站近了，耳边有极轻的嗡鸣。
+  where: beacon
+  pays_off: k_fire
+  stages:
+  - hint: 灯塔脚下的草叶一圈枯黄卷曲，朝塔的方向倒伏。
+    when: D3 06:00
+    flag: sign_fs_beacon_warmth_1
+- id: fs_east_road_voice
+  hint: 风从崖下带上来断断续续的低语，像有人在反复念着什么，听不清字句。
+  where: east_road
+  pays_off: k_fire
+- id: fs_workshop_drag
+  hint: 那扇关着门的工坊门前，尘土被拖出几道宽宽的印子，又被人用扫帚匆匆抹过。
+  where: workshops
+  pays_off: k_trap

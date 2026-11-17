@@ -1,0 +1,484 @@
+history:
+- when: 两个月前
+  text: 政府与海洋渔业局联合发布公告，要求一个月内清退石坡尾内所有渔船，渔民全部上岸，以便清淤改造、规划商区。
+  where: shipowei
+- when: 一个月前
+  text: 石坡尾的渔船被回收，阿宝的小渔船也在其中；她仍每天清晨来工地边查看。
+  who:
+  - abao
+  where: shipowei
+- when: 8 月 4 日凌晨
+  text: 施工人员在排洪箱涵的地下排水通道里清出一道未标记于任何图纸的老旧闸门，闸板一侧脱轨倾斜，海水和淤泥从缝隙涌入排水设施（据《石头屿晚报》报道）。
+  who:
+  - chen_gong
+  where: shipowei
+- when: 开局前一天
+  text: 工地附近工人养的几条狗喝了排水通道里冒出的水，当晚就喘不上气。
+  where: shipowei
+- when: 开局前一天
+  text: 阮施宁和黄懿一起写作业时握笔的手在抖；她在图书馆魂不守舍，在家门口盯着排水沟里的水看了很久；她把日记本交给黄懿保管。
+  who:
+  - ruan_shining
+  - huang_yi
+- when: 开局前一夜
+  text: 月亮升过石坡尾废弃船厂的烟囱时，阮施宁按约先进了海洋乐园，随后爬了出来，独自走进排水通道。
+  who:
+  - ruan_shining
+  known_by:
+  - ruan_mother
+  - ruan_father
+relations:
+- a: huang_grandma
+  b: huang_yi
+  kind: 亲属
+  value: 80
+  why: 她希望孙女远走高飞
+- a: jianfu
+  b: liying
+  kind: 敌对
+  value: -40
+  why: 留下派与回归派对“变化”的分歧
+- a: abao
+  b: lao_zhang
+  kind: 信任
+  value: 50
+  why: 老街坊，阿宝认识看门的老张
+- a: yang_zongxi
+  b: chen_gong
+  kind: 雇佣
+  value: 10
+  why: 约好今晚采访
+- a: ruan_mother
+  b: ruan_shining
+  kind: 亲属
+  value: 70
+  why: 乐于见到女儿“回家”
+agendas:
+- npc: yang_zongxi
+  goals:
+  - 晚上七点多在石坡尾采访陈工
+  steps:
+  - id: invite
+    text: 被调查员接近时，邀请他们一起去石坡尾看看，并提起小记者班
+    meet: true
+    once: true
+    source: yang_zongxi
+  - id: treat
+    text: 前往工地之前，请同行的孩子在夜市吃点小吃
+    when: flag:yang_joined
+    meet: true
+    once: true
+    source: yang_zongxi
+  - id: cover
+    text: 孩子们被成年人怀疑时，以“报社小记者实习”为由替他们解围
+    when: flag:yang_joined
+    meet: true
+    once: false
+    source: yang_zongxi
+  - id: go_interview
+    text: 赶去石坡尾赴约
+    when: D1 19:00
+    does: at:yang_zongxi:shipowei
+    meet: false
+    source: yang_zongxi
+mechanics:
+- name: 深潜者血统转变
+  rules: 调查员每次接触喷泉、井水、潮湿的地下水道或任何食物与水源时进行体质检定，失败则增加 1 级转变。1 级起出现难以解释的征兆（皮肤长时间保持湿润），并视为“已开始转变”；3 级时开始听到大海的呼唤。已开始转变的调查员在闸门口收到阮施宁的邀请。守秘人事先不让调查员知道自己有血统。
+  why: 原书第 5 页“回家的诱惑”
+  plugin: transformation
+  runs: 插件
+- name: 异变触发
+  rules: 调查员探索任意 2-3 个地点之后遭遇异变事件；插件在到过两个不同的调查地点后设 outbreak_ready。
+  why: 原书第 7 页“拄着麻烦”
+  plugin: transformation
+  runs: 插件
+- name: 闸门失败尝试
+  rules: 每轮失败的封堵尝试额外损失 1 小时；可选每三次失败暗骰 1D3，结果为 1 时遭遇 1 只巡逻深潜者。时间推进由守秘人执行。
+  why: 原书第 13 页
+  plugin: transformation
+  runs: 插件
+- name: 小学生调查员规则
+  rules: 关键玩具、一起上、小个子、不被当回事、疯跑、告状风险，见守秘人须知全文。
+  why: 原书第 15-16 页
+  runs: 守秘人
+preparation:
+  npcs:
+    ruan_shining:
+      fingerprint: f5f2cbd7deab5fe63e3db97f14e728afe134bd853d336ef8a10293ed4ff21f4d
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: called、goal、personality、voice、knows 均已填写，与原书第4、13页一致，保留原状
+    ruan_mother:
+      fingerprint: 850af5995f4aac7f98302ee42586b07f35b5a470680b1968be0d451d818cfc7e
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第5页（阮施宁的家），保留原状
+    ruan_father:
+      fingerprint: 08c3c40be8423c9d0705c08a15c911cf5263fdb74646b01b92455475ad073abd
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第5页，保留原状
+    grannies:
+      fingerprint: 91c1ea0d4c227469c612d5bd80e5af6ed97e028e44d49848c9a95407a5d1613d
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，所知照抄原书第5页阿婆们的话，保留原状
+    huang_yi:
+      fingerprint: 421a77aca280ba37060237bb8f036afd51c3d83bc3b7ff7a0e5f83c7122c37cf
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第6页黄懿与日记本段落，保留原状
+    huang_grandma:
+      fingerprint: b5c2be5f1101f4f39585fd3b85daffbef71b32bcd5e78ab717976f73a0bf1d12
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第6页阿嫲段落，保留原状
+    librarian:
+      fingerprint: a9819765b593d2ae08fac0cc50670d9abcd87d77e79a88110e38a3337da9b2cc
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 只补了空着的 goal；knows 已照原书第6-7页填好（昨天见到阮施宁魂不守舍），其余字段保留
+    busker:
+      fingerprint: a2d9f145bd204e2faaef10c624fe6a90db0964efae1c98aaecef537a63ebe080
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 只补了空着的 goal；knows 已照原书第7页填好，其余字段保留
+    yang_zongxi:
+      fingerprint: 307b5a635e4d2af4734d811255b33c44c2519ff76da5dc4d3bd32462ae1b4a89
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第8页杨纵溪段落，保留原状
+    toy_vendor:
+      fingerprint: 8db0fc1ff55581786f7816d0c8a8c3c77219d3cfb412861ab1f4cb632483efc4
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 只补了空着的 goal；knows 已照原书第9页填好（以为是中耳炎），其余字段保留
+    jianfu:
+      fingerprint: f66583e63bd60f2aa8a0183c72b1ab3b1f37da083e5997b9c814808ce558cbd6
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第9页建福段落，保留原状
+    liying:
+      fingerprint: f3d5f73149afc047da69c8ea99df12d3ff5e52636180d2befc16bd6db1b55245
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第4、9页丽英段落，保留原状
+    abao:
+      fingerprint: 70bc279faf66df9a97eb0ec362815d4fab837e42a94a40158e801d2527a5d3f3
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第10-11页阿宝段落，保留原状
+    chen_gong:
+      fingerprint: 9edad39f67e23d710619f9038fbeb9f555f15e8dcd01acc2ed9ba40d863f564d
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐，依据原书第11页陈工段落，保留原状
+    lao_zhang:
+      fingerprint: 538c5635532f696bb494b6057f472fdaacecd33e45c9359600403ed0672847f1
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 各字段已齐；原作对老张只写到他是看门人、阿宝认识他、看守室里有水泥和沙袋，不另添所知，保留原状
+  scenery:
+    place:ocean_park:
+      fingerprint: bfb57ab204b9b0abfa238ce6e44efef112f237047e4eae1e32612ee5787e8ef1
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 露天烂尾乐园，水泥地、藤蔓、塑像；原文只写闷热夏日，没写雨雾等天气，保留 outdoors=true、street、无天气
+    place:ruan_home:
+      fingerprint: 4091fa5e20d550f50d0796a0d7f8baba4c06748f01f40dd8f2c17e65d638f75a
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 场景在窄巷门口，阿婆在屋外剥豆，调查员只从门缝里往屋里看；保留露天、building，原文没写天气
+    place:huang_home:
+      fingerprint: b42decfff70c6650941d887c00059160383fcd7ebaa855dffcb181138e33b772
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 室内：戏服、书柜、摇椅；保留原状
+    place:library:
+      fingerprint: 8d8acfaa757ced9ede4ac9b2f9be10fb3ba3e7692b8ca3b92d09119ff8989c9e
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 室内现代馆舍；保留原状
+    place:music_square:
+      fingerprint: 66dd241973f718caea01c82cab77f23d88c80e36fd83367ee39b5d17a5409a21
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 露天下沉式广场带喷泉；保留 street，原文没写天气
+    place:night_market:
+      fingerprint: 0e400eae9d19ed79959573702aa6c5de72b62b54f05567bc377bbb4794297157
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 露天街市；摊灯和灯箱招牌不属于可选的光效类别，原文没写天气，保留原状
+    place:shipowei:
+      fingerprint: 7dbf224e5876ae85a43f61fc8ebae140bc5f61b44c227332b90681204687862c
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 露天避风坞，坞底淤泥连着海水；保留 water，原文没写天气
+    place:drain_tunnel:
+      fingerprint: ebbdbd60e62b922b1e0743ba65fceb6f07d3f292a045bf408bd89fdc158ac585
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 地下箱涵，原文写只有昏暗的手电光；保留 torch
+    place:drain_gate:
+      fingerprint: 1f8b3629546e1ba0135be239af4ff9a1b9ecffb738ca67a453ef049632a0a0e6
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 通道深处，靠手电照明；保留 torch
+    place:player_home:
+      fingerprint: 560b1390c6db6062aac42f07b64df4242c4228a05806c52132ea8ab9a8b16c1f
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 室内伙伴家；保留原状
+    place:shipowei_guardroom:
+      fingerprint: 512d080108f0a0814eeefb935fa438f70b7af14033f065e4c1b5913886825493
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原来缺字段。原文写的是一间简陋的看守室，屋里堆着水泥袋和沙袋，所以补成室内、building；原文没写天气
+    handout:h_town_map:
+      fingerprint: 42be47285dc494ff8a6021f64bc16eb41ec17c38a508601a4fdfa5f02f8c0c71
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 是地图，画成说明卡（card），保留
+    handout:h_newspaper:
+      fingerprint: 53fa314a3587a446aa172370e766d2c043902be33d7a199129b20896a33f91b3
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 《石头屿晚报》报纸；保留 news
+    handout:h_diary:
+      fingerprint: 9f1cb9e9439c03fcb12b0f33fdd89bd54bd7c636e66a6bcbc0656776bd28c4bd
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 日记本；保留 diary
+    handout:h_picture_book:
+      fingerprint: 4cc0654e38d1cd1addcf42d242ce7d1860762d4574b5faf39598692450e6fa64
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 绘本书页；保留 book
+    handout:h_note:
+      fingerprint: 378a6036de9e16c7fa202b4530325da840619c81e75d42fd9f908f2e569015c7
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 阮施宁留下的手写纸条，是便条；保留 letter
+  variants:
+    ocean_park:
+      fingerprint: 7059dfea06f1c15f0d4a7caeb091fdabecd565ee9265018a22078d3b0f99ae6e
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原文乐园画面固定；丽英在园外远处注视属于人物且不现身，园内没有时有时无的物件
+    ruan_home:
+      fingerprint: b6d486d9cd52f349f0909b4b4ea6d619ce2ab6eaa75842a97abe293108d2e0d9
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 门口的阿婆与开门的阮家父母都是人物，由小像显示；原文没写别的来去的东西
+    huang_home:
+      fingerprint: ef1edf75a23fe877b3d0c1e0546971a11d11e34c0bc7653d9f6d203a8394067d
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 阿嫲端来的冰粉水果是见面反应里的小道具，不是地点状态；其余都是人物
+    library:
+      fingerprint: cec05e752e9fc74e48dde25a19a33186ad8d3a6994ceb201a1a15d20d32f0ce9
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原文图书馆画面固定，报纸与绘本一直在架上，没有来去变化
+    night_market:
+      fingerprint: babab9fc95e15eedcec0807bf5527360876a71a552d3a8ebcb8efb51583831b6
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: '夜市地点描述本身写的是约18:00亮灯后摊位、灯箱、人群齐全的开市样子，原图即开市状态；原作写到的来去性画面（玩具摊主耳中粘稠物、排队大人手上的蹼）已有两条差分覆盖。白天空无一人、清晨鱼市是与原图相反的时段状态，没有人物在场可作
+        at: 条件，无法按格式写；异变倒地按原作是随所在处任选的一种演法，由标记触发而非人物在场状态，不适合写成本地点差分。保留原状。'
+    drain_tunnel:
+      fingerprint: 625c39cd5f38a7450735176c924199c6f2826bc96c66bf5d5376b30119e6b058
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 唯一来去的是深潜者，画出会剧透真身；D2 02:24被淹属永久变样，不在此写
+    drain_gate:
+      fingerprint: 4c7e008550c114e6000b3ca57019621deb26ca0f3064a02bbf1e26cfe653d1aa
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 阮施宁的身影是人物且已写进原图描述；她离开后是永久变化，留下的卡片和纸条是藏着的物件
+    player_home:
+      fingerprint: 47c8385b0e7afce747417c1c72467a0d623832b6a234dd547a5f8c5d4befa2f6
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: AutoKeeper补充的地点，原文没写会时有时无的东西
+    shipowei_guardroom:
+      fingerprint: fc7228121209a22aafd1810396789d49f9773f64626cca47e71148288c4aefb9
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 沙袋和水泥袋一直堆着，原文没写夜里点灯等变化；老张是人物
+    shipowei:
+      fingerprint: 13feba664c333252f08c46927a60b5db5a1cd08010ac42f901b36dfde232156d
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: shipowei
+    music_square:
+      fingerprint: cbb6a503ab48e687c6e66f7cae269a43ce14b75e6d134ffd791de66832ef295b
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: c_busker_talk
+  closeups:
+    ocean_park:
+      fingerprint: 74c7bc89c148c53f281b651816477ad810e44a51f2d68d7da94fdf1d962c0398
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: ocean_park；c_park_tracks
+    ruan_home:
+      fingerprint: 35d8e3453f79fc5ce91439f8b1225f6d0f4bb69fa19df139bc6b200baf52df35
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: ruan_home
+    huang_home:
+      fingerprint: 96ec5575d7cb86a2d43e26223a471fc6b60145e59de43471c73d48a6ba4ade8c
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: huang_home 守秘人须知（阿嫲外貌、招待的吃食）；伏笔 fs_huang_window
+    library:
+      fingerprint: dc041e08a68aae048961670c849081e99ce38158f38f2443e4802e602c1a1d4f
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: library；c_picture_book
+    music_square:
+      fingerprint: 969247770fd77de6ef477a06622437b258eb9828ead20e0d6508f613a522db77
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: music_square
+    night_market:
+      fingerprint: 0949af23d34fe22a18c36c46f3008ad313e46072dbaf8a061ce81d1087ad37e9
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: night_market；c_toy_ears
+    shipowei:
+      fingerprint: 262ef466806995901c9d52ca662f0028ba79f327c2729c4f5e999020695bb8a9
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 已有 4 处视角（北侧石台阶、东岸坍塌的驳岸、箱涵入口的围挡、散落的撬棍和钢筋），每个地点最多 4 处，已经满了；其余可调查项（旁街的杂货铺和理发店）原文只提了一句，没写画面细节，不再新增
+    drain_tunnel:
+      fingerprint: c30e8f8d8b1e7faf6ee00662589bef334197535def460030c48efda97cf591bf
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: drain_tunnel
+    drain_gate:
+      fingerprint: 54095e45cf70da6d6e660df1cb6bcd754d546df28618dd6fb1658167c9d927a3
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: drain_gate；c_gate_gap
+    player_home:
+      fingerprint: e5330e5928c583cabc3a167e35346fba91e053c62ebec2bb7c37fd1cf83700fa
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: player_home
+    shipowei_guardroom:
+      fingerprint: 0ec54cc4ac459cacf6363d3277d318b25a90c6d3954658cb8b3e7739680d6220
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: shipowei_guardroom；sandbags
+  present:
+    e_market_open:
+      fingerprint: 85483829d045acb853d75f9587828c7e05e427cd1e50d423955804035635d26e
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原书第 8-9 页：晚上六点左右摊位照明灯点亮，塑料玩具摊（女摊主）、虾饼和海蛎饼摊（建福）、春卷摊（丽英）都在出摊，调查员在夜市时就站在这些摊位前。三人都是有名有姓的 NPC。烧烤摊等其他摊贩没有被设为
+        NPC，不写。
+    e_outbreak:
+      fingerprint: b3ba21c4a6275ccbe0a9ac08497706b4afcfd6bf1d6a9476146d7ff772bdacc7
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原书第 7 页“拄着麻烦”：倒下的人是“前方人群”里的一个、“夜市有摊主倒下”或“一名工人”，原文都没点名，是路人或工人，不是 NPC。“夜市有摊主倒下”也没说是哪一摊，不能认定是玩具摊主等已有
+        NPC。周围人群也只是路人。
+    e_tunnel_chase:
+      fingerprint: ce1004375a75eabe45130a355fbdfceefd068e05134edbd8374a49fbe9a0c28a
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原书第14-15页：调查员拐过低矮弯道后遇到4个正在巡查排水通道的深潜者，进入追逐。当场只有调查员和深潜者，深潜者是怪物，不算NPC。阿宝即使答应带路（abao_guiding），按原文也只是“到达入口后可在外面望风，或在调查员被困时帮忙找人求救”，不进通道；阮施宁要等逃到点10以后，才在闸门口出现（e_ruan_leaves）。所以这件事发生时，调查员眼前没有任何NPC。
+    e_ruan_leaves:
+      fingerprint: b2c5fc669302186eec5754d75aa4bc0fcdce12cfa3fcf32caccdc4989c2d62ba
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原书第 13 页：调查员在闸门口找到穿着阮施宁衣服、头已变成鱼头的她，她当场呱叫、邀请（有人开始转变时），最后看了他们一眼，挤过闸门跃入海中。她就在调查员眼前行动。
+    e_home_all:
+      fingerprint: 2f98fd319eb5617a235033bd3e22465962e834e7a05e0e33399e735f1477985c
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原书第 14 页成功结局：调查员爬出来，回家时妈妈已经起床，问“昨晚去哪里了？”。妈妈不是本模组的 NPC。之后排水沟旁那个对他们笑的人是未点名的路人，而且发生在“一周之后或更久”，不在这个事件当场。
+    e_home_loss:
+      fingerprint: ac4dc77f51fbd5d8cd7f95651b0360ada41ffbcbfa0243d11f16a241caf49f1d
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 同成功结局（原书第 14 页）：只有调查员的妈妈和后来排水沟旁未点名的路人，都不是 NPC。被拖走的是调查员，也不是 NPC。
+    e_storm_surge:
+      fingerprint: 7a3586aa2a637377af1426755bae501ca5ef8c9e45fc76806ed4d7306618a945
+      source: c7d55fc850b99bf211dcb5d40cb27b6e8b3e513f6cffb9d790470a4a3f5ea74e
+      reason: 原书第 13-14 页：2:24 后排水通道因海水倒灌和风暴潮顶托被完全淹没，接着是失败结局的城市景象（病人、医生、深潜者来来去去）。这里只写潮水和不点名的人群，没有 NPC 在调查员面前出场。
+ties:
+- id: tie_ruan_friend
+  hook: 阮施宁是他从小一起长大的好朋友，她从来都会告诉他要去哪里；日记本里那幅“好朋友们！”的涂鸦里也画着他（原作明示有这幅画，画里有谁按本局调查员补全）。
+  npc: ruan_shining
+  fits:
+  - 重要之人
+- id: tie_raccoon_cards
+  hook: 他的小浣熊卡片收集册还差最稀有的那几张，阮施宁答应今天拿来交换；这些卡片最后会湿透着留在闸门口（原作 rare_cards，要等 ruan_gone 之后才能找到）。
+  npc: ruan_shining
+  fits:
+  - 宝贵之物
+- id: tie_park_seahorse
+  hook: 废弃海洋乐园是他们从侧门缺口爬进去的秘密基地；园里那只褪了色的黄色小海马是他最喜欢的塑像，可以当作他的关键玩具的来历或寄托（补全；关键玩具规则照原作）。
+  place: ocean_park
+  fits:
+  - 意义非凡之地
+  - 宝贵之物
+- id: tie_huang_classmate
+  hook: 他和黄懿同班，常看她在楼梯口学阿嫲甩袖子、学小锣“锵锵”；这只是熟人关系，日记本密码仍须说服、话术、零食贿赂或智力检定才能拿到（照原作条件）。
+  npc: huang_yi
+  fits:
+  - 重要之人
+- id: tie_gaojia_troupe
+  hook: 他家逢年过节去看黄懿阿嫲那个高甲戏班的戏，记得她扮戏时那身鱼鳞纹戏服（补全；阿嫲的混血身份不因此透露）。
+  npc: huang_grandma
+  fits:
+  - 意义非凡之地
+  - 思想与信念
+- id: tie_close_windows
+  hook: 他自家的老人也总说“夜里的潮声不该放进屋子”、不许他靠近海，和黄懿阿嫲的叮嘱一模一样（补全；原作说调查员带极稀薄血统、本地远亲里可能有深潜者，但这位老人是否混血属未知，守秘人不得事先透露）。
+  npc: huang_grandma
+  fits:
+  - 思想与信念
+  - 重要之人
+- id: tie_sick_neighbor
+  hook: 出门前听说邻居胸闷、喘不上气、耳道流东西（原作可选开场），这位邻居可以就是夜市塑料玩具摊的女摊主，她坚持说只是中耳炎（合并为补全；她的耳朵线索仍须夜市开市后、侦查成功才能看清）。
+  npc: toy_vendor
+  fits:
+  - 重要之人
+- id: tie_shrimp_cake
+  hook: 他常跟阮施宁一起去夜市缠着大人买建福阿伯的虾饼，阿伯认得这几个孩子（补全；建福给工具和嘱咐仍须孩子表现出要阻止感染或找到阮施宁的意图，且他不会同行）。
+  npc: jianfu
+  fits:
+  - 重要之人
+  - 意义非凡之地
+- id: tie_spring_rolls
+  hook: 妈妈出门前嘱咐他晚上回家前去夜市买春卷（原作可选开场）——妈妈一向光顾的正是丽英的春卷摊（补全）。
+  npc: liying
+  fits:
+  - 重要之人
+- id: tie_fisher_family
+  hook: 他家祖上在石坡尾打鱼，阿公和阿宝曾在同一片避风坞停船，一个月前渔船被一起收走（补全，原作渔民常见姓张、黄、阮、欧；阿宝带路仍须说服，讲闽南语得 1 颗奖励骰）。
+  npc: abao
+  fits:
+  - 重要之人
+  - 职业
+- id: tie_lost_boat
+  hook: 小时候家里的小渔船就泊在石坡尾，他在船上睡过午觉；如今那里只剩一坞黑泥和警戒线（补全，依据原作两个月前的清退公告）。
+  place: shipowei
+  fits:
+  - 意义非凡之地
+  - 宝贵之物
+- id: tie_parent_worksite
+  hook: 他的爸爸或亲戚在清淤工地当小工，回家抱怨过陈工吹哨骂人（补全；这层关系不替代 yang_joined，陈工见到孩子照样驱赶，还可能触发告状风险）。
+  npc: chen_gong
+  fits:
+  - 职业
+  - 重要之人
+- id: tie_library_regular
+  hook: 少儿图书馆是他和阮施宁每周借《冒险小虎队》的地方，管理员认得他们，也会对他们“嘘”（补全；深海绘本仍须图书馆使用检定）。
+  place: library
+  fits:
+  - 意义非凡之地
+- id: tie_reporter_dream
+  hook: 他梦想当记者，家里订《石头屿晚报》，见过“记者 杨纵溪”的署名，听说报社有小记者班（补全；两人此前没见过面，她的邀请照原作在被接近时提出）。
+  npc: yang_zongxi
+  fits:
+  - 思想与信念
+  - 职业
+- id: tie_square_evenings
+  hook: 夏天傍晚大人常带他去音乐广场，坐在喷泉水池边乘凉、玩水（补全；那里的喷泉和水池仍按转变规则算水源）。
+  place: music_square
+  fits:
+  - 意义非凡之地
+- id: tie_home_computer
+  hook: 那台装着 Windows XP 的老台式机就在他家，是全家攒钱买的，原定下午大家来他家玩黄金矿工和泡泡堂（原作只写“其中一位调查员家中”，具体是谁按本局定）。
+  place: player_home
+  fits:
+  - 宝贵之物
+  - 意义非凡之地
+- id: tie_lucky_stone
+  hook: 每次去找阮施宁，他都要摸一摸门口写着“幸运石”的石椅，直到有狗在上面拉屎；门口剥豆的阿婆们也认得他（原作写了石椅；阿婆认得他是补全）。
+  place: ruan_home
+  fits:
+  - 意义非凡之地
+foreshadow:
+- id: fs_park_watcher
+  hint: 收拾东西准备钻出侧门缺口时，巷口电线杆的阴影里好像有个大人站着，一直朝乐园这边看，看了很久都没走开。
+  where: ocean_park
+  pays_off: k_hybrids
+- id: fs_ruan_ditch
+  hint: 阮家门前的排水沟积着一汪浑水，大热天的巷子里，凑近闻却有一股像退潮时海边那样的咸腥味。
+  where: ruan_home
+  pays_off: k_seawater
+  stages:
+  - hint: 沟里的水比上次来时涨高了一截，水面浮着一层灰白的细泡沫，咸腥味已经飘到幸运石石椅那边了。
+    when: flag:outbreak_seen
+- id: fs_huang_window
+  hint: 这么闷热的天，阿嫲摇椅旁那扇朝海那边的窗却关得死死的，插销插着，缝里还塞了布条。
+  where: huang_home
+  pays_off: k_hybrids
+- id: fs_city_cough
+  hint: 阅览处有个大人一边翻报纸一边揉耳朵，隔一会儿就停下来，张大嘴深深吸一口气，像怎么也吸不够。
+  where: library
+  pays_off: k_infection
+  stages:
+  - hint: 阅览处那几张椅子上捂着胸口、喘得发急的大人多了好几个，有人拿纸巾一直往耳朵里擦，管理员也没心思嘘人了。
+    when: flag:outbreak_seen
+    flag: sign_fs_city_cough_1
+  - hint: 夜市人堆里到处是这种喘气声，排队的、摆摊的，好几个人说着话就停下来张嘴吸气，旁边的人也只当是天太闷。
+    when: flag:outbreak_seen
+    where: night_market
+- id: fs_culvert_seep
+  hint: 排洪箱涵入口那圈临时围挡底下，有一道细细的水一直往外淌，坞底的潮水明明都退光了，它还是不停。
+  where: shipowei
+  pays_off: k_gate
+  stages:
+  - hint: 天黑以后，围挡底下淌出来的水变急了，在淤泥上冲出一道发亮的小沟，腥臭味比白天浓得多，围挡里面隐约有水声。
+    when: D1 20:00
+    flag: sign_fs_culvert_seep_1
+  - hint: 快到半夜了，水不是在淌而是在往外涌，围挡的底边被冲得一鼓一鼓，能听见里面的水一阵比一阵响。
+    when: D2 00:00

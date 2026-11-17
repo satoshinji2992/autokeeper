@@ -1,0 +1,1192 @@
+pictures:
+  cover:
+    source: source/images/p01_image01.png
+    original: true
+    purpose: reference
+  finale_lab:
+    source: source/images/p15_image01.png
+    original: true
+    purpose: reference
+  manor_hall:
+    title: File:The Parlour Fireplace, Samlesbury Hall - geograph.org.uk - 4545093.jpg
+    page: https://commons.wikimedia.org/wiki/File:The_Parlour_Fireplace,_Samlesbury_Hall_-_geograph.org.uk_-_4545093.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/The_Parlour_Fireplace%2C_Samlesbury_Hall_-_geograph.org.uk_-_4545093.jpg/500px-The_Parlour_Fireplace%2C_Samlesbury_Hall_-_geograph.org.uk_-_4545093.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: David Dixon
+    width: 640
+    height: 480
+    kind: scene
+  eberhard_room:
+    title: File:(Portrait of Jo Stafford, New York, N.Y.(?), ca. July 1946) (LOC) (5148793708) (cropped).jpg
+    page: https://commons.wikimedia.org/wiki/File:(Portrait_of_Jo_Stafford,_New_York,_N.Y.(%3F),_ca._July_1946)_(LOC)_(5148793708)_(cropped).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/%28Portrait_of_Jo_Stafford%2C_New_York%2C_N.Y.%28%3F%29%2C_ca._July_1946%29_%28LOC%29_%285148793708%29_%28cropped%29.jpg/500px-%28Portrait_of_Jo_Stafford%2C_New_York%2C_N.Y.%28%3F%29%2C_ca._July_1946%29_%28LOC%29_%285148793708%29_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: The Library of Congress
+    width: 664
+    height: 825
+    kind: scene
+  cemetery:
+    title: File:Funeral of Ellen G. White in Battle Creek 6.jpg
+    page: https://commons.wikimedia.org/wiki/File:Funeral_of_Ellen_G._White_in_Battle_Creek_6.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ac/Funeral_of_Ellen_G._White_in_Battle_Creek_6.jpg/500px-Funeral_of_Ellen_G._White_in_Battle_Creek_6.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Unknown authorUnknown author
+    width: 5652
+    height: 4430
+    kind: scene
+  manor:
+    title: File:HerrenhausHeinrichsruh.jpg
+    page: https://commons.wikimedia.org/wiki/File:HerrenhausHeinrichsruh.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/HerrenhausHeinrichsruh.jpg/500px-HerrenhausHeinrichsruh.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Plackman123
+    width: 4032
+    height: 3024
+    kind: scene
+  steelworks:
+    title: File:13 Industry of Australia - Steelworks of BlueScope Steel Limited company in Port Kembla, Australia.jpg
+    page: https://commons.wikimedia.org/wiki/File:13_Industry_of_Australia_-_Steelworks_of_BlueScope_Steel_Limited_company_in_Port_Kembla,_Australia.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d5/13_Industry_of_Australia_-_Steelworks_of_BlueScope_Steel_Limited_company_in_Port_Kembla%2C_Australia.jpg/500px-13_Industry_of_Australia_-_Steelworks_of_BlueScope_Steel_Limited_company_in_Port_Kembla%2C_Australia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 3.0
+    artist: Marek Ślusarczyk (Tupungato) Photo gallery
+    width: 2400
+    height: 1600
+    kind: scene
+  waldemont_room:
+    title: File:Vassar Library Study Area.jpg
+    page: https://commons.wikimedia.org/wiki/File:Vassar_Library_Study_Area.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Vassar_Library_Study_Area.jpg/500px-Vassar_Library_Study_Area.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Sabatheus (Jim Mills)
+    width: 3693
+    height: 2110
+    kind: scene
+  lab_corridor:
+    title: File:Webster School Basement Corridor - DPLA - fb11519cbd73c2592b833b1e9895f3f3.jpg
+    page: https://commons.wikimedia.org/wiki/File:Webster_School_Basement_Corridor_-_DPLA_-_fb11519cbd73c2592b833b1e9895f3f3.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Webster_School_Basement_Corridor_-_DPLA_-_fb11519cbd73c2592b833b1e9895f3f3.jpg/500px-Webster_School_Basement_Corridor_-_DPLA_-_fb11519cbd73c2592b833b1e9895f3f3.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: ''
+    width: 5793
+    height: 4692
+    kind: scene
+  lab:
+    title: File:Eddystone, Pennsylvania - Railroad parts. Baldwin Locomotive Works. A modern blacksmith's furnace (or forge) in the... - NARA - 518708.jpg
+    page: https://commons.wikimedia.org/wiki/File:Eddystone,_Pennsylvania_-_Railroad_parts._Baldwin_Locomotive_Works._A_modern_blacksmith%27s_furnace_(or_forge)_in_the..._-_NARA_-_518708.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Eddystone%2C_Pennsylvania_-_Railroad_parts._Baldwin_Locomotive_Works._A_modern_blacksmith%27s_furnace_%28or_forge%29_in_the..._-_NARA_-_518708.jpg/500px-Eddystone%2C_Pennsylvania_-_Railroad_parts._Baldwin_Locomotive_Works._A_modern_blacksmith%27s_furnace_%28or_forge%29_in_the..._-_NARA_-_518708.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Lewis Hine
+    width: 3000
+    height: 2124
+    kind: scene
+  sd_office:
+    title: File:Photograph of a Corridor in the National Archives Building (36090913171).jpg
+    page: https://commons.wikimedia.org/wiki/File:Photograph_of_a_Corridor_in_the_National_Archives_Building_(36090913171).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Photograph_of_a_Corridor_in_the_National_Archives_Building_%2836090913171%29.jpg/500px-Photograph_of_a_Corridor_in_the_National_Archives_Building_%2836090913171%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: The U.S. National Archives
+    width: 3797
+    height: 3032
+    kind: scene
+  works_office:
+    title: works_office
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 钢铁厂办公楼：办公楼里打字机响个不停，走廊尽头是财务部和档案室，窗外烟囱冒着黑烟。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  restaurant:
+    title: File:Monet private dining room, Dalat Palace Hotel 02.jpg
+    page: https://commons.wikimedia.org/wiki/File:Monet_private_dining_room,_Dalat_Palace_Hotel_02.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Monet_private_dining_room%2C_Dalat_Palace_Hotel_02.jpg/500px-Monet_private_dining_room%2C_Dalat_Palace_Hotel_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Diane Selwyn (talk)
+    width: 2967
+    height: 1855
+    kind: scene
+  hilde_apartment:
+    title: File:Interieur slaapkamer - Bedroom Interior (5259997289).jpg
+    page: https://commons.wikimedia.org/wiki/File:Interieur_slaapkamer_-_Bedroom_Interior_(5259997289).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/7/75/Interieur_slaapkamer_-_Bedroom_Interior_%285259997289%29.jpg/500px-Interieur_slaapkamer_-_Bedroom_Interior_%285259997289%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: Het Nieuwe Instituut - Architecture Collection
+    width: 1280
+    height: 986
+    kind: scene
+  bank:
+    title: File:StateLibQld 1 151711 Teller's counter at the Queensland National Bank, Brisbane, 1922.jpg
+    page: https://commons.wikimedia.org/wiki/File:StateLibQld_1_151711_Teller%27s_counter_at_the_Queensland_National_Bank,_Brisbane,_1922.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/10/StateLibQld_1_151711_Teller%27s_counter_at_the_Queensland_National_Bank%2C_Brisbane%2C_1922.jpg/500px-StateLibQld_1_151711_Teller%27s_counter_at_the_Queensland_National_Bank%2C_Brisbane%2C_1922.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: ''
+    width: 1000
+    height: 757
+    kind: scene
+  jolan_grave:
+    title: File:Mossy gravestones in Section 38 - geograph.org.uk - 5745345.jpg
+    page: https://commons.wikimedia.org/wiki/File:Mossy_gravestones_in_Section_38_-_geograph.org.uk_-_5745345.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2c/Mossy_gravestones_in_Section_38_-_geograph.org.uk_-_5745345.jpg/500px-Mossy_gravestones_in_Section_38_-_geograph.org.uk_-_5745345.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Evelyn Simak
+    width: 640
+    height: 562
+    kind: scene
+  weber_woods:
+    title: File:Winter Sunlight on Silver Birches in Dunwich Forest - geograph.org.uk - 5614922.jpg
+    page: https://commons.wikimedia.org/wiki/File:Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg/500px-Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Roger Jones
+    width: 3648
+    height: 2736
+    kind: scene
+  farm:
+    title: File:Metal barn near Charton Bay Farm - geograph.org.uk - 6517029.jpg
+    page: https://commons.wikimedia.org/wiki/File:Metal_barn_near_Charton_Bay_Farm_-_geograph.org.uk_-_6517029.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/38/Metal_barn_near_Charton_Bay_Farm_-_geograph.org.uk_-_6517029.jpg/500px-Metal_barn_near_Charton_Bay_Farm_-_geograph.org.uk_-_6517029.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Roger Cornfoot
+    width: 1024
+    height: 768
+    kind: scene
+  jewish_quarter:
+    title: File:Apartment building. Staircase. - 35 József körút, Budapest District VIII.JPG
+    page: https://commons.wikimedia.org/wiki/File:Apartment_building._Staircase._-_35_J%C3%B3zsef_k%C3%B6r%C3%BAt,_Budapest_District_VIII.JPG
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/Apartment_building._Staircase._-_35_J%C3%B3zsef_k%C3%B6r%C3%BAt%2C_Budapest_District_VIII.JPG/500px-Apartment_building._Staircase._-_35_J%C3%B3zsef_k%C3%B6r%C3%BAt%2C_Budapest_District_VIII.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: Globetrotter19
+    width: 2272
+    height: 1704
+    kind: scene
+  manor_grand_piano:
+    title: File:Steinway & Sons concert grand piano, model D-274, manufactured at Steinway's factory in Hamburg, Germany.png
+    page: https://commons.wikimedia.org/wiki/File:Steinway_%26_Sons_concert_grand_piano,_model_D-274,_manufactured_at_Steinway%27s_factory_in_Hamburg,_Germany.png
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/Steinway_%26_Sons_concert_grand_piano%2C_model_D-274%2C_manufactured_at_Steinway%27s_factory_in_Hamburg%2C_Germany.png/500px-Steinway_%26_Sons_concert_grand_piano%2C_model_D-274%2C_manufactured_at_Steinway%27s_factory_in_Hamburg%2C_Germany.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: Steinway &amp; Sons, 10 Rondenbarg, Hamburg D-22525, Germany, eu.steinway.com.Steinway &amp; Sons, 1 Steinway Place, Lon
+    width: 1985
+    height: 1912
+    kind: scene
+  cemetery_coffin_wreck:
+    title: cemetery_coffin_wreck
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 埃森公墓·烧过的棺材残骸：雨里冒着细烟的焦黑橡木棺材残骸，棺板烧塌、边缘炭化，棺内是一副烧得干干净净的骨架，骨架下面和棺底积着厚厚一层灰白的骨灰，雨水打在灰上溅出小坑，没有油迹
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  eberhard_wardrobe:
+    title: File:EFTA00001776 - Richly carved wooden wardrobe with circular door handles and a mirrored interior revealing neatly hung white robes.jpg
+    page: https://commons.wikimedia.org/wiki/File:EFTA00001776_-_Richly_carved_wooden_wardrobe_with_circular_door_handles_and_a_mirrored_interior_revealing_neatly_hung_white_robes.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/EFTA00001776_-_Richly_carved_wooden_wardrobe_with_circular_door_handles_and_a_mirrored_interior_revealing_neatly_hung_white_robes.jpg/500px-EFTA00001776_-_Richly_carved_wooden_wardrobe_with_circular_door_handles_and_a_mirrored_interior_revealing_neatly_hung_white_robes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Federal Bureau of Investigation
+    width: 768
+    height: 1152
+    kind: scene
+  eberhard_vanity:
+    title: File:(Portrait of Jo Stafford, New York, N.Y.(?), ca. July 1946) (LOC) (5148793708) (cropped).jpg
+    page: https://commons.wikimedia.org/wiki/File:(Portrait_of_Jo_Stafford,_New_York,_N.Y.(%3F),_ca._July_1946)_(LOC)_(5148793708)_(cropped).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/%28Portrait_of_Jo_Stafford%2C_New_York%2C_N.Y.%28%3F%29%2C_ca._July_1946%29_%28LOC%29_%285148793708%29_%28cropped%29.jpg/500px-%28Portrait_of_Jo_Stafford%2C_New_York%2C_N.Y.%28%3F%29%2C_ca._July_1946%29_%28LOC%29_%285148793708%29_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: The Library of Congress
+    width: 664
+    height: 825
+    kind: scene
+  waldemont_bookshelf:
+    title: File:Abbotsford House Study Room (248456373).jpeg
+    page: https://commons.wikimedia.org/wiki/File:Abbotsford_House_Study_Room_(248456373).jpeg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6a/Abbotsford_House_Study_Room_%28248456373%29.jpeg/500px-Abbotsford_House_Study_Room_%28248456373%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC0
+    artist: Michael D Beckwith
+    width: 2048
+    height: 1365
+    kind: scene
+  waldemont_desk_under:
+    title: File:Study desk - Lacock Abbey - Wiltshire, England - DSC00927.jpg
+    page: https://commons.wikimedia.org/wiki/File:Study_desk_-_Lacock_Abbey_-_Wiltshire,_England_-_DSC00927.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Study_desk_-_Lacock_Abbey_-_Wiltshire%2C_England_-_DSC00927.jpg/500px-Study_desk_-_Lacock_Abbey_-_Wiltshire%2C_England_-_DSC00927.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Daderot
+    width: 5472
+    height: 3648
+    kind: scene
+  segli_bookcase:
+    title: The room is filled with an extensive collection of books, with shelves lining th
+    page: https://s26162.pcdn.co/wp-content/uploads/2023/06/overflowing-bookcases.jpg
+    thumb: https://s26162.pcdn.co/wp-content/uploads/2023/06/overflowing-bookcases.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  lab_cabinets:
+    title: File:Old metal cabinet Torquay.jpg
+    page: https://commons.wikimedia.org/wiki/File:Old_metal_cabinet_Torquay.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Old_metal_cabinet_Torquay.jpg/500px-Old_metal_cabinet_Torquay.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Secretlondon
+    width: 3024
+    height: 4032
+    kind: scene
+  sd_archive:
+    title: File:File cabinets (4137041591).jpg
+    page: https://commons.wikimedia.org/wiki/File:File_cabinets_(4137041591).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/30/File_cabinets_%284137041591%29.jpg/500px-File_cabinets_%284137041591%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 2.0
+    artist: waferboard
+    width: 1000
+    height: 724
+    kind: scene
+  lab_iron_door:
+    title: A heavily rusted iron door, its surface pockmarked and stained with orange-brown
+    page: https://images.stockcake.com/public/2/1/4/21467a1d-4ca6-4ba0-846e-c40409ca7162_large/rusted-iron-door-stockcake.jpg
+    thumb: https://images.stockcake.com/public/2/1/4/21467a1d-4ca6-4ba0-846e-c40409ca7162_large/rusted-iron-door-stockcake.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  sd_telephone:
+    title: File:Telefon BW 2012-02-18 13-44-32.JPG
+    page: https://commons.wikimedia.org/wiki/File:Telefon_BW_2012-02-18_13-44-32.JPG
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Telefon_BW_2012-02-18_13-44-32.JPG/500px-Telefon_BW_2012-02-18_13-44-32.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: Berthold Werner
+    width: 3087
+    height: 2434
+    kind: scene
+  restaurant_private_table:
+    title: File:Private dining room Ritz London page 144.jpg
+    page: https://commons.wikimedia.org/wiki/File:Private_dining_room_Ritz_London_page_144.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Private_dining_room_Ritz_London_page_144.jpg/500px-Private_dining_room_Ritz_London_page_144.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Bates, Kimball and Guild, Boston
+    width: 1290
+    height: 893
+    kind: scene
+  hilde_brass_lamp:
+    title: File:Brass kerosene lamp.jpg
+    page: https://commons.wikimedia.org/wiki/File:Brass_kerosene_lamp.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Brass_kerosene_lamp.jpg/500px-Brass_kerosene_lamp.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC0
+    artist: W.carter
+    width: 3223
+    height: 4798
+    kind: scene
+  bank_vault:
+    title: File:Zürich Switzerland-Safe-deposit-boxes-01.jpg
+    page: https://commons.wikimedia.org/wiki/File:Z%C3%BCrich_Switzerland-Safe-deposit-boxes-01.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/Z%C3%BCrich_Switzerland-Safe-deposit-boxes-01.jpg/500px-Z%C3%BCrich_Switzerland-Safe-deposit-boxes-01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: CEphoto, Uwe Aranas
+    width: 3756
+    height: 3819
+    kind: scene
+  weber_boarded_house:
+    title: File:Boarded up House - geograph.org.uk - 1441713.jpg
+    page: https://commons.wikimedia.org/wiki/File:Boarded_up_House_-_geograph.org.uk_-_1441713.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Boarded_up_House_-_geograph.org.uk_-_1441713.jpg/500px-Boarded_up_House_-_geograph.org.uk_-_1441713.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Peter Bond
+    width: 640
+    height: 480
+    kind: scene
+  lab_furnace:
+    title: The industrial furnace door is a large, rectangular structure with multiple rect
+    page: https://image.made-in-china.com/202f0j00VFjksYQlrdqz/Fixed-Inclined-Furnace-Door-of-Industrial-Aluminum-Melting-Furnace.webp
+    thumb: https://image.made-in-china.com/202f0j00VFjksYQlrdqz/Fixed-Inclined-Furnace-Door-of-Industrial-Aluminum-Melting-Furnace.webp
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  weber_woods_spot:
+    title: File:Winter Sunlight on Silver Birches in Dunwich Forest - geograph.org.uk - 5614922.jpg
+    page: https://commons.wikimedia.org/wiki/File:Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg/500px-Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Roger Jones
+    width: 3648
+    height: 2736
+    kind: scene
+  weber_grave:
+    title: File:Fresh grave somerset hills.jpg
+    page: https://commons.wikimedia.org/wiki/File:Fresh_grave_somerset_hills.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Fresh_grave_somerset_hills.jpg/500px-Fresh_grave_somerset_hills.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC0
+    artist: Simplificationalizer
+    width: 4224
+    height: 2376
+    kind: scene
+  farm_metal_barn:
+    title: File:Metal barn - geograph.org.uk - 1406966.jpg
+    page: https://commons.wikimedia.org/wiki/File:Metal_barn_-_geograph.org.uk_-_1406966.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c0/Metal_barn_-_geograph.org.uk_-_1406966.jpg/500px-Metal_barn_-_geograph.org.uk_-_1406966.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Stephen Craven
+    width: 640
+    height: 480
+    kind: scene
+  farm_brick_furnace:
+    title: File:Torpedo car refractory bricks.JPG
+    page: https://commons.wikimedia.org/wiki/File:Torpedo_car_refractory_bricks.JPG
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2b/Torpedo_car_refractory_bricks.JPG/500px-Torpedo_car_refractory_bricks.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 3.0
+    artist: Morgan Riley
+    width: 1200
+    height: 1600
+    kind: scene
+  jewish_nameplates:
+    title: File:Name plate, Tyrone County Club - geograph.org.uk - 1027070.jpg
+    page: https://commons.wikimedia.org/wiki/File:Name_plate,_Tyrone_County_Club_-_geograph.org.uk_-_1027070.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Name_plate%2C_Tyrone_County_Club_-_geograph.org.uk_-_1027070.jpg/500px-Name_plate%2C_Tyrone_County_Club_-_geograph.org.uk_-_1027070.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Kenneth Allen
+    width: 640
+    height: 405
+    kind: scene
+  segli:
+    title: File:Man with glasses portrait (5664190939).jpg
+    page: https://commons.wikimedia.org/wiki/File:Man_with_glasses_portrait_(5664190939).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Man_with_glasses_portrait_%285664190939%29.jpg/500px-Man_with_glasses_portrait_%285664190939%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: Bergen Public Library Norway from Bergen, Norway
+    width: 2921
+    height: 4435
+    kind: portrait
+  meisner:
+    title: File:Russia - elderly man in a gray sweater.jpg
+    page: https://commons.wikimedia.org/wiki/File:Russia_-_elderly_man_in_a_gray_sweater.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3e/Russia_-_elderly_man_in_a_gray_sweater.jpg/500px-Russia_-_elderly_man_in_a_gray_sweater.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Dmitry Makeev
+    width: 3456
+    height: 5184
+    kind: portrait
+  daughter:
+    title: File:Little girl Cutter, 1 Dec 1918 (16878180218).jpg
+    page: https://commons.wikimedia.org/wiki/File:Little_girl_Cutter,_1_Dec_1918_(16878180218).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/Little_girl_Cutter%2C_1_Dec_1918_%2816878180218%29.jpg/500px-Little_girl_Cutter%2C_1_Dec_1918_%2816878180218%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: David Knights-Whittome
+    width: 623
+    height: 800
+    kind: portrait
+  eberhard:
+    title: A man with slicked black hair, dressed in a formal suit and bow tie, gazes thoug
+    page: https://i.pinimg.com/564x/7c/29/51/7c2951dc23b02cde4ae3a27c133cf46a.jpg
+    thumb: https://i.pinimg.com/564x/7c/29/51/7c2951dc23b02cde4ae3a27c133cf46a.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: portrait
+  works_staff:
+    title: File:Chicago City Clerk Abraham Kohn, mid- to late 19th century (NBY 1576) (cropped).jpg
+    page: https://commons.wikimedia.org/wiki/File:Chicago_City_Clerk_Abraham_Kohn,_mid-_to_late_19th_century_(NBY_1576)_(cropped).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Chicago_City_Clerk_Abraham_Kohn%2C_mid-_to_late_19th_century_%28NBY_1576%29_%28cropped%29.jpg/500px-Chicago_City_Clerk_Abraham_Kohn%2C_mid-_to_late_19th_century_%28NBY_1576%29_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Unknown authorUnknown author
+    width: 955
+    height: 955
+    kind: portrait
+  huebner:
+    title: File:Portrait of Hoshyar Qaftan, Kurdish-Iraqi businessman, wearing a suit.png
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_Hoshyar_Qaftan,_Kurdish-Iraqi_businessman,_wearing_a_suit.png
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/7/77/Portrait_of_Hoshyar_Qaftan%2C_Kurdish-Iraqi_businessman%2C_wearing_a_suit.png/500px-Portrait_of_Hoshyar_Qaftan%2C_Kurdish-Iraqi_businessman%2C_wearing_a_suit.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Qaftan Enterprise
+    width: 603
+    height: 771
+    kind: portrait
+  old_woman:
+    title: File:Portrait of an elderly woman (AM 77612-1).jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_an_elderly_woman_(AM_77612-1).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c9/Portrait_of_an_elderly_woman_%28AM_77612-1%29.jpg/500px-Portrait_of_an_elderly_woman_%28AM_77612-1%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 4.0
+    artist: Collins, Tudor Washington, 1898-1970, photographer
+    width: 953
+    height: 1275
+    kind: portrait
+  waldemar_friends:
+    title: File:Lewis Wickes Hine, The charter member of the Red Cross Boy Scout Troop Paris, September 1918 - Library of Congress.jpg
+    page: https://commons.wikimedia.org/wiki/File:Lewis_Wickes_Hine,_The_charter_member_of_the_Red_Cross_Boy_Scout_Troop_Paris,_September_1918_-_Library_of_Congress.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Lewis_Wickes_Hine%2C_The_charter_member_of_the_Red_Cross_Boy_Scout_Troop_Paris%2C_September_1918_-_Library_of_Congress.jpg/500px-Lewis_Wickes_Hine%2C_The_charter_member_of_the_Red_Cross_Boy_Scout_Troop_Paris%2C_September_1918_-_Library_of_Congress.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Lewis Hine
+    width: 9349
+    height: 6508
+    kind: portrait
+  farmer:
+    title: File:Portrait of railroad worker May Janus, Stelco Steel Company of Canada, Hamilton, Ontario Portrait de May Janus, ouvrière du rail à la Stelco Steel Company of Canada, Hamilton (Ontario) (43854114905).jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_railroad_worker_May_Janus,_Stelco_Steel_Company_of_Canada,_Hamilton,_Ontario_Portrait_de_May_Janus,_ouvri%C3%A8re_du_rail_%C3%A0_la_Stelco_Steel_Company_of_Canada,_Hamilton_(Ontario)_(43854114905).jpg
+    thumb: https://upload.wikimedia.org/wikipedia/commons/f/f0/Portrait_of_railroad_worker_May_Janus%2C_Stelco_Steel_Company_of_Canada%2C_Hamilton%2C_Ontario_Portrait_de_May_Janus%2C_ouvri%C3%A8re_du_rail_%C3%A0_la_Stelco_Steel_Company_of_Canada%2C_Hamilton_%28Ontario%29_%2843854114905%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled
+    license: Public domain
+    artist: Ronny Jaques. National Film Board of Canada. Photothèque.
+    width: 467
+    height: 480
+    kind: portrait
+  calvin:
+    title: 'A man in a vintage suit, with his hand pressed to his temple, looks directly at '
+    page: https://images.fineartamerica.com/images-medium-large-5/1960s-portrait-man-in-suit-and-tie-vintage-images.jpg
+    thumb: https://images.fineartamerica.com/images-medium-large-5/1960s-portrait-man-in-suit-and-tie-vintage-images.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: portrait
+  soldier:
+    title: File:Portrait, man, uniform Fortepan 16808.jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait,_man,_uniform_Fortepan_16808.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/Portrait%2C_man%2C_uniform_Fortepan_16808.jpg/500px-Portrait%2C_man%2C_uniform_Fortepan_16808.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: 'FOTO:Fortepan — ID 16808: Adományozó/Donor: Unknown.'
+    width: 1695
+    height: 2451
+    kind: portrait
+  bank_clerk:
+    title: File:Portrait of a man in suit with waistcoat (3195835458).jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_a_man_in_suit_with_waistcoat_(3195835458).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3a/Portrait_of_a_man_in_suit_with_waistcoat_%283195835458%29.jpg/500px-Portrait_of_a_man_in_suit_with_waistcoat_%283195835458%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Powerhouse Museum from Sydney, Australia
+    width: 787
+    height: 1024
+    kind: portrait
+  assassin:
+    title: File:George H. Revell, tramp, arrested for being drunk and disorderly (16615668789).jpg
+    page: https://commons.wikimedia.org/wiki/File:George_H._Revell,_tramp,_arrested_for_being_drunk_and_disorderly_(16615668789).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fb/George_H._Revell%2C_tramp%2C_arrested_for_being_drunk_and_disorderly_%2816615668789%29.jpg/500px-George_H._Revell%2C_tramp%2C_arrested_for_being_drunk_and_disorderly_%2816615668789%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: Tyne &amp; Wear Archives &amp; Museums
+    width: 612
+    height: 830
+    kind: portrait
+  krause:
+    title: File:Otto Wünsche, marine officer (c. 1918).png
+    page: https://commons.wikimedia.org/wiki/File:Otto_W%C3%BCnsche,_marine_officer_(c._1918).png
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Otto_W%C3%BCnsche%2C_marine_officer_%28c._1918%29.png/500px-Otto_W%C3%BCnsche%2C_marine_officer_%28c._1918%29.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Unknown authorUnknown author
+    width: 1119
+    height: 1519
+    kind: portrait
+  winter:
+    title: File:Otto Wünsche, marine officer (c. 1918).png
+    page: https://commons.wikimedia.org/wiki/File:Otto_W%C3%BCnsche,_marine_officer_(c._1918).png
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Otto_W%C3%BCnsche%2C_marine_officer_%28c._1918%29.png/500px-Otto_W%C3%BCnsche%2C_marine_officer_%28c._1918%29.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Unknown authorUnknown author
+    width: 1119
+    height: 1519
+    kind: portrait
+  item-i_ppk:
+    title: File:Walther PPk.jpg
+    page: https://commons.wikimedia.org/wiki/File:Walther_PPk.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/61/Walther_PPk.jpg/500px-Walther_PPk.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 2.0
+    artist: Askild Antonsen
+    width: 4288
+    height: 2848
+    kind: item
+  item-i_waldemont_pistol:
+    title: File:Luger IMG 6768-retouched.jpg
+    page: https://commons.wikimedia.org/wiki/File:Luger_IMG_6768-retouched.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/Luger_IMG_6768-retouched.jpg/500px-Luger_IMG_6768-retouched.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0 fr
+    artist: 'Luger_IMG_6768.jpg: Rama'
+    width: 5616
+    height: 3744
+    kind: item
+  item-i_transcript:
+    title: File:Three Letters to Lord Melville, on Discussing Governors Barlow and Minto. 1805-07 - DPLA - dba2b1c7c4d1cae1a1a7b5f350406ec9 (page 2).jpg
+    page: https://commons.wikimedia.org/wiki/File:Three_Letters_to_Lord_Melville,_on_Discussing_Governors_Barlow_and_Minto._1805-07_-_DPLA_-_dba2b1c7c4d1cae1a1a7b5f350406ec9_(page_2).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Three_Letters_to_Lord_Melville%2C_on_Discussing_Governors_Barlow_and_Minto._1805-07_-_DPLA_-_dba2b1c7c4d1cae1a1a7b5f350406ec9_%28page_2%29.jpg/500px-Three_Letters_to_Lord_Melville%2C_on_Discussing_Governors_Barlow_and_Minto._1805-07_-_DPLA_-_dba2b1c7c4d1cae1a1a7b5f350406ec9_%28page_2%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Dalrymple, Alexander, 1737-1808
+    width: 1258
+    height: 1610
+    kind: item
+  item-i_safe_key:
+    title: File:Tresorraum Deutschland 1.jpg
+    page: https://commons.wikimedia.org/wiki/File:Tresorraum_Deutschland_1.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Tresorraum_Deutschland_1.jpg/500px-Tresorraum_Deutschland_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 3.0
+    artist: GeoTrinity
+    width: 1813
+    height: 1221
+    kind: item
+  item-i_tome:
+    title: File:Manuscript anonymous on Alchemy, 17th century Wellcome L0012730.jpg
+    page: https://commons.wikimedia.org/wiki/File:Manuscript_anonymous_on_Alchemy,_17th_century_Wellcome_L0012730.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Manuscript_anonymous_on_Alchemy%2C_17th_century_Wellcome_L0012730.jpg/500px-Manuscript_anonymous_on_Alchemy%2C_17th_century_Wellcome_L0012730.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 4.0
+    artist: ''
+    width: 4906
+    height: 3852
+    kind: item
+  item-i_ppk_demo:
+    title: File:Walther PPk.jpg
+    page: https://commons.wikimedia.org/wiki/File:Walther_PPk.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/61/Walther_PPk.jpg/500px-Walther_PPk.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 2.0
+    artist: Askild Antonsen
+    width: 4288
+    height: 2848
+    kind: item
+  cemetery_coffin_wreck_knows_players_clue_c_coffin_bones:
+    title: 埃森公墓（骨头断面和关节处夹着金属光泽，摸上去冰冷坚硬，像金属）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：埃森公墓·烧过的棺材残骸：雨里冒着细烟的焦黑橡木棺材残骸，棺板烧塌、边缘炭化，棺内是一副烧得干干净净的骨架，骨架下面和棺底积着厚厚一层灰白的骨灰，雨水打在灰上溅出小坑，没有油迹
+
+      Show it after this change: 骨头断面和关节处夹着金属光泽，摸上去冰冷坚硬，像金属
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: cemetery_coffin_wreck
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 埃森公墓·烧过的棺材残骸：雨里冒着细烟的焦黑橡木棺材残骸，棺板烧塌、边缘炭化，棺内是一副烧得干干净净的骨架，骨架下面和棺底积着厚厚一层灰白的骨灰，雨水打在灰上溅出小坑，没有油迹
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  eberhard_wardrobe_knows_players_clue_c_wardrobe:
+    title: 艾伯哈德的卧室（衣柜敞开：成排的黑丝袜、紧身胸衣、高跟皮靴、几顶假发和一副假胸，挂着几件艳俗的女）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：艾伯哈德的卧室·半掩的衣柜：半掩的雕花衣柜门缝里露出丝绸裙摆和蕾丝花边，柜门上挂着一件深色外套，地上散着香水瓶
+
+      Show it after this change: 衣柜敞开：成排的黑丝袜、紧身胸衣、高跟皮靴、几顶假发和一副假胸，挂着几件艳俗的女式外衣
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:EFTA00001776 - Richly carved wooden wardrobe with circular door handles and a mirrored interior revealing neatly hung white robes.jpg
+      page: https://commons.wikimedia.org/wiki/File:EFTA00001776_-_Richly_carved_wooden_wardrobe_with_circular_door_handles_and_a_mirrored_interior_revealing_neatly_hung_white_robes.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/EFTA00001776_-_Richly_carved_wooden_wardrobe_with_circular_door_handles_and_a_mirrored_interior_revealing_neatly_hung_white_robes.jpg/500px-EFTA00001776_-_Richly_carved_wooden_wardrobe_with_circular_door_handles_and_a_mirrored_interior_revealing_neatly_hung_white_robes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: Public domain
+      artist: Federal Bureau of Investigation
+      width: 768
+      height: 1152
+      kind: scene
+    width: 683
+    height: 1024
+  eberhard_vanity_knows_players_clue_c_key_found:
+    title: 艾伯哈德的卧室（抽屉里躺着一把带编号牌的银行保险柜钥匙）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：艾伯哈德的卧室·摆满瓶罐的梳妆台：梳妆台镜子前挤满香水瓶、粉盒、口红和眼线笔，粉扑上沾着脂粉，几个小抽屉半开着
+
+      Show it after this change: 抽屉里躺着一把带编号牌的银行保险柜钥匙
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:(Portrait of Jo Stafford, New York, N.Y.(?), ca. July 1946) (LOC) (5148793708) (cropped).jpg
+      page: https://commons.wikimedia.org/wiki/File:(Portrait_of_Jo_Stafford,_New_York,_N.Y.(%3F),_ca._July_1946)_(LOC)_(5148793708)_(cropped).jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/%28Portrait_of_Jo_Stafford%2C_New_York%2C_N.Y.%28%3F%29%2C_ca._July_1946%29_%28LOC%29_%285148793708%29_%28cropped%29.jpg/500px-%28Portrait_of_Jo_Stafford%2C_New_York%2C_N.Y.%28%3F%29%2C_ca._July_1946%29_%28LOC%29_%285148793708%29_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: Public domain
+      artist: The Library of Congress
+      width: 664
+      height: 825
+      kind: scene
+    width: 824
+    height: 1024
+  waldemont_desk_under_knows_players_clue_c_desk_gun:
+    title: 沃德蒙特的书房与卧室（桌面下方的暗处卡着一把手枪）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：沃德蒙特的书房与卧室·书桌下方：一丝不苟的书桌，桌下暗处是整齐的抽屉柜和桌腿，地毯平整
+
+      Show it after this change: 桌面下方的暗处卡着一把手枪
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Study desk - Lacock Abbey - Wiltshire, England - DSC00927.jpg
+      page: https://commons.wikimedia.org/wiki/File:Study_desk_-_Lacock_Abbey_-_Wiltshire,_England_-_DSC00927.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Study_desk_-_Lacock_Abbey_-_Wiltshire%2C_England_-_DSC00927.jpg/500px-Study_desk_-_Lacock_Abbey_-_Wiltshire%2C_England_-_DSC00927.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: Public domain
+      artist: Daderot
+      width: 5472
+      height: 3648
+      kind: scene
+    width: 1024
+    height: 683
+  weber_street:
+    title: File:Łódź, ul. Księży Młyn 2011.jpg
+    page: https://commons.wikimedia.org/wiki/File:%C5%81%C3%B3d%C5%BA,_ul._Ksi%C4%99%C5%BCy_M%C5%82yn_2011.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/%C5%81%C3%B3d%C5%BA%2C_ul._Ksi%C4%99%C5%BCy_M%C5%82yn_2011.jpg/500px-%C5%81%C3%B3d%C5%BA%2C_ul._Ksi%C4%99%C5%BCy_M%C5%82yn_2011.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 3.0
+    artist: Zorro2212
+    width: 1793
+    height: 1200
+    kind: scene
+  cemetery_coffin_ash_bed:
+    title: cemetery_coffin_ash_bed
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 埃森公墓·棺底的灰堆：焦黑棺板之间堆着湿透的灰白骨灰，碎炭和烧弯的铜钉散在灰里
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  manor_wake_room:
+    title: manor_wake_room
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 庄园大厅·守灵用过的灵堂：撤走棺材后空出来的灵堂，黑布罩着的长桌，烧到底的蜡烛残根，凋萎的白花圈靠在墙边，几把椅子还摆成守夜时的样子
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  factory_floor:
+    title: Inside a steel factory, a massive ladle suspended from an overhead crane pours m
+    page: https://images.imagerenderer.com/images/artworkimages/mediumlarge/2/interior-view-of-steel-plant-bettmann.jpg
+    thumb: https://images.imagerenderer.com/images/artworkimages/mediumlarge/2/interior-view-of-steel-plant-bettmann.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  segli_office:
+    title: An engineer in a checkered shirt stands at a drafting table, meticulously workin
+    page: https://images.fineartamerica.com/images-medium-large-5/drawing-office-ton-kinsbergen.jpg
+    thumb: https://images.fineartamerica.com/images-medium-large-5/drawing-office-ton-kinsbergen.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  hilde_bed_floor:
+    title: hilde_bed_floor
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 希尔德的公寓·床底的地板：大床下的暗处是拼接整齐的木地板，积着薄灰，床单垂下来遮住一半
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  factory_stamp_press:
+    title: factory_stamp_press
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 生产车间·冲压机和模具：冲压机的锤头一下下砸落，模具表面刻着繁复的花纹，传送带上一排排刚压好的手枪握把带着同样的纹路
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  servants:
+    title: File:Waiter holding bottle of Budweiser beer on tray LCCN2004676499.jpg
+    page: https://commons.wikimedia.org/wiki/File:Waiter_holding_bottle_of_Budweiser_beer_on_tray_LCCN2004676499.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Waiter_holding_bottle_of_Budweiser_beer_on_tray_LCCN2004676499.jpg/500px-Waiter_holding_bottle_of_Budweiser_beer_on_tray_LCCN2004676499.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Miscellaneous Items in High Demand, PPOC, Library of Congress
+    width: 1197
+    height: 1536
+    kind: portrait
+  jolan_open_grave:
+    title: jolan_open_grave
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A wide landscape view of the place (about 3:2).
+
+      Subject (场景): 约兰迁移后的坟墓·被挖开的坟：青苔半掩的墓碑前，坟被挖开，湿土堆在一边，坑底一只敞着盖的骨灰罐几乎是空的
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 683
+  farm_neighbor:
+    title: File:Portrait of Helen Johns, clerical worker at the Farmer's Co-operative Milk Factory, Drouin, Victoria (6173540005).jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_Helen_Johns,_clerical_worker_at_the_Farmer%27s_Co-operative_Milk_Factory,_Drouin,_Victoria_(6173540005).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1c/Portrait_of_Helen_Johns%2C_clerical_worker_at_the_Farmer%27s_Co-operative_Milk_Factory%2C_Drouin%2C_Victoria_%286173540005%29.jpg/500px-Portrait_of_Helen_Johns%2C_clerical_worker_at_the_Farmer%27s_Co-operative_Milk_Factory%2C_Drouin%2C_Victoria_%286173540005%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: National Library of Australia Commons
+    width: 772
+    height: 1024
+    kind: portrait
+  superior:
+    title: File:Lewis Hine Power house mechanic working on steam pump.jpg
+    page: https://commons.wikimedia.org/wiki/File:Lewis_Hine_Power_house_mechanic_working_on_steam_pump.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Lewis_Hine_Power_house_mechanic_working_on_steam_pump.jpg/500px-Lewis_Hine_Power_house_mechanic_working_on_steam_pump.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Lewis Hine
+    width: 2155
+    height: 3000
+    kind: portrait
+  lotte:
+    title: 'An old black and white photograph shows a widow in mourning, her face partially '
+    page: https://monovisions.com/wp-content/uploads/2015/06/vintage-daguerreotypes-of-widows-in-mourning-victorian-era-1800s-07.jpg
+    thumb: https://monovisions.com/wp-content/uploads/2015/06/vintage-daguerreotypes-of-widows-in-mourning-victorian-era-1800s-07.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: portrait
+  item-i_dagger:
+    title: A hand holds a small, ornate dagger with an intricately carved hilt and blade, r
+    page: https://i.etsystatic.com/25517356/r/il/371861/5861358079/il_fullxfull.5861358079_ilyl.jpg
+    thumb: https://i.etsystatic.com/25517356/r/il/371861/5861358079/il_fullxfull.5861358079_ilyl.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: item
+  waldemont_waldemont_dead:
+    title: 沃德蒙特·冯·赫施伯格，黑色丧服，脸色苍白，眼睛布满血丝（被火焰烧成一具焦黑的骷髅）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: portrait
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+
+      Subject (人物头像): 沃德蒙特·冯·赫施伯格，黑色丧服，脸色苍白，眼睛布满血丝。现在：被火焰烧成一具焦黑的骷髅
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 936
+  cemetery_coffin_ash_bed_knows_players_clue_c_dagger:
+    title: 埃森公墓（灰里露出一把做工精致的匕首，柄上刻着和配枪握柄一面相近的花纹，刻痕明显是手工雕的）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：埃森公墓·棺底的灰堆：焦黑棺板之间堆着湿透的灰白骨灰，碎炭和烧弯的铜钉散在灰里
+
+      Show it after this change: 灰里露出一把做工精致的匕首，柄上刻着和配枪握柄一面相近的花纹，刻痕明显是手工雕的
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: cemetery_coffin_ash_bed
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 埃森公墓·棺底的灰堆：焦黑棺板之间堆着湿透的灰白骨灰，碎炭和烧弯的铜钉散在灰里
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  lab_corridor_at_players_lab_corridor_flag_lab_door_cutting:
+    title: 地下层走廊（铁门前架着一台切割机，地上溅满火花和焊渣，门板上切出一道没切完的口子）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：地下层走廊：地下层的走廊又潮又暗，灯泡嗡嗡作响，尽头是一扇沉重的铁门。
+
+      Show it after this change: 铁门前架着一台切割机，地上溅满火花和焊渣，门板上切出一道没切完的口子
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Webster School Basement Corridor - DPLA - fb11519cbd73c2592b833b1e9895f3f3.jpg
+      page: https://commons.wikimedia.org/wiki/File:Webster_School_Basement_Corridor_-_DPLA_-_fb11519cbd73c2592b833b1e9895f3f3.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Webster_School_Basement_Corridor_-_DPLA_-_fb11519cbd73c2592b833b1e9895f3f3.jpg/500px-Webster_School_Basement_Corridor_-_DPLA_-_fb11519cbd73c2592b833b1e9895f3f3.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: Public domain
+      artist: ''
+      width: 5793
+      height: 4692
+      kind: scene
+    width: 1024
+    height: 932
+  lab_iron_door_knows_players_clue_c_welded_lock:
+    title: 地下层走廊（凑近看，锁孔和门缝被焊料封得严严实实，根本插不进钥匙）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：地下层走廊·沉重的铁门：潮湿昏暗的走廊尽头一扇厚重的铁门，门板上有锈迹，一把锁嵌在门上，头顶灯泡嗡嗡作响
+
+      Show it after this change: 凑近看，锁孔和门缝被焊料封得严严实实，根本插不进钥匙
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: A heavily rusted iron door, its surface pockmarked and stained with orange-brown
+      page: https://images.stockcake.com/public/2/1/4/21467a1d-4ca6-4ba0-846e-c40409ca7162_large/rusted-iron-door-stockcake.jpg
+      thumb: https://images.stockcake.com/public/2/1/4/21467a1d-4ca6-4ba0-846e-c40409ca7162_large/rusted-iron-door-stockcake.jpg
+      license: 网页图片，版权归原作者，只在本机使用
+      artist: ''
+      width: 0
+      height: 0
+      kind: scene
+    width: 1024
+    height: 1024
+  lab_cabinets_knows_players_clue_c_lab_heads:
+    title: 地下实验室（一个柜子里堆着银白色的金属；另一个柜子里是三个泡在福尔马林里的金发男人头颅，和一）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：地下实验室·存放赤钢的柜子：焚尸炉旁并排立着两个关着门的金属柜子，柜门上贴着花体字的标签
+
+      Show it after this change: 一个柜子里堆着银白色的金属；另一个柜子里是三个泡在福尔马林里的金发男人头颅，和一块块金属放在一起，各贴着花体字姓名标签
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Old metal cabinet Torquay.jpg
+      page: https://commons.wikimedia.org/wiki/File:Old_metal_cabinet_Torquay.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Old_metal_cabinet_Torquay.jpg/500px-Old_metal_cabinet_Torquay.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 4.0
+      artist: Secretlondon
+      width: 3024
+      height: 4032
+      kind: scene
+    width: 768
+    height: 1024
+  restaurant_at_eberhard_restaurant:
+    title: 高档餐厅单间（单间桌上摆好两副餐具，点着烛台，冰桶里插着一瓶香槟）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：高档餐厅单间：埃森最好的餐厅，侍者领你穿过铺着白桌布的大堂，推开一间挂着丝绒帘子的单间。
+
+      Show it after this change: 单间桌上摆好两副餐具，点着烛台，冰桶里插着一瓶香槟
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Monet private dining room, Dalat Palace Hotel 02.jpg
+      page: https://commons.wikimedia.org/wiki/File:Monet_private_dining_room,_Dalat_Palace_Hotel_02.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Monet_private_dining_room%2C_Dalat_Palace_Hotel_02.jpg/500px-Monet_private_dining_room%2C_Dalat_Palace_Hotel_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: Public domain
+      artist: Diane Selwyn (talk)
+      width: 2967
+      height: 1855
+      kind: scene
+    width: 1024
+    height: 641
+  hilde_bed_floor_knows_players_clue_c_floor_hide:
+    title: 希尔德的公寓（一块地板被撬开过，掀起来下面是个巴掌大的扁平空洞，空无一物）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：希尔德的公寓·床底的地板：大床下的暗处是拼接整齐的木地板，积着薄灰，床单垂下来遮住一半
+
+      Show it after this change: 一块地板被撬开过，掀起来下面是个巴掌大的扁平空洞，空无一物
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: hilde_bed_floor
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 希尔德的公寓·床底的地板：大床下的暗处是拼接整齐的木地板，积着薄灰，床单垂下来遮住一半
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  hilde_brass_lamp_knows_players_clue_c_lamp_hide:
+    title: 希尔德的公寓（灯座底盖拧下后是空心的，里面能放巴掌大的薄物，什么也没有）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：希尔德的公寓·床头的黄铜台灯：床头柜上一盏擦得锃亮的黄铜台灯，灯座又圆又厚，旁边放着手帕和香水瓶
+
+      Show it after this change: 灯座底盖拧下后是空心的，里面能放巴掌大的薄物，什么也没有
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Brass kerosene lamp.jpg
+      page: https://commons.wikimedia.org/wiki/File:Brass_kerosene_lamp.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Brass_kerosene_lamp.jpg/500px-Brass_kerosene_lamp.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC0
+      artist: W.carter
+      width: 3223
+      height: 4798
+      kind: scene
+    width: 688
+    height: 1024
+  bank_vault_knows_players_clue_c_vault:
+    title: 银行（打开的柜格里放着一本拉丁文古书和一把瓦尔特 PPK，握柄花纹带着明显的手工刻痕）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：银行·保险柜库房：厚重的库房门后一面墙的黄铜编号保险柜小门，中间一张铺绒布的桌子
+
+      Show it after this change: 打开的柜格里放着一本拉丁文古书和一把瓦尔特 PPK，握柄花纹带着明显的手工刻痕
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Zürich Switzerland-Safe-deposit-boxes-01.jpg
+      page: https://commons.wikimedia.org/wiki/File:Z%C3%BCrich_Switzerland-Safe-deposit-boxes-01.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/Z%C3%BCrich_Switzerland-Safe-deposit-boxes-01.jpg/500px-Z%C3%BCrich_Switzerland-Safe-deposit-boxes-01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 3.0
+      artist: CEphoto, Uwe Aranas
+      width: 3756
+      height: 3819
+      kind: scene
+    width: 1008
+    height: 1024
+  jolan_open_grave_knows_players_clue_c_nail:
+    title: 约兰迁移后的坟墓（翻开的坟土里有一小片断掉的红色延长甲）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：约兰迁移后的坟墓·被挖开的坟：青苔半掩的墓碑前，坟被挖开，湿土堆在一边，坑底一只敞着盖的骨灰罐几乎是空的
+
+      Show it after this change: 翻开的坟土里有一小片断掉的红色延长甲
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: jolan_open_grave
+      page: ''
+      thumb: ''
+      license: AI 生成（Codex image_gen）
+      artist: Codex image_gen
+      kind: scene
+      prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+        A wide landscape view of the place (about 3:2).
+
+        Subject (场景): 约兰迁移后的坟墓·被挖开的坟：青苔半掩的墓碑前，坟被挖开，湿土堆在一边，坑底一只敞着盖的骨灰罐几乎是空的
+
+        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      based_on: null
+      width: 1024
+      height: 683
+    width: 1024
+    height: 683
+  weber_woods_spot_knows_players_clue_c_shell:
+    title: 街区外的小树林（拨开落叶，下面有一枚旧弹壳）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：街区外的小树林·发现尸体的地方：光秃秃的桦树之间，一片湿透的落叶，看不出什么特别
+
+      Show it after this change: 拨开落叶，下面有一枚旧弹壳
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:Winter Sunlight on Silver Birches in Dunwich Forest - geograph.org.uk - 5614922.jpg
+      page: https://commons.wikimedia.org/wiki/File:Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg/500px-Winter_Sunlight_on_Silver_Birches_in_Dunwich_Forest_-_geograph.org.uk_-_5614922.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 2.0
+      artist: Roger Jones
+      width: 3648
+      height: 2736
+      kind: scene
+    width: 1024
+    height: 768
+  segli_die_drawings:
+    title: File:HC Mais drawings 1883 -- Wire cable tramways, mechanisms 002.png
+    page: https://commons.wikimedia.org/wiki/File:HC_Mais_drawings_1883_--_Wire_cable_tramways,_mechanisms_002.png
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/HC_Mais_drawings_1883_--_Wire_cable_tramways%2C_mechanisms_002.png/500px-HC_Mais_drawings_1883_--_Wire_cable_tramways%2C_mechanisms_002.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Henry Coathupe Mais
+    width: 2230
+    height: 2510
+    kind: scene
+  item-i_axe:
+    title: 'The image shows two identical heavy axes with long wooden handles and dark gray '
+    page: https://www.lehmans.com/cdn/shop/files/ab0c959ff12f16581cd12dd343e0d1d409aadef2_100042722_1_L.png?v=1777014277&width=800
+    thumb: https://www.lehmans.com/cdn/shop/files/ab0c959ff12f16581cd12dd343e0d1d409aadef2_100042722_1_L.png?v=1777014277&width=800
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: item
+  manor_at_soldier_manor_hall:
+    title: 赫施伯格庄园（庄园门前的车道上停着一辆黑色梅赛德斯，穿灰制服的司机站在车边淋着雨等候）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：赫施伯格庄园：赫施伯格家的庄园。
+
+      Show it after this change: 庄园门前的车道上停着一辆黑色梅赛德斯，穿灰制服的司机站在车边淋着雨等候
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: File:HerrenhausHeinrichsruh.jpg
+      page: https://commons.wikimedia.org/wiki/File:HerrenhausHeinrichsruh.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/HerrenhausHeinrichsruh.jpg/500px-HerrenhausHeinrichsruh.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 4.0
+      artist: Plackman123
+      width: 4032
+      height: 3024
+      kind: scene
+    width: 1024
+    height: 768
+  segli_bookcase_knows_players_clue_c_transcript:
+    title: 总工程师办公室（抽出一沓没有封面、翻得卷边的拉丁语打字稿，满页德语批注，下面压着一本手绘图册，画）
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
+
+      Edit the attached picture of 场景：总工程师办公室·塞满的书柜：塞得满满当当的书柜，工程手册、期刊和图纸卷筒挤在一起，下层压着成沓的纸
+
+      Show it after this change: 抽出一沓没有封面、翻得卷边的拉丁语打字稿，满页德语批注，下面压着一本手绘图册，画着装置和怪异符号，每张图都标了页码
+
+      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+    based_on:
+      title: The room is filled with an extensive collection of books, with shelves lining th
+      page: https://s26162.pcdn.co/wp-content/uploads/2023/06/overflowing-bookcases.jpg
+      thumb: https://s26162.pcdn.co/wp-content/uploads/2023/06/overflowing-bookcases.jpg
+      license: 网页图片，版权归原作者，只在本机使用
+      artist: ''
+      width: 0
+      height: 0
+      kind: scene
+    width: 1024
+    height: 512

@@ -1,0 +1,420 @@
+relations:
+  - {a: hartman, b: james, kind: 师生, value: 20, why: 尊重他的才智，却抵触他不守学术程序}
+  - {a: holcomb, b: james, kind: 不满, value: -20, why: 他总是逾期不还书}
+  - {a: holcomb, b: caleb, kind: 轻视, value: -40, why: 认为这个助手毫无用处}
+  - {a: caleb, b: james, kind: 生意, value: 10, why: 詹姆斯是他偷卖藏书的买主}
+  - {a: cora, b: james, kind: 亲属, value: 80, why: 他的阿姨，很可能抚养了他}
+
+history:
+  - when: 开局前几个月
+    text: 凯莱布·莫罗把摩尔家族藏书中的欧几里得手稿卖给詹姆斯，后来又卖给他《缟玛瑙石板》英译本。
+    who: [caleb, james]
+  - when: 开局前几天
+    text: 詹姆斯去了科拉阿姨家，在地下室完成了《缟玛瑙石板》中的仪式，裂隙打开，科拉惨死并被做成门之守卫者。
+    who: [james, cora]
+    where: cora_house
+
+agendas:
+  - npc: hartman
+    goals: [让学生守规矩、好好考试]
+    steps:
+      - id: summon
+        text: 被点名的调查员早上来办公室时，冷着脸训诫他们，对詹姆斯的缺席只表示惊讶
+        when: flag:hartman_summoned & D2 08:00
+        meet: true
+        once: true
+        source: 原文“在教室”“与哈特曼教授交谈”
+
+mechanics:
+  - name: 关闭大门
+    runs: 守秘人
+    why: 主地下室，门之守卫者袭击期间
+    rules: 把詹姆斯拉出图形中央：困难力量检定，多人合力获得一个奖励骰；成功后调查员拉着的部分脱臼或骨折，理智 0/1。毁掉他胸口的图形：开刃武器即可，不锋利的武器需困难成功；攻击无助的詹姆斯理智 0/1D3，意外杀死他（他只剩 3 点生命）理智 1/1D6。任一成功设 gate_closed，守卫者倒下、蓝光消失；詹姆斯死了另设 james_dead。
+preparation:
+  npcs:
+    hartman:
+      fingerprint: dc23831c736b8c9a85da2a38be74567fdbac3b1aa575bfe83424439fb1e681c1
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 称呼、目标、性格、说话方式、所知都已写好，依据原文“在教室”“与哈特曼教授交谈”，无需补充
+    bernard:
+      fingerprint: e1e18e8ad45acbfd6f1201c2bfd36680eaa4e27cb630490b342affd32e69ccbd
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 各字段都已写好，依据原文“进入”一节（宿醉、几天没见詹姆斯、门卫有备用钥匙），无需补充
+    holcomb:
+      fingerprint: 245e30643103fc8655a53a0d38c11aeb74e5bdbf6a86e9783262539d5d50091b
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 各字段都已写好，依据原文“图书馆”一节，无需补充
+    caleb:
+      fingerprint: 0ab2bb4ddc02bee87dd7393c4f660633210cb75636f06804ef04b8a21b74a0cf
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 各字段都已写好，依据原文“与凯莱布·莫罗对话”一节，无需补充
+    ruby:
+      fingerprint: b42636c6dbac4b68b9b4f87a32269e00707e282a660f3c2e85e7916b55e6cffd
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 各字段都已写好，依据原文“拜访科拉阿姨”一节（重视隐私、可破例一次、恐吓无效），无需补充
+    cora:
+      fingerprint: d3c7d653d69659a6b5285aa59a524dd0cc6d749b9b9523a8076988c74f59b7bf
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 已补目标和说话方式。knows 留空：她已死去，被当作守卫者的外壳；原作没写她生前或死后知道什么，连谁杀了她都没写明，所以不补
+    james:
+      fingerprint: 9d18f3b0e6942421bfc0ea4539a434531a678f9c96ef725f6e392e0001ffe733
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 已补目标和说话方式。knows 已有（仪式与《缟玛瑙石板》的内容，他已说不出话），保留原状
+  scenery:
+    place:campus:
+      fingerprint: f7b9261e95ea90374c4ae7f74664561eca9a55b05f1afa2af6c7618e47fd8f30
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 露天校园，红砖楼舍、草坪和小径，用街道广场地面正合适；原文没写天气，不加
+    place:classroom:
+      fingerprint: 697845168b493ce6584a0f6d39425a82b2125b302a56fc485d54e3365544a986
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内阶梯教室，归入建筑；原文没写天气和特殊光照
+    place:hartman_office:
+      fingerprint: 83e863ef37f81a69ef68242b4fd58135d88cb814d2f073e7bf8262f81277275e
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内办公室，归入建筑；原文没写天气和光
+    place:library:
+      fingerprint: f9f877eca699d5e19b86311bb58925f294f6bb598f0ff49dde3880aacf6a0dfc
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内阅览室，归入建筑；绿罩台灯是寻常照明，不属于可选的天气光效
+    place:library_office:
+      fingerprint: 4e5fa34dbd53946b5ae859ad287ddc10bd71d175c28f0ff30c89f38ee8f21b15
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 借阅台后面的室内小办公室，归入建筑；原文没写天气
+    place:registrar:
+      fingerprint: ca6cfe0028f48132525c192d325d5ef995a0aa80cd98fe63f889766a3229d350
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内行政办公室，归入建筑；原文没写天气
+    place:dorm_yard:
+      fingerprint: 09a66f2ebe5fb657c2ec9766e7ac28b25bd32656fc06776052556f2a039356e4
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 公寓门前露天，校园东侧建筑旁的街道地面；原文没写天气。原文只说等到天黑潜行有奖励骰，这是条件，不是固定的光
+    place:dorm:
+      fingerprint: 74caf3ab8ec15ca700e94c4a3cdd45c724836924bff734eae0364d2f528ac5f7
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 寄宿公寓的建筑容器，室内，地面为建筑
+    place:dorm_hall:
+      fingerprint: 171789c041669238c29af4f08d55150a9799689800bb9b06c9b7633e91e419e2
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内一楼走廊，归入建筑；“昏暗”是整理时的描写，原文没写特殊光效
+    place:bernard_room:
+      fingerprint: e6c67ce8399f5cb7d926d698da3e40068309a2cba7ec0a3c2e77a01f7717e2df
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内宿舍，窗帘拉着，归入建筑；没有天气
+    place:james_room:
+      fingerprint: c0d377a0c8e128ee1b12803e8d69fa318189d96de037690895fadddbb10c1bfc
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内宿舍，归入建筑；窗户微开不改变露天属性，原文没写天气
+    place:janitor_office:
+      fingerprint: e3e8ae2f65de49875252a5748d714ba4abb8c772845c79d3ae00231445ed5746
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 地下室里的门卫办公室，室内建筑；原文没写光效
+    place:ludlow:
+      fingerprint: 42fc294c53fac57ee6aabcb7ef07c66b66431f4c5db11999e3925933adaf0572
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 小镇北街露天，地面为街道；原文没写天气
+    place:cora_house:
+      fingerprint: dce843e033c7568d6b7b8cdf6221db486942809d60d7eda610ad2b576b3d2712
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 房子的建筑容器，进入后都是室内，地面为建筑；原文只说房子在镇子边缘、很隐蔽，没写天气
+    place:cora_ground:
+      fingerprint: 36259a642060845537351d3347c8dfa40e3e0aca86a60e72cb318cab141bb167
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 一楼起居室和厨房，室内建筑；落灰不算天气光效
+    place:cora_landing:
+      fingerprint: 48dea2bdd6d2d63e1c031c827e2dd89132248e02f41ce8a5b95bfb8d14f0c63b
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 二楼楼梯口，室内建筑；原文没写天气和光
+    place:cora_bath:
+      fingerprint: e88ce7db76d3bd65710b0dea0966e3db7d99a6564c77a5c8ccff58eb2d485e73
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内小浴室，原文写它没有任何不寻常之处；归入建筑，不加光效
+    place:cora_bedroom:
+      fingerprint: d5edf01c2759e292752a2ff95df077c32946c5eaaeb470a1d777a9b1eb023f6d
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 室内卧室，归入建筑；苍蝇和恶臭不是天气光效，不加
+    place:cora_basement_hall:
+      fingerprint: 79ac055d613246d603171f7544d8a31bab5c9dc1995d466757022b57d6357c84
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 地下室走廊，室内建筑；嗡嗡声是声音，原文没写光
+    place:cora_basement:
+      fingerprint: 08941af29108a8da7cca8530ed075aa2b3d8ee2ceaa893088421734674a90eed
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文写整个房间被淡蓝色的光照亮，而且这光来自时空裂隙、裂隙关闭时会消失。它是稳定的异界之光，不是火光闪烁，所以把 flicker 改成 warp；仍是室内建筑
+    handout:h_sigil:
+      fingerprint: 8e38e5586a96c71ead2f1d5e1b21c75cd28808e792d4dc118a82b6e0a778ff21
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 一张画着几何图形的草图，属于说明卡类，现有的 card 对得上
+    handout:h_postcard:
+      fingerprint: c39944ae7af151cf400f1f9c4863f9a0e71b288feb389649c6e6410fb9649f5a
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 科拉写给詹姆斯的明信片，属于信件便条类，现有的 letter 对得上
+    handout:h_note:
+      fingerprint: 7261bafd2347d6690181b3984f7f6a940baeaca0610bef026db655dbe1014207
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 印着图书馆信头的手写便条，属于信件便条类，现有的 letter 对得上
+  variants:
+    campus:
+      fingerprint: d2e6189cea846c353f8590a36d67d3d25d210566b98cfbd2f7c34348eab3b96f
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文对校园只有概述，没有写到时有时无的车辆、人群或灯光，保留原图
+    classroom:
+      fingerprint: f3cc528cadf0ac6cb2ea4c63e7b4fc851556f53220733ef00cd5f5a514e269be
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文只写考前最后一课坐满学生、哈特曼讲课，原图已经画出这个状态；下课后的教室原文没有描写，哈特曼本人由角落小像显示
+    hartman_office:
+      fingerprint: 3a712953062246c8178402df7e45c573c14ed81936801b5210d0ff4d5694a4b1
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文只说哈特曼下课回办公室、点名的人次日早上来见他，没有写画面上多出什么；人物由小像显示
+    library:
+      fingerprint: 5e8acf9b97b5110c08fcab2ddf01a941382a64296dd3616953caec0ab6615493
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文写的是霍尔科姆夫人的规矩和气氛，没有来来去去的布置；她本人由小像显示
+    library_office:
+      fingerprint: 63a9b33b73ddbc7276d50daaf44a0dd75d19ab42a6e7170faa9ad4d49b2eb2a8
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文只写凯莱布常在这里整理书籍，原图已有书堆和贴标签的人；人物由小像显示，没有别的可变画面
+    registrar:
+      fingerprint: 5a1b707a934cc70e7ba9363a4fe8b842088ac51754348456186bd6c167b232ec
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文只写鲁比和档案，没有时有时无的画面变化
+    dorm_yard:
+      fingerprint: 5ca2e842b65057433426ea47d70a29b83ca171757536153e4e1edd56bb69ce88
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文只说等到天黑爬窗时潜行有奖励骰，没有描写夜里点灯之类的画面；微开的窗户是需要侦查发现的隐藏通路，画进图里会把检定结果直接给玩家，所以不画
+    dorm:
+      fingerprint: e47fc3477340faf0fbfea293987d751307deec11993c98c91f2b51e1fe995cee
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 只是建筑容器，原文没有画面描写
+    dorm_hall:
+      fingerprint: 2e1e8509a3dda2704813ddfcbc70fd9f48c7a06c3991892392506bf9a258462d
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 伯纳德开门出来是人物出场，由小像显示；原文没有写走廊里时有时无的东西
+    bernard_room:
+      fingerprint: 42c3621f486724b8c1f40a3cb23ada3f6a8894632b36ca65cde98cff14627ea9
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文只写伯纳德在屋里睡觉解宿醉、不请人进门，没有可变的画面
+    james_room:
+      fingerprint: 6cf3ab63f5f85a3ec44cf4bd1ba934885de2ec4955b1a937d50b3e884abd8873
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 房间的混乱是固定状态；拿走钥匙或手稿这类改动原文没有写成画面变化，画出来还可能提前暴露藏着的物件
+    janitor_office:
+      fingerprint: fa872ca5356749c95f29c7a2eb57e1158e503f647c9a0e0805b2fe947c5cbf37
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 门卫原文没有资料，也没有写他在不在办公室时画面有什么不同
+    ludlow:
+      fingerprint: 4f221618db11af9a571faa2e03d33f0c0db907f6170546df926eb9c313077cca
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文只写顺北街转入土路，没有写镇上的车辆、人群或时段变化
+    cora_house:
+      fingerprint: 5f6244543da0ad7fa334d93e18ba1283682f3f91b1c8f4758836906d8a9acdd6
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文写警察在裂隙关闭后赶到，但警察不是登记过的人物，这个状态只能用剧情标记表示，写不成 at:人物:地点 的条件；而且调查员这时在屋里，屋外的画面用不上。所以不写
+    cora_ground:
+      fingerprint: c7ca559af97f80899bacf0d1b58c4c1aed28ed583e092b4729adda774552c9ae
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文写一楼起初没有可疑之处，没有来来去去的画面变化
+    cora_landing:
+      fingerprint: a5a5a404ff2bbb79107b1ccd7dfe321eccdb4d5059dff3bf21c45984838d59ee
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 二楼楼梯口的苍蝇声和恶臭是固定状态，原文没有写时有时无的变化
+    cora_bath:
+      fingerprint: 3571f287b22352fe0bee3b2369adef2c8c3e9ca83578b6a4ee690d8f5e678632
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文明写浴室没有任何不寻常的地方
+    cora_bedroom:
+      fingerprint: 5a1cce29cf585fedc718ff8a778549f182adf6a37e3dca85b24abb0944240ccf
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 尸体起身下楼属于剧情事件，不是来来去去的东西；它本身就是守卫者，画出空床或掀开的毯子会剧透它的真身，所以不画
+    cora_basement_hall:
+      fingerprint: d5518288f369fc05bddd77cd52d6a71124f99486a2f511e4ffc55e067a24b8af
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 楼梯上的脚印要侦查才能发现，不能画进图里；守卫者经过走廊属于人物或怪物出场，不画真身
+    cora_basement:
+      fingerprint: bcca94e146da81547163c6b6a11d265f54223197a55a9cf8d0f4a672e6e16368
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 守卫者进来是怪物出场，不画真身；裂隙关闭后蓝光消失、詹姆斯落下是剧情造成的永久变化，不属于背景差分
+  closeups:
+    campus:
+      fingerprint: 581e1c0e4a9c15f2a906e9f5f866b2ef8d8dc9fe687d4ee1f05196e88a0443d6
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 校园小径和公告栏只是交通枢纽，原作没有写可查看的具体东西，不需要特写
+    hartman_office:
+      fingerprint: 152b43444e4e686f64a999cf2837073ee4c2b742199ed9c7452b3bd3c87bca35
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原作只说哈特曼在这里提供不了别的信息，书桌和黑板没有内容，不需要特写
+    library:
+      fingerprint: c9ba120a2cbe031235e599714b14af3803cd160c4719ccdbaaa2c4d0a51a5f86
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文图书馆一节只写霍尔科姆夫人的规矩和她说的话。这里的线索 c_holcomb_overdue、c_holcomb_books、c_holcomb_c、c_holcomb_truth
+        都要和她交谈才能拿到，借阅台、长桌、书架上没有原作写到的实物可以走近细看。场景图已经画出借阅台和绿罩台灯的阅览室，再加特写没有内容，所以保留原状。
+    library_office:
+      fingerprint: eb61912c746caca1b5e83028a635a35cc3cac36dadb25fc0ef092b91968944a5
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 线索都来自和凯莱布对质，工作台和书堆上原作没有写可查看的东西
+    registrar:
+      fingerprint: 60af9f513388ba582abc61585183dbb6d47b58cf017036a5d4d8e17ae4ccb238
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 档案要靠说服鲁比才能看，档案柜本身没有可画的内容，原作也没写档案的样子
+    dorm_hall:
+      fingerprint: a96dbe42e529c32873a99505fd3f79f8a0f93eec21f28406a3dae52fa94d0528
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 走廊上只有敲门、撬锁这些动作，房门本身没有值得单独看一眼的地方
+    bernard_room:
+      fingerprint: 584808dc35873c8adb64f771361bad4d211d20f4803a23f646d8d2ed8d4c97b7
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 伯纳德不让人进门，凌乱的床上没有线索
+    ludlow:
+      fingerprint: 1414ad8d63d1304c189c5d36d8eeecc0fe2e5b0f1a8a23f0d52ea8268bd072e5
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 北街和土路只是去科拉家的过渡，原作没有写具体可查看的东西
+    cora_house:
+      fingerprint: 13d21525927ed53aac94e4d97099d6e27a49bd9bccc049c90a82459ac14acd3a
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 屋外只有一扇没锁的前门，原作没有写可查看的细节
+    cora_landing:
+      fingerprint: a07dc681d3f0409d00cfe0622b5aebacffad6890aa38708b97098a7a1fc3cabf
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 楼梯口的卧室门、嗡嗡声和恶臭在场景描写里已经交代，特写在卧室那边写
+    cora_bath:
+      fingerprint: 488d542b3bd721f9e93ec8251ecd952f1bd26133d247db777f54d4eb860c6598
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原作明说浴室没有任何不寻常的地方
+    classroom:
+      fingerprint: 2c4050ded9c0841d80d89195a3e4459dfe140dcfa29a7db2e8580ad8b3da30e8
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: classroom、c_absence
+    dorm_yard:
+      fingerprint: 40a2207c6f167b835ae384df22782e2df6a956b6fcfb3544b35ea465a3267a40
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: dorm_yard、c_window
+    janitor_office:
+      fingerprint: 38cabc78a1ecf717d8bf526b695f610eda855b64f39f3d3e440145f2fa41f5cf
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: janitor_office、i_spare_key
+    james_room:
+      fingerprint: a720f9bb422366567bfeea95913f32bc621a5985b52136fb60695910f65492d2
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: james_room、c_overdue、c_strange_sigil、c_postcard
+    cora_ground:
+      fingerprint: 4078ec062f913d1f7ea450f0b39329eb9dbe880148ea55355d06f6c54e6aef18
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文写一楼起初没有可疑之处，只有厨房里变质的食物和冰箱里发霉的烘肉卷。这一处已经有特写 cora_icebox。c_stench 是闻到的恶臭，看不出来；楼梯井上的脚印在 cora_basement_hall，不在这里。起居室里的苍蝇和糖罐是补写的伏笔，原作没写。没有别的原作实物值得再加特写，所以保留原状。
+    cora_bedroom:
+      fingerprint: 9c565abea70302f899803d3f60949b435a967227964bd458a75354d9b61f4b2a
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 卧室里原作只写了床上盖着毯子的尸体，已经有特写 cora_blanket_bed，可调查项也只有这一个，按要求不能重复新增。揭开毯子后看到的尸体（c_corpse）属于这张已有特写的后续，本次不新建视角。嗡嗡声
+        c_humming 是听到的，画不出来。所以保留原状。
+    cora_basement_hall:
+      fingerprint: 097bcb0829e52f4e28741b0fe3ca88ce2903adb77fbd5ee7770f5118dfc30712
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: cora_basement_hall、c_footprints
+    cora_basement:
+      fingerprint: b41450bfd8a305c70bb9ecdb66f9be79853ed5fcf8b4d73e6e9c7f0d13fe3fe7
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: cora_basement、c_james_floating、c_chest_sigil
+  present:
+    e_risk_exam:
+      fingerprint: ce6796b998354471b978c26293bce45d8d801684a3442b44c42788c137c3bf93
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文“去往佛蒙特州”一节：调查员冒着错过考试的风险去佛蒙特时要过 0/1 理智检定，守秘人拿毕业的风险吓唬他们。这件事发生在去勒德洛的路上（坐巴士、自己叫车，或搭同学的便车）。在场的只有调查员自己，没有任何具名
+        NPC。朗读里的“哈特曼教授的脸”只是调查员心里想到他，教授本人不在场。开车的同学、巴士乘客都是没有名字的路人，不是 NPC。科拉和詹姆斯这时还在勒德洛的房子里，调查员看不到。所以 present
+        留空。
+    e_guardian:
+      fingerprint: 9449005b0b43fbb13539af50ce31678e43aca6aea646f434342c665a40836815
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文“门之守卫者”：调查员在主地下室调查时，被楼梯上的脚步声打断，看见科拉阿姨复活的遗体跌跌撞撞下楼，它随后进入地下室，袭击平视范围内的调查员。科拉（NPC cora）就是这个当场动手的守卫者，算到场。原文“地下室”写着詹姆斯赤裸着悬浮在血绘图案上方，就在这个房间里，眼神会聚焦到叫他名字的人身上；关闭大门要当场把他拉出图形或毁掉他胸口的图形，所以他也在调查员眼前。
+    e_sirens:
+      fingerprint: 5b1f3d9f638fbe253475168f099cd7f3fc3ea061f6734ff220c23486ed11e0b5
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文“关闭大门”：“科拉·韦布的尸体将会倒下……留给玩家的将是科拉的尸体，和……丧失行为能力——或者死掉的詹姆斯”；原文“后果”：调查员还在弄清发生了什么时就听见警笛。gate_closed
+        是在地下室当场设下的，所以科拉倒下的尸体和詹姆斯（活着但丧失行为能力，或已死）当时都在调查员眼前。赶来的警察没有名字，不属于 NPC，不列。
+    e_other_world:
+      fingerprint: 386436d2c9f3e721f2032f5b3e3b6a29e9c3cd45a74133b599540bb56c7814d6
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 原文“后果”：调查员被带往警局，在警车窗外或其他场合意识到世界变得陌生。此时只有没有名字的警察，不属于 NPC；詹姆斯和科拉都留在科拉的房子里，所以不列任何人。
+    e_other_world_dead:
+      fingerprint: 2744cd2937ec3d5abc4c1c4a683383430fec1a630211d5023367b0d73fd97f30
+      source: 3c726d7ec82cbb693962f2677762bff457f2bf0d2ef2bdf0e0496ca035aeb5ff
+      reason: 和 e_other_world 一样：发生在被警察带往警局的途中，原文没有写任何有名字的 NPC 在场；死去的詹姆斯和科拉的尸体留在房子里，所以不列任何人。
+ties:
+- id: tie_james_study_partner
+  hook: 詹姆斯是调查员的固定学习搭档，曾在某门课快挂科时陪他熬夜补习、一句外传的话也没说过；这正好给出原作要求问清的“一失踪就立刻去找他”的动机（只是关系，不给任何关于他下落的消息）。
+  npc: james
+  fits:
+  - 重要之人
+- id: tie_james_room_familiar
+  hook: 调查员以前常去詹姆斯宿舍一起做题，熟悉他平时那种“有点不爱收拾”的乱法，所以一进门就更能感到这次乱得离奇（不提供钥匙或进门的门路，进门仍按原作的检定和办法）。
+  place: james_room
+  fits:
+  - 意义非凡之地
+  - 重要之人
+- id: tie_cora_meatloaf
+  hook: 詹姆斯偶尔会和调查员分吃佛蒙特寄来的点心，说是科拉阿姨做的；调查员从没见过她，也不知道她的地址，只知道詹姆斯提起她时语气很软（地址仍要靠旧信、明信片或学生档案得到）。
+  npc: cora
+  fits:
+  - 重要之人
+  - 宝贵之物
+- id: tie_hartman_advisor
+  hook: 哈特曼教授是调查员的指导老师或助教上司，调查员的奖学金或毕业论文要靠他点头，所以中途离课被点名、去佛蒙特错过考试的代价对这位调查员格外重（哈特曼对詹姆斯除了缺席感到惊讶，仍然什么也不知道）。
+  npc: hartman
+  fits:
+  - 职业
+  - 思想与信念
+- id: tie_holcomb_shelver
+  hook: 调查员在大学图书馆做过勤工俭学的上架员，挨过霍尔科姆夫人的训，清楚她最恨凌乱、噪音和不敬；这只让调查员更懂怎么在她面前守规矩，不代替向她询问，也不让调查员自动想到便条上的“C”是谁。
+  npc: holcomb
+  fits:
+  - 职业
+- id: tie_caleb_copies
+  hook: 调查员曾从图书馆后台那个方脸助理手里花小钱买过几页“查不到出处”的旧文献抄本，留作珍藏；调查员不知道抄本从哪来，也不知道他卖过东西给詹姆斯，对质时凯莱布照样先否认，要社交检定成功才会交代。
+  npc: caleb
+  fits:
+  - 宝贵之物
+  - 职业
+- id: tie_ruby_scholarship
+  hook: 鲁比·托伦斯曾经替调查员办过奖学金或注册的手续，两人见面会打招呼；这让请她破例显得顺理成章，但仍要说服、话术或取悦检定成功，恐吓照样只会让她赶人并以纪律处分相威胁。
+  npc: ruby
+  fits:
+  - 重要之人
+  - 职业
+- id: tie_bernard_drinking
+  hook: 伯纳德·富勒是调查员在球队或酒局上认识的熟人，知道这家伙宿醉时脾气有多坏；交情只让他更愿意开门听两句，想从他那里问到备用钥匙的事仍要社交检定成功，失败他照样威胁去告诉门卫。
+  npc: bernard
+  fits:
+  - 重要之人
+- id: tie_ludlow_grandparents
+  hook: 调查员小时候夏天在勒德洛附近的亲戚家住过，认得北街和镇外的土路；这只是熟悉小镇，并不知道科拉·韦布住在哪栋房子，去佛蒙特的交通方式和路程也照原作（5-6 小时）。
+  place: ludlow
+  fits:
+  - 意义非凡之地
+- id: tie_vermont_classmate
+  hook: 调查员有个家在佛蒙特的同学平时常开车回家，可以作为原作“搭同学便车”的那个人；当天对方能不能捎上他们仍要过原作的幸运检定。
+  place: ludlow
+  fits:
+  - 重要之人
+foreshadow:
+- id: fs_window_flies
+  hint: 起居室窗玻璃上爬着几只苍蝇，一下一下撞着玻璃，屋里别处却静得没有一点动静。
+  where: cora_ground
+  pays_off: k_cora_dead
+- id: fs_blanket_shifted
+  hint: 毯子的一角从床沿滑下来一截，底下那个人形躺的姿势有点别扭，像是不久前动过。
+  where: cora_bedroom
+  pays_off: e_guardian
+  stages:
+  - hint: 床上只剩一条皱成一团、半拖到地上的毯子，那个人形不在了；地板上的污迹从床边一路延伸到门口。
+    when: flag:guardian_risen
+    flag: sign_fs_blanket_shifted_1
+- id: fs_blue_under_door
+  hint: 走廊尽头那扇门的门缝底下透出一线很淡的光，颜色偏冷，不像灯泡，也不像烛火。
+  where: cora_basement_hall
+  pays_off: k_ritual
+  stages:
+  - hint: 门缝底下那线冷光不见了，走廊里只剩楼梯口漏下来的一点昏光，嗡嗡声也停了。
+    when: flag:gate_closed
+    flag: sign_fs_blue_under_door_1
+- id: fs_sugar_jar
+  hint: 圆桌上那只瓷糖罐上的花纹，和进门时记得的好像不太一样——也许只是刚才没看仔细。
+  where: cora_ground
+  pays_off: e_other_world

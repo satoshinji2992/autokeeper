@@ -1,0 +1,409 @@
+pictures:
+  sc_breakdown-4ef3a835:
+    title: 坡顶的小村
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 傍晚，长途车停在山顶小村第一座红石矮屋旁的空地上，发动机舱盖掀开，四周房屋阴郁沉默，天边余晖暗红。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      source: source/images/p52_image01.png
+      original: true
+      purpose: reference
+    width: 1024
+    height: 576
+  sc_beacon-69b8e289.photo:
+    title: The rusted cast iron lighthouse stands tall against a clear blue sky, its intric
+    page: https://img.atlasobscura.com/BoGADL3lX3AMof81TpLxtiaky8P4-Xy868AzeYyHmDc/rt:fit/w:1200/q:80/sm:1/scp:1/ar:1/aHR0cHM6Ly9hdGxh/cy1kZXYuczMuYW1h/em9uYXdzLmNvbS91/cGxvYWRzL3BsYWNl/X2ltYWdlcy8xM2E4/NjgyYTdhMDhkYWZl/NTBfSU1HXzAzNjYu/anBn.jpg
+    thumb: https://img.atlasobscura.com/BoGADL3lX3AMof81TpLxtiaky8P4-Xy868AzeYyHmDc/rt:fit/w:1200/q:80/sm:1/scp:1/ar:1/aHR0cHM6Ly9hdGxh/cy1kZXYuczMuYW1h/em9uYXdzLmNvbS91/cGxvYWRzL3BsYWNl/X2ltYWdlcy8xM2E4/NjgyYTdhMDhkYWZl/NTBfSU1HXzAzNjYu/anBn.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  sc_beacon-69b8e289:
+    title: 黑色的铁塔
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 悬崖边三条路交汇处，一座熟铁铸造、漆黑的灯塔，头顶高处巨大的弧形平台，撑架像蛇一样汇向中心，下面堆着成捆木柴，灰白的秋日天空。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: The rusted cast iron lighthouse stands tall against a clear blue sky, its intric
+      page: https://img.atlasobscura.com/BoGADL3lX3AMof81TpLxtiaky8P4-Xy868AzeYyHmDc/rt:fit/w:1200/q:80/sm:1/scp:1/ar:1/aHR0cHM6Ly9hdGxh/cy1kZXYuczMuYW1h/em9uYXdzLmNvbS91/cGxvYWRzL3BsYWNl/X2ltYWdlcy8xM2E4/NjgyYTdhMDhkYWZl/NTBfSU1HXzAzNjYu/anBn.jpg
+      thumb: https://img.atlasobscura.com/BoGADL3lX3AMof81TpLxtiaky8P4-Xy868AzeYyHmDc/rt:fit/w:1200/q:80/sm:1/scp:1/ar:1/aHR0cHM6Ly9hdGxh/cy1kZXYuczMuYW1h/em9uYXdzLmNvbS91/cGxvYWRzL3BsYWNl/X2ltYWdlcy8xM2E4/NjgyYTdhMDhkYWZl/NTBfSU1HXzAzNjYu/anBn.jpg
+      license: 网页图片，版权归原作者，只在本机使用
+      artist: ''
+      width: 0
+      height: 0
+      kind: scene
+    width: 1024
+    height: 576
+  sc_bear-94bd31ad:
+    title: 林间空地
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 秋日林间空地上，一头黑熊用后腿站起，伸向结满果子的树枝，树叶金黄橙红。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      source: source/images/p25_image01.png
+      original: true
+      purpose: reference
+    width: 1024
+    height: 576
+  sc_beasts-5b76731f:
+    title: 荧光的眼睛
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜里的林间小路，树枝间亮着一双双荧光的小眼睛，长尖耳朵的黑影从树上滑下，其中一只身上冒出红紫色的火苗。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:Fireplace and Picture in Doge's South Bedroom.jpg
+      page: https://commons.wikimedia.org/wiki/File:Fireplace_and_Picture_in_Doge%27s_South_Bedroom.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e6/Fireplace_and_Picture_in_Doge%27s_South_Bedroom.jpg/500px-Fireplace_and_Picture_in_Doge%27s_South_Bedroom.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 4.0
+      artist: Davidlwinkler
+      width: 2988
+      height: 3984
+      kind: scene
+    width: 1024
+    height: 576
+  sc_assassination-9bc99cca.photo:
+    title: A luminous full moon illuminates a dramatic cliffside landscape, with rugged roc
+    page: https://images.stockcake.com/public/e/5/b/e5b9f049-82e5-401c-a48e-fbf875943a06/moonlit-coastal-cliff-stockcake.jpg
+    thumb: https://images.stockcake.com/public/e/5/b/e5b9f049-82e5-401c-a48e-fbf875943a06/moonlit-coastal-cliff-stockcake.jpg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  sc_assassination-9bc99cca:
+    title: 月下的刀光
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 月夜的崖顶草地，一个黑影从背后勒住一个裹头巾的老人，长刀反着冷光，地上隐约冒出蓝色的火焰。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: A luminous full moon illuminates a dramatic cliffside landscape, with rugged roc
+      page: https://images.stockcake.com/public/e/5/b/e5b9f049-82e5-401c-a48e-fbf875943a06/moonlit-coastal-cliff-stockcake.jpg
+      thumb: https://images.stockcake.com/public/e/5/b/e5b9f049-82e5-401c-a48e-fbf875943a06/moonlit-coastal-cliff-stockcake.jpg
+      license: 网页图片，版权归原作者，只在本机使用
+      artist: ''
+      width: 0
+      height: 0
+      kind: scene
+    width: 1024
+    height: 576
+  sc_procession-e63f6c05.photo:
+    title: File:St-Roch de Thuin (marche aux flambeau) , Belgique . par Brutus Art.jpg
+    page: https://commons.wikimedia.org/wiki/File:St-Roch_de_Thuin_(marche_aux_flambeau)_,_Belgique_._par_Brutus_Art.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/St-Roch_de_Thuin_%28marche_aux_flambeau%29_%2C_Belgique_._par_Brutus_Art.jpg/500px-St-Roch_de_Thuin_%28marche_aux_flambeau%29_%2C_Belgique_._par_Brutus_Art.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: '"Brutus Art"'
+    width: 2919
+    height: 4382
+    kind: scene
+  sc_procession-e63f6c05:
+    title: 火把长龙
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜晚村子的大街，一张张涂黑的脸、左眼画着红三角，火把排成长龙涌向远处的黑色铁塔，前面抬着三具盖红布的人形。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:St-Roch de Thuin (marche aux flambeau) , Belgique . par Brutus Art.jpg
+      page: https://commons.wikimedia.org/wiki/File:St-Roch_de_Thuin_(marche_aux_flambeau)_,_Belgique_._par_Brutus_Art.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/St-Roch_de_Thuin_%28marche_aux_flambeau%29_%2C_Belgique_._par_Brutus_Art.jpg/500px-St-Roch_de_Thuin_%28marche_aux_flambeau%29_%2C_Belgique_._par_Brutus_Art.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 4.0
+      artist: '"Brutus Art"'
+      width: 2919
+      height: 4382
+      kind: scene
+    width: 1024
+    height: 576
+  sc_ignite-22585de0.photo:
+    title: A large crowd of people stands in a circle at night, watching two towering bonfi
+    page: https://www.shutterstock.com/shutterstock/videos/1109604359/thumb/1.jpg?ip=x480
+    thumb: https://www.shutterstock.com/shutterstock/videos/1109604359/thumb/1.jpg?ip=x480
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  sc_ignite-22585de0:
+    title: 点火
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 从高台上往下看，火把伸向铁塔下的柴堆，火苗沿铁架往上爬，下面是密密麻麻仰望的人群，夜空里星光异常明亮。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: A large crowd of people stands in a circle at night, watching two towering bonfi
+      page: https://www.shutterstock.com/shutterstock/videos/1109604359/thumb/1.jpg?ip=x480
+      thumb: https://www.shutterstock.com/shutterstock/videos/1109604359/thumb/1.jpg?ip=x480
+      license: 网页图片，版权归原作者，只在本机使用
+      artist: ''
+      width: 0
+      height: 0
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_bicycle-26048478:
+    title: 向黎明而行
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment: 黎明前的山坡顶，一辆自行车停在路边，远处山头上的村子化作火海，灰暗的烟柱直冲天空。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on: null
+    width: 1024
+    height: 576
+  sc_end_hilltop-34d21e6a.photo:
+    title: A lone figure sits inside a brightly lit fire tower at night, its warm glow cont
+    page: https://i0.wp.com/www.adirondackexplorer.org/wp-content/uploads/2019/09/HurricaneMtMikeLynch-9.jpg?fit=2000%2C969&ssl=1
+    thumb: https://i0.wp.com/www.adirondackexplorer.org/wp-content/uploads/2019/09/HurricaneMtMikeLynch-9.jpg?fit=2000%2C969&ssl=1
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  sc_end_hilltop-34d21e6a:
+    title: 移动的星星
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜里的山顶，远处高地上一座铁塔燃着橘色大火，村子上空有一颗星星拖着微光在移动。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: A lone figure sits inside a brightly lit fire tower at night, its warm glow cont
+      page: https://i0.wp.com/www.adirondackexplorer.org/wp-content/uploads/2019/09/HurricaneMtMikeLynch-9.jpg?fit=2000%2C969&ssl=1
+      thumb: https://i0.wp.com/www.adirondackexplorer.org/wp-content/uploads/2019/09/HurricaneMtMikeLynch-9.jpg?fit=2000%2C969&ssl=1
+      license: 网页图片，版权归原作者，只在本机使用
+      artist: ''
+      width: 0
+      height: 0
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_woods-354c425b.photo:
+    title: File:Foggy autumn forest in the morning.jpg
+    page: https://commons.wikimedia.org/wiki/File:Foggy_autumn_forest_in_the_morning.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b7/Foggy_autumn_forest_in_the_morning.jpg/500px-Foggy_autumn_forest_in_the_morning.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Sergey Pesterev
+    width: 3657
+    height: 5485
+    kind: scene
+  sc_end_woods-354c425b:
+    title: 林中的早晨
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 秋日清晨的树林，晨雾里落叶满地，路上留着车辙和马蹄印，一个人扶着树干站起来。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:Foggy autumn forest in the morning.jpg
+      page: https://commons.wikimedia.org/wiki/File:Foggy_autumn_forest_in_the_morning.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b7/Foggy_autumn_forest_in_the_morning.jpg/500px-Foggy_autumn_forest_in_the_morning.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 4.0
+      artist: Sergey Pesterev
+      width: 3657
+      height: 5485
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_burned-d723077e.photo:
+    title: File:Fanove 2017 VALERIA MARZANO.jpg
+    page: https://commons.wikimedia.org/wiki/File:Fanove_2017_VALERIA_MARZANO.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Fanove_2017_VALERIA_MARZANO.jpg/500px-Fanove_2017_VALERIA_MARZANO.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Valeriamarzano
+    width: 3456
+    height: 5184
+    kind: scene
+  sc_end_burned-d723077e:
+    title: 灯塔上的火
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜色里熊熊燃烧的铁塔高台，火焰和黑烟吞没了顶上的铁链，下面人群高举火把。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:Fanove 2017 VALERIA MARZANO.jpg
+      page: https://commons.wikimedia.org/wiki/File:Fanove_2017_VALERIA_MARZANO.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Fanove_2017_VALERIA_MARZANO.jpg/500px-Fanove_2017_VALERIA_MARZANO.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY-SA 4.0
+      artist: Valeriamarzano
+      width: 3456
+      height: 5184
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_chant-b1c1a3cb.photo:
+    title: File:Trinity Test Fireball 53ms.jpg
+    page: https://commons.wikimedia.org/wiki/File:Trinity_Test_Fireball_53ms.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Trinity_Test_Fireball_53ms.jpg/500px-Trinity_Test_Fireball_53ms.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Photo courtesy of National Nuclear Security Administration / Nevada Site Office
+    width: 800
+    height: 638
+    kind: scene
+  sc_end_chant-b1c1a3cb:
+    title: 第二颗太阳
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜空中升起第二颗耀眼的白色太阳，火舌凝在半空，整座山头连同村庄在白光中化为灰烬。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:Trinity Test Fireball 53ms.jpg
+      page: https://commons.wikimedia.org/wiki/File:Trinity_Test_Fireball_53ms.jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Trinity_Test_Fireball_53ms.jpg/500px-Trinity_Test_Fireball_53ms.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: Public domain
+      artist: Photo courtesy of National Nuclear Security Administration / Nevada Site Office
+      width: 800
+      height: 638
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_summon-620c577c.photo:
+    title: File:Meteor shower in the Chilean Desert (potw2227a).jpg
+    page: https://commons.wikimedia.org/wiki/File:Meteor_shower_in_the_Chilean_Desert_(potw2227a).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/Meteor_shower_in_the_Chilean_Desert_%28potw2227a%29.jpg/500px-Meteor_shower_in_the_Chilean_Desert_%28potw2227a%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 4.0
+    artist: ESO/P. Horalek
+    width: 10957
+    height: 16492
+    kind: scene
+  sc_end_summon-620c577c:
+    title: 群星坠落
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 无数星星拖着火尾从夜空坠向山顶铁塔，人群仰望吟诵，火光冲天。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: File:Meteor shower in the Chilean Desert (potw2227a).jpg
+      page: https://commons.wikimedia.org/wiki/File:Meteor_shower_in_the_Chilean_Desert_(potw2227a).jpg
+      thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/Meteor_shower_in_the_Chilean_Desert_%28potw2227a%29.jpg/500px-Meteor_shower_in_the_Chilean_Desert_%28potw2227a%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+      license: CC BY 4.0
+      artist: ESO/P. Horalek
+      width: 10957
+      height: 16492
+      kind: scene
+    width: 1024
+    height: 576
+  sc_end_madness-70879202.photo:
+    title: 'A man stands with his arms outstretched, facing a massive fire that illuminates '
+    page: https://artlist-content-images.imgix.net/jpg/c80e008c-92b4-45d3-9567-71b2c75446e3-gradedThumbnail_w800px_e80a6500-cf67-4738-95e7-84b4e297a9a2_1740047437703.jpeg
+    thumb: https://artlist-content-images.imgix.net/jpg/c80e008c-92b4-45d3-9567-71b2c75446e3-gradedThumbnail_w800px_e80a6500-cf67-4738-95e7-84b4e297a9a2_1740047437703.jpeg
+    license: 网页图片，版权归原作者，只在本机使用
+    artist: ''
+    width: 0
+    height: 0
+    kind: scene
+  sc_end_madness-70879202:
+    title: 我是星星
+    page: ''
+    thumb: ''
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    prompt: 'A picture for a Call of Cthulhu horror game set in 1927 年（秋），美国新罕布什尔州北部，北面白山山脉、南面温尼伯索基湖之间的山顶小村烬头村（Emberhead）.
+
+      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 一个人形在火中张开双臂，身体化作白热的光点，与夜空的星星连成一片。
+
+      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
+      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+    based_on:
+      title: 'A man stands with his arms outstretched, facing a massive fire that illuminates '
+      page: https://artlist-content-images.imgix.net/jpg/c80e008c-92b4-45d3-9567-71b2c75446e3-gradedThumbnail_w800px_e80a6500-cf67-4738-95e7-84b4e297a9a2_1740047437703.jpeg
+      thumb: https://artlist-content-images.imgix.net/jpg/c80e008c-92b4-45d3-9567-71b2c75446e3-gradedThumbnail_w800px_e80a6500-cf67-4738-95e7-84b4e297a9a2_1740047437703.jpeg
+      license: 网页图片，版权归原作者，只在本机使用
+      artist: ''
+      width: 0
+      height: 0
+      kind: scene
+    width: 1024
+    height: 576

@@ -1,0 +1,186 @@
+conclusions:
+  - id: k_waldemont_spy
+    text: 沃德蒙特是苏联间谍，通过希尔德的公寓把胶卷交给加尔文·考克斯
+  - id: k_jolan
+    text: 沃德蒙特的生母是犹太人约兰，有人挖出了她的骨灰撒进阿克塞尔的棺材
+  - id: k_guns
+    text: 钢铁厂出产的武器刻着致人自燃的咒文，调查员的配枪也是其中之一
+  - id: k_eberhard
+    text: 艾伯哈德扮成女人作案，是金发男人失踪案和自燃案背后的人
+  - id: k_lab
+    text: 塞格利的地下实验室藏着真相
+
+events:
+  - id: e_coffin_fire
+    title: 棺材起火
+    when: "D1 14:20"
+    where: cemetery
+    present: [waldemont, lotte, eberhard, meisner]
+    read_aloud: 洛特夫人俯身与丈夫作最后的道别，棺材缝里忽然冒出一缕青烟。转眼间整口棺材熊熊燃烧起来，火舌舔上洛特夫人的袖口，她尖叫着向后跌倒。人群乱作一团——可没过多久，火自己熄灭了，只剩一堆冒着烟的残骸。
+    sanity: 0/1
+    sets: [coffin_burned]
+    text: 守灵夜艾伯哈德对阿克塞尔的尸体施放的熔铸之血此刻生效。洛特被烧伤。火很快自己熄灭，之后可检查残骸（c_coffin_bones、c_coffin_ashes、c_dagger）。钟点为 AutoKeeper 补充，原文只写下午葬礼中。
+  - id: e_waldemont_burns
+    title: 沃德蒙特自燃
+    when: "flag:waldemont_ignites & !flag:waldemont_dead"
+    present: [waldemont]
+    read_aloud: 沃德蒙特的皮肤一点点发红，接着龟裂开来，血从裂缝里渗出，裂缝深处透出火光——下一刻烈焰从他身体里迸发出来。等火灭的时候，那里只剩一具焦黑的骷髅。
+    sanity: 1D3/1D10
+    sets: [waldemont_dead]
+    effects:
+      - {kind: die, target: waldemont, why: 原文“Asche zu Asche”：守秘人认为合适时他被火焰吞噬，烧成焦黑骷髅}
+    text: 守秘人认为合适时设 waldemont_ignites。开始自燃时与他有肢体接触的调查员或重要 NPC 受 1D8 火焰伤害；不重要的 NPC 可直接烧死（例：动手逮捕他的小兵当场烧死）。之后上级要求调查员查明情况，由艾伯哈德继承家业。
+  - id: e_dinner_invite
+    title: 晚餐邀请
+    when: "flag:waldemont_dead & !flag:dinner_done"
+    text: 沃德蒙特死后，艾伯哈德派人送信，邀请调查员到埃森一家高档餐厅的单间共进晚餐；单间是用女人的名字订的。守秘人用信使、电话或仆人转达。
+  - id: e_dinner
+    title: 晦气的约会
+    when: "flag:waldemont_dead & at:players:restaurant & !flag:dinner_done"
+    where: restaurant
+    present: [eberhard]
+    performer: eberhard
+    performance: |
+      打扮得像个贵妇人，毫不掩饰地表达对调查员露骨的喜爱和赞美，例如：“您真帅。您是个美男子。您的肉体如此完美……我真想每天看着您看着那些钢铁大家伙轰隆隆的然后我们把大炮献给元首……长官，我亲爱的长官，我的好先生，我真喜欢您，我要把您献给元首……哦不，您已经属于元首了……您是阿波罗您是齐格弗里德！您是齐格弗里德的黄金！我爱您！”
+      可能热烈地亲吻调查员的双手、忽然跪下来趴在调查员腿上。某一刻突然板起脸一本正经地胡扯：“您知道，国会纵火是元首的命令……对吗？……要用烈火净化帝国的敌人……焚毁国会就是净化欧洲的开始。为了元首的幸福，这是必要的牺牲。”
+      与调查员为了千年帝国和死去的上帝干杯，最后为晚餐买单。
+    read_aloud: 丝绒帘子掀开，桌边坐着一位戴面纱、穿着华贵长裙的“贵妇人”。面纱下那双画了眼线的蓝眼睛朝你眨了眨。
+    sets: [dinner_done]
+    text: 艾伯哈德不在乎调查员是否怀疑他，他觉得调查员拿他没办法，只是在享受生活。晚餐结束后守秘人可安排刺客（设 assassin_strikes）。
+  - id: e_assassin
+    title: 暗杀
+    when: "flag:dinner_done & flag:assassin_strikes & !flag:assassin_caught"
+    present: [assassin, eberhard]
+    fight: [assassin]
+    read_aloud: 街角的暗处有人抬起了手，枪口对准了艾伯哈德。
+    stakes:
+      - {when: "caught:assassin | surrendered:assassin", flags: [assassin_caught], note: 刺客被控制，立刻吞氰化物自杀}
+    text: 英国或苏联的间谍来刺杀艾伯哈德，配枪的型号和产地暗示他的身份。一旦被调查员控制就吞氰化物自杀。事后艾伯哈德压抑着兴奋故作柔弱，缠着调查员送他回家。这是原作给的“引诱调查员开枪”的机会之一；刺客数值为 AutoKeeper 补充。
+  - id: e_assassin_dies
+    title: 刺客服毒
+    when: "flag:assassin_caught"
+    present:
+    - assassin
+    - eberhard
+    read_aloud: 被按住的男人下颌一动，嘴角冒出白沫，身体抽搐了几下就不动了。
+    effects:
+      - {kind: die, target: assassin, why: 原文：一旦被调查员控制即吞氰化物自杀}
+    text: 刺客吞下氰化物死亡。
+  - id: e_daughter
+    title: 捉迷藏
+    when: "flag:waldemont_dead & at:players:manor_hall & !flag:daughter_scene_done"
+    where: manor_hall
+    present: [eberhard, daughter]
+    performer: eberhard
+    performance: |
+      换了西装或高领羊毛衫，正陪沃德蒙特的女儿玩捉迷藏或教她弹钢琴。带她过来对调查员说她父亲死了、妈妈伤心病倒了，“这小杂种该怎么办”，暗示调查员处理掉她。若调查员还不知道约兰的事，在这里透露（她有犹太血统）。说她“从身体到头脑都是个贱种”，问“您是超人……杀掉她会让您愧疚吗”。调查员拒绝时，他真心地说：“长官您真可爱，我喜欢您。”
+    read_aloud: 大厅里传来孩子咯咯的笑声。钢琴后面探出一个穿黑裙子的小女孩，追在她后面的是换了一身高领羊毛衫的艾伯哈德。
+    sets: [daughter_scene_done]
+    text: 原作给的“引诱调查员开枪”机会之一：沃德蒙特死后下一次见到艾伯哈德时发生。地点为 AutoKeeper 补充（原文只写他在照顾女儿）。
+  - id: e_cutting
+    title: 切门
+    when: "flag:lab_door_cutting & at:players:lab_corridor"
+    where: lab_corridor
+    present: [eberhard]
+    performer: eberhard
+    performance: 十分宠溺地当众抚摸调查员，试图把他哄好：“亲爱的长官，我的好先生，如果您打算参观我的房间，和我说就是，何必如此大费周章呢？”然后轻飘飘地打开那扇快被切开的门，展示他的德男脑瓜收藏。
+    read_aloud: 切割机的火花溅了一地，铁门快要切开时，走廊那头传来高跟鞋的声音。
+    sets: [finale_invited]
+    text: 找切割机和操作工的时间足够艾伯哈德得知消息赶来。之后进入爱的誓言。
+  - id: e_bank_alarm
+    title: 办事处的访客
+    when: "flag:safe_forced & at:players:sd_office"
+    where: sd_office
+    present:
+    - eberhard
+    - soldier
+    read_aloud: 值班士兵报告说有位先生在等你。艾伯哈德穿着一身正经的西装，坐在办事处的长椅上冲你微笑。
+    sets: [finale_invited]
+    text: 以恐吓职员的方式打开保险柜，即便要求封口，艾伯哈德也会在一天内得知，穿正常西装到办事处等调查员，之后邀请他去实验室。也可由守秘人认为合适的 NPC 通知调查员他来了。
+  - id: e_finale
+    title: 爱的誓言
+    when: "at:players:lab & !flag:finale_reached"
+    where: lab
+    present: [eberhard, segli]
+    art: finale_lab
+    read_aloud: 实验室里的炉火映着金属的光泽。艾伯哈德就在这里等你——外衣滑落在地，下面是女式蕾丝内衣和吊带黑丝，大腿上绑着一条纳粹袖标。塞格利站在一旁，微笑着推了推眼镜。
+    sets: [finale_reached]
+    text: 终战开始。艾伯哈德不择手段地死缠烂打，直到调查员暴起伤人或表现出撤退意图（设 finale_turns）。守秘人可把终战定在 2 月 14 日。
+  - id: e_fireball
+    title: 火球
+    when: "flag:finale_reached & flag:finale_turns"
+    where: lab
+    fight: [eberhard]
+    sanity: 1/1D6
+    read_aloud: 艾伯哈德张开双手，实验室里的空气一下子烧了起来——在场的其他人一个接一个变成火炬。
+    stakes:
+      - {when: "dead:eberhard", flags: [eberhard_dead, finale_survived], note: 艾伯哈德死了}
+      - {when: "ended:won | ended:fled | ended:parley", flags: [finale_survived], note: 调查员从实验室活着出来}
+    text: 艾伯哈德用几乎全部 MP（普通火球术）点燃在场除他本人、塞格利和调查员以外的所有 NPC；调查员过敏捷检定，失败受 1D8 溅射火焰伤害。之后若召唤克图格亚或炎之精，两者成功率相加不超过 60。一对一决斗，他倾向先缴械再近身互殴；虐杀方式见 keeper_notes。
+    present:
+    - eberhard
+    - segli
+
+endings:
+  - id: loyalty
+    title: 忠诚是你的奖赏
+    condition: "flag:gave_up"
+    text: 你认定这一切都是元首的旨意，撒手不管，逃过了实验室里的那一场。不过你也没几天好日子了：正常的枪越来越难找，自燃事件越来越多……
+  - id: resign
+    title: 辞职
+    condition: "flag:chose_resign"
+    requires: ["flag:finale_survived"]
+    text: 两人死了，军工厂照常运转。你递交了辞呈，把这个烂摊子留给别人。
+  - id: heydrich
+    title: 柏林的枪声
+    condition: "flag:chose_heydrich"
+    requires: ["flag:finale_survived"]
+    text: 你带着附魔枪回到柏林，冲进总部枪毙了海德里希。（极难幸运检定成功时：在他的坟前痛哭的希姆莱和你一起烧成了灰。）
+  - id: report
+    title: 彻查
+    condition: "flag:chose_report"
+    requires: ["flag:finale_survived"]
+    text: 你交上一份令上级满意的钢铁厂管理和间谍问题报告，并让他们相信那些离奇的案子与你无关；上级终于同意回收枪支、彻查生产线。
+  - id: coup
+    title: 政变
+    condition: "flag:chose_coup"
+    requires: ["flag:finale_survived"]
+    text: 你决定发动一场政变。
+  - id: london
+    title: 去伦敦
+    condition: "flag:chose_london"
+    requires: ["flag:finale_survived"]
+    text: 加尔文没有被遣返或枪毙。你用手里的筹码说动了他，他把你弄去了英国。
+  - id: suicide
+    title: 坟头着火
+    condition: "flag:chose_suicide"
+    requires: ["flag:finale_survived"]
+    text: 你用那把附魔枪朝自己开了一枪。几天后，你的坟头着了火。
+  - id: ashes
+    title: 灰飞烟灭
+    condition: 调查员在终战中死去，或被熔铸之血烧成了灰
+    text: 你终究和其他人一样，回归了矿物灰和金属元素。军工厂的烟囱照常冒着黑烟。
+
+showcases:
+  - {id: sc_opening, kind: 开场, when: opening, title: 雨中的葬礼, art: cover, prompt: 阴雨中的公墓，黑伞围着墓穴和橡木棺材，远处是钢铁厂的烟囱}
+  - {id: sc_coffin, kind: 突发, when: "event:e_coffin_fire", title: 棺材起火, prompt: 雨中的棺材突然燃起熊熊烈火，送葬人群惊慌后退，黑伞散落一地}
+  - {id: sc_waldemont, kind: 危机, when: "event:e_waldemont_burns", title: 烈焰迸发, prompt: 一个穿丧服的男人皮肤龟裂透出火光，烈焰从身体里迸发，周围的人惊恐后退}
+  - {id: sc_dinner, kind: 重要场景, when: "event:e_dinner", title: 丝绒帘后的晚餐, prompt: 烛光下的高档餐厅单间，丝绒帘子，桌边坐着戴面纱、穿华贵长裙的高个子身影}
+  - {id: sc_finale, kind: 最终boss, when: "event:e_finale", title: 地下实验室, art: finale_lab, prompt: 钢铁厂地下实验室，炉火映着金属光泽，柜子里摆着玻璃罐}
+  - {id: sc_end_loyalty, kind: 结局, when: "ending:loyalty", title: 忠诚是你的奖赏, prompt: 军火库里成排刻着花纹的手枪，一个军官背影走向远方的火光}
+  - {id: sc_end_resign, kind: 结局, when: "ending:resign", title: 辞呈, prompt: 办公桌上一封辞呈和一把手枪，窗外钢铁厂烟囱冒黑烟}
+  - {id: sc_end_heydrich, kind: 结局, when: "ending:heydrich", title: 柏林的枪声, prompt: 柏林阴沉的官邸走廊，一把冒烟的手枪，地上的影子}
+  - {id: sc_end_report, kind: 结局, when: "ending:report", title: 彻查, prompt: 装满回收手枪的木箱被搬上卡车，雨夜里的探照灯}
+  - {id: sc_end_coup, kind: 结局, when: "ending:coup", title: 政变, prompt: 夜里的柏林街头，坦克和士兵，探照灯划破天空}
+  - {id: sc_end_london, kind: 结局, when: "ending:london", title: 雾中的伦敦, prompt: 浓雾里的泰晤士河岸，一个穿大衣的人回头望}
+  - {id: sc_end_suicide, kind: 结局, when: "ending:suicide", title: 坟头着火, prompt: 墓地里一座新坟燃着火，雨落不灭}
+  - {id: sc_end_ashes, kind: 结局, when: "ending:ashes", title: 灰飞烟灭, prompt: 一捧灰烬和一副银白色金属光泽的骨架，炉火渐暗}
+prelude:
+- art: cover
+  text: 1939年2月，纳粹德国。鲁尔区的烟囱日夜冒烟，为帝国的军队炼出钢铁。
+- art: steelworks
+  text: 赫施伯格钢铁厂是德国军方的武器供应商。老董事长阿克塞尔·冯·赫施伯格刚刚去世，按遗嘱由大儿子沃德蒙特继承家业。
+- text: 沃德蒙特早年参与左派运动，同情布尔什维克。他1934年入了党，当局仍然不信任他，不打算让有共产党履历的人掌控军工企业。
+- text: 你是帝国保安处负责国内安全的人员。柏林派你去埃森，表面上是和新主人打好关系，实际是找到或制造他的把柄，用看上去合法的手续扳倒他。
+- art: cemetery
+  text: 2月11日，阴雨。你带着在柏林领到的配枪坐火车到了埃森，握柄上刻着奇怪的花纹。你刚好赶上老董事长的葬礼。

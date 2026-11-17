@@ -1,0 +1,317 @@
+history:
+- when: 几十年前
+  text: 老张还小时随父亲出海，遭遇蜃气和藏在其中的海和尚，侥幸逃出，船舷留下爪痕；他记不清经过，却成了不自知的感染者。
+  who:
+  - zhang
+- when: 几年前
+  text: 老张的父亲出海“追大鱼”失踪，实为受烙印暗示，已转化为海和尚。老张以为他被海流卷走。
+  who:
+  - zhang
+- when: 开局前两天
+  text: 月全食（天狗吃月亮），格拉基碎片的精神波动变活跃，蜃气加剧，海和尚躁动；远海有人看见挂红灯笼的海市。
+  known_by:
+  - auntie
+relations:
+- a: zhang
+  b: players
+  kind: 雇佣
+  value: 50
+  why: 调查员租了他的船，他想让客人钓个痛快
+agendas:
+- npc: zhang
+  goals:
+  - 带客人钓上大鱼（实为感召：把祭品带回深海）
+  steps:
+  - id: welcome
+    text: 带调查员上船，介绍船上设施，帮第一次挂饵、煮鱼汤、闲聊旧事
+    meet: true
+    once: false
+    source: zhang
+  - id: chase_fish
+    text: 船底被撞后兴奋地要开往远海礁石滩追大鱼
+    when: flag:bumped
+    meet: true
+    once: true
+    source: 前往远海
+  - id: cast_net
+    text: 大鱼拉不动时撒下拖网，抱住主绳不放，阻挡调查员割绳，可能把人推下海
+    when: flag:hooked
+    meet: true
+    once: false
+    source: 大鱼上钩
+  - id: leap
+    text: 若无人干涉阻拦，在礁石滩跳入海中
+    when: flag:net_cast
+    meet: false
+    only_if: 调查员没有制服或有效限制他的行动；被制服或限制住时不做
+    does: flag:zhang_overboard
+    source: 真相
+mechanics:
+- name: 晕船
+  rules: 近海停船时全员体质检定，有出海经验或渔民背景给一个奖励骰；失败者所有动作一个惩罚骰直到好转，大失败当场呕吐；晕过船的人在礁石上休息片刻，下一次晕船检定额外一个奖励骰；返航时体质未过者被颠得呕吐。
+  why: 近海-休息玩耍环节、远海-礁石滩、返航
+  plugin: bayu_sea
+  runs: 插件
+- name: 钓鱼
+  rules: 幸运检定决定咬钩，成功后力量或投掷与鱼对抗（鲅鱼 25、鲈鱼 40、鲅鱼王 60、神秘的大力 75）；可选钓鱼事件表 1-6。
+  why: 活动二：近海垂钓
+  runs: 守秘人
+- name: 礁石滩逃生
+  rules: 每轮约 12 秒，4-5 轮内须切断绳索并启动渔船，否则船沉；3 处网绳需锋利工具与敏捷检定；至少 2 处断后可驾驶检定启动，每 2 次检定耗 1 轮；香与小像各令海和尚停 1 轮，各一次。
+  why: 逃生与追逐
+  plugin: bayu_sea
+  runs: 插件
+preparation:
+  npcs:
+    zhang:
+      fingerprint: bacecca2b96a26a3c5b6b8612a044e2a6cb02981157fd8a339ce60f2ef062615
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 未通名短称呼（穿蓝工装的敦实船长）、想要、性格、说话、知道（短波电台、木雕小像、爷爷遇雾、海和尚巡海、红色珊瑚树林、父亲失踪等）都已经填好，与原文“登船”“现煮鲅鱼汤”“关于老张的经历”几段一致；秘密和会撒的谎也已写明。没有空着的字段，保留原状。
+    auntie:
+      fingerprint: 6fe36b31742c829088926f03d407efb5cd345103869d0e78716425d7b3a06564
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 未通名短称呼（围花头巾的摊主大姨）、想要、性格、说话、知道（渔况、月全食、远海海市、宁可信其有）都已填好，内容对应原文“早餐铺子”情报参考 1-4 条。原作没有写她知道更多的事，不另外补充，保留原状。
+    old_man:
+      fingerprint: 96877f57847d0095c6b2f2a3eaa06a7d097024f3964a0c004cbf3ace0169d59f
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 未通名短称呼（抽旱烟的老头）、想要、性格、说话、知道（三炷香的老规矩、海和尚是龙王使者、长啥样没人知道）都已填好，对应原文“渔具铺子”一节。原作没有写他知道更多的事，保留原状。
+  scenery:
+    place:wharf:
+      fingerprint: bab9c6222b203d00f01aeef064a62e8f67e8b061e4776a6f1544ecb518661af9
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 露天码头、渔船并排停在水边，ground=water 保留；原文码头段只写天未亮、几盏昏黄路灯，没有写雾，所以去掉 fog，天气留空
+    place:breakfast_cart:
+      fingerprint: a994423b4532fda8430fd8be7aa066740c1264bb3221450535b7a333cb3224e9
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 三轮餐车支在码头入口，露天；周围是入口处的铺面街边，ground 改为 street；车头那串灯泡照亮菜单，flicker 保留
+    place:tackle_stall:
+      fingerprint: a44ff6822bff0a5fe8903f041aacf8228f87cd38e112a5d48fcb24c189244320
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 老头坐在马扎上、面前铺着蓝布的地摊，在码头入口，露天，ground 改为 street；原文没写天气，留空
+    place:boat:
+      fingerprint: 27a9b59f783dc7679858c5202083ec2bd3e1e64beee3653b74232c5fe14737f8
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 整艘船泊在海上，有开放式甲板，outdoors=true、ground=water 与原文一致；原文对船整体没写固定天气，保留原状
+    place:boat_deck:
+      fingerprint: f1c0edee33b88e9692883df0413affa76ee02a5d15d4c453d47d3a23d8e31b5f
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文写明船尾是开放式甲板，露天，四周是海，资料保持不变；紫雾只在日出那一刻出现，9点前后雾又散去，不是到这里一眼就能看到的常态天气，所以不加天气
+    place:boat_cabin:
+      fingerprint: 85b0b72bcebd30a6a532b207d70a10fa843eca341abc89f9de577d629bc3573d
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 驾驶室是上层有顶的舱室，按室内房间记为 outdoors=false、ground=building，与已有资料一致；原文没写这里的天气或光
+    place:boat_hold:
+      fingerprint: 41643ec748530ae0b713d477b74ea89cb7125b02d1da295ea4c1e59fb247bf9c
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 下层船舱低矮、封闭，室内，按 building 记，与已有资料一致；原文没写这里的天气或光
+    place:reef_rock:
+      fingerprint: 02490a524474a50706c02ae18e1ba7c6416ae364f93622a1ca2227c3069f1ae7
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 远海露天礁石，周围是墨蓝色海水，ground=water；原文写逃离时“礁石滩自视野中消失之时，海上的雾气也渐渐散去”，可见礁石滩笼着雾，fog 保留
+  variants:
+    wharf:
+      fingerprint: 5f58f38238e4f6ca6c10471f79f620f49f7f624ceeae8ab056e7ee08045eeca4
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文只写了凌晨 4:30 的码头：路灯、等船的钓客、亮着小灯泡的铺子，这些就是原图本身的样子。船开走后码头只剩远去的灯火，调查员不会再回来看它的白天，所以没有某人到场才出现、之后又消失的东西。老张到场靠角上的人物小像显示，不用画进背景。
+    breakfast_cart:
+      fingerprint: 3c7f50ac50ad9fb3c8ef115b2de71004399fddf880c9f0d9038d10e509dfd699
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 三轮餐车、灯泡和大姨捞水饺在原文里一直都在，原图已经画了。原文没有写开摊、收摊，也没有写人群聚散的变化。
+    tackle_stall:
+      fingerprint: 797f2bce753ad04bfd229a446bc02b9b424120e15ac07bed347addb97d9e4a94
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 老头、蓝布、假饵和红布蒙口的陶罐一直摆在摊上，原图已经画了。掀开红布看沙蚕和递线香都是一下子的动作，不是持续存在的画面变化，而且线香随后归调查员拿着，不留在摊上。
+    boat:
+      fingerprint: 7de0d427a92b408b0b1cf016eeb47099410c83be015293c0f5cf024186ffbb89
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 这是整艘船的外观，原文只写了陈旧、有修补痕迹，没有写来来去去的东西。船从码头开到近海、再到礁石滩，是剧情推进带来的位置变化，用标记表示，不属于时有时无的背景差分。
+    boat_deck:
+      fingerprint: 52a83078728a53fabc00d29e27cdec1d9c989d6677d76fd8ad65f9dcfd027f68
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文里甲板上的变化有两类，都不适合写成差分。一类是一下子的事：煮鱼汤、钓鱼事件 5 拉上来的旧渔网、礁石滩上网绳缠住挂钩和固定栓。另一类会剧透海和尚。这些变化只能用剧情标记表示，挂不到“某人在这里时”这种状态上。老张在甲板上的时间很多，用他在场作条件会过宽。卡式炉、锅和泡沫箱原图里已经有了。
+    boat_cabin:
+      fingerprint: 0bc406c89933e3237adff2886a0a5f3bf30c084f51c4e1313c162ef4f1d5c1ac
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 电台亮红灯只在船底被撞时出现一次，不是持续成立的状态。小像被扔下海属于逃生时的永久改变，不在这次的范围内。其余陈设一直都在，原图已经画了。
+    boat_hold:
+      fingerprint: 3767a928cb1521a26a2e65abb79665e34091237bec49b51a16aa503588764fc3
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文没有细写底舱。老张冲下来拖走拖网是一次性的动作，拖网离开后不会回来，属于永久变化，不是时有时无的背景差分。
+    reef_rock:
+      fingerprint: e27f7120e5ddbda1f23266436ad66e25c9408fdeca7a377df685587bde92d41d
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 礁石滩只在船停靠时出现，原文写到的光滑礁石、冰冷海水和缝隙里的手套都是固定存在的。从海里冒出来的东西属于剧透，不能画进背景。所以没有来来去去、可以画出来的变化。
+  closeups:
+    wharf:
+      fingerprint: de975ee2937c76619535101f1c228008db87ce810c85c277bec9057b9a27295d
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: wharf、c_find_boat
+    breakfast_cart:
+      fingerprint: c334c0dde33d324f511c6a74352f7f32766469a5edc8ba382f5b779af2d7ec72
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: breakfast_cart
+    tackle_stall:
+      fingerprint: e090b447d797e8de709610f875b40d54978c80b95d5b3f5dacf4d2dc406be020
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: tackle_stall
+    boat_deck:
+      fingerprint: 7156f2d9a9ae8b0af850b2010ad2bb8ae0cc95d476d95b99f13bd987254ca978
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: boat_deck、c_claw_marks
+    boat_cabin:
+      fingerprint: 3382838e6a811f7312a8fe962fe5de233a448f854c103fb883cd3acada923170
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: boat_cabin
+    boat_hold:
+      fingerprint: 9cb18ec243d5b8d44a37f95a99cc37c2ac0428800036a53898d8aded0eb86006
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: boat_hold、trawl_net
+    reef_rock:
+      fingerprint: 0d3cb804fc61d356063e058c338cd2f56fc1e8f9d6c6e9c7fd1d0203b46e783e
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: reef_rock、c_reef_smooth
+  present:
+    e_captain_wait:
+      fingerprint: 1b46c57ed4600e00dbb94305a44553229e98c405eb4654663204cef549cf6f60
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“在码头等到4点40分左右时，船长老张会到达码头，带着调查员们登上船”；朗读写敦实、穿蓝工装的中年男人走到调查员面前搭话，就是老张。大姨、老头在各自铺子里，这件事没有写到他们。
+    e_captain_boat:
+      fingerprint: a982d074516105056c54ca2d70903f3aca02bb403d0325ecaa4074cfd511808f
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文《登船-乘风破浪888号》：调查员们通过成功的侦查，或是在码头等到4点40分左右时，船长老张会到达码头，带着调查员们登上“乘风破浪888号”。这一事件的朗读写的是穿蓝色工装的中年男人走到船边，当面招呼调查员上船，这人就是老张（zhang），他当时在调查员眼前。大姨和老头留在各自的铺子里，这件事里没写到他们，所以不算在场。
+    e_nearshore:
+      fingerprint: 8df5c980179557028baea119bbcb1660e2786b8ebfbaafa326025554f828192f
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“老张关闭了引擎……‘好嘞！’老张从驾驶室里探出头”，当面吆喝。码头上的人这时已经留在岸上。
+    e_sunrise:
+      fingerprint: b3edaccdd4111d1e56e2bdd17b8d4ad4e9f6ff414291ca0614c20a017f107442
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“老张会呆呆地凝望许久……嘟囔‘是海市啊……’，然后安抚调查员们”，他在船上当场有反应。
+    e_bump:
+      fingerprint: ee55d559c854da6e9f3a95656167279c645a17e0e57a38f7318484c446403fa1
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“老张他会扒在船沿，眼睛紧盯鱼影消失的方向……招呼调查员们”。电台里的声音来自不明的远处，不是在场的 NPC；黑影是怪物，不写。
+    e_to_reef:
+      fingerprint: 9992e870c34e763ca64829dbf77e7112c689d60cde430466ac9a585d52cd767a
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“老张拉满了马力……将渔船在礁石附近停下，并告知调查员……招呼调查员们一同帮忙打窝撒料”。
+    e_hooked:
+      fingerprint: fc699fcdd3fecbb54d4352b9b68ea78c406a0d1fbd0f4c7c3961832bf1159bdd
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“老张紧握鱼竿……念叨着‘使劲……大鱼……’，一边抓起水壶……灌下大半壶”，他当着调查员拉竿、喝水。
+    e_net:
+      fingerprint: a7304af40b41e257390611a390146e63b886ddc36633723e5b115298a01abf92
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文写老张冲下底舱拖出拖网、撒网，喊“快来帮忙”，之后死死抱住主绳往上拉，还会阻挡调查员。海和尚是怪物，由 fight 字段处理，不写进 present。
+    e_sink:
+      fingerprint: 5d0f3bafff35d8a2466f7c40a9c366132bf11e1085a7a6d16636c84ea5ec4b39
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文只写“4-5轮内未能切断绳索并启动渔船，船只将被拖翻、沉没”，没写到任何 NPC。老张在不在船上要看他之前是否被推下海（zhang_overboard），不是这件事本身定下的，所以不写；海和尚是怪物。
+    e_escape:
+      fingerprint: 3ceabe620bbf73bf0892f2656e079d795401af5f94c5a57c564933dc98e27dcc
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“返航”一节只写调查员把油门推到底、船身颠簸，以及海和尚浮出水面注视，没写到老张。他在不在船上取决于 zhang_overboard，所以不写；海和尚是怪物。
+    e_home_with_zhang:
+      fingerprint: fb4a32809a56594dd42b5bde40d770f0893180dd65e1ab1cd9d8110dfc362bbe
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 条件是 !zhang_overboard，结局原文“老张会在上岸后大病一场……佣金他会退还调查员”，说明他和调查员一起回到了码头。
+    e_home_alone:
+      fingerprint: a637a120adfe669b0a513ff355d5fcbe3c0586f896b91447f5a9bd8964327d14
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 条件是 zhang_overboard，原文“调查员们只能带着空荡荡的渔船回到码头”，没有 NPC 在场。
+    e_heading_home:
+      fingerprint: 12fbe1c5bf83dcf08e9c5d6ab26e2e638d6bb2fd56162a7f2784476979c1acc9
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 原文“提前回航的可能性”写老张不受异变影响，也不会干扰调查员，他还在船上和调查员一起返航；可能出现的海和尚袭击由守秘人决定，而且是怪物，不写。
+    e_early_home:
+      fingerprint: aeca00b890130abda78f9426102027b4383c89c10551ef113e12cda2d513edfe
+      source: c67a70ab2cf87594c26d05e3485f4a083b5f9df2086494e438d8f095c7c71d1c
+      reason: 提前返航时老张没有异变，一直留在自己船上，原文说他“不会对调查员进行干扰”，他和调查员一起靠岸。码头铺子的人原文没写到，不写。
+ties:
+- id: tie_auntie_hometown
+  hook: 调查员祖籍胶东或小时候在烟台住过，大姨一听口音就认出是老乡，问起他家老街坊，聊着聊着更愿意把海上的传闻多说几句（AutoKeeper 补全：原作没写调查员和本地有关系；情报仍按原作，问到近期怪事才讲海市）。
+  npc: auntie
+  fits:
+  - 意义非凡之地
+  - 重要之人
+- id: tie_dumpling_memory
+  hook: 菜单上的鲅鱼水饺，是调查员已故的长辈每年春天都会包的家乡味，站在三轮餐车前，他想起了那个人（AutoKeeper 补全，只用来做气氛和角色扮演）。
+  place: breakfast_cart
+  fits:
+  - 宝贵之物
+  - 重要之人
+- id: tie_folk_belief
+  hook: 调查员是研究或信仰沿海民俗的人（比如民俗学者、家里供龙王妈祖），老头讲的“船头点三炷香”跟他家乡老人的说法很像，所以愿意认真听（AutoKeeper 补全；线香仍然要买了东西才送，c_incense
+    的前置不变）。
+  npc: old_man
+  fits:
+  - 思想与信念
+  - 职业
+- id: tie_fisher_trade
+  hook: 调查员当过海员、渔民，或者在胶东跑过船，跟老张算半个同行，聊起渔船行当很投机，老张也乐意拿他家世代打鱼的事来吹（AutoKeeper 补全；这层背景只按原作规则给晕船检定一个奖励骰，不给别的检定加成）。
+  npc: zhang
+  fits:
+  - 职业
+  - 意义非凡之地
+- id: tie_lost_at_sea
+  hook: 调查员有亲友这几年在黄海出海后下落不明，喝鱼汤时老张说起父亲失踪，两人同病相怜（AutoKeeper 补全：只写有这么一位失踪的亲友，不点明他的去向，也不说他和海和尚有关）。
+  npc: zhang
+  fits:
+  - 重要之人
+- id: tie_wharf_childhood
+  hook: 调查员小时候被父母带来芝罘湾码头看过渔船回港，这次旅游有一半是想回来看看，眼前这一排排渔船和记忆里的样子已经不大一样了（AutoKeeper 补全）。
+  place: wharf
+  fits:
+  - 意义非凡之地
+  - 重要之人
+- id: tie_carver_eye
+  hook: 调查员是木雕、文物或宗教造像方面的行家，一进驾驶室，那尊磨得油亮的小像就把他的目光吸了过去（AutoKeeper 补全；要看出它不是龙王也不是妈祖，仍须通过原作的<侦查>或<艺术/手艺(雕刻)>检定）。
+  place: boat_cabin
+  fits:
+  - 职业
+  - 思想与信念
+- id: tie_radio_ham
+  hook: 调查员玩业余无线电或者干通讯这一行，看见老式短波电台就忍不住想上手摆弄，有话题跟老张聊（AutoKeeper 补全；c_radio 和 c_radio_bubbles 仍按原作检定拿，判定没过也可以照原作去问老张）。
+  place: boat_cabin
+  fits:
+  - 职业
+- id: tie_marine_science
+  hook: 调查员学的是海洋生物、海洋地质或潜水，凭专业知识就明白，一块礁石上连一个贝壳、一只藤壶都没有，实在不正常（AutoKeeper 补全；c_reef_smooth 原作就是搜到即得，这条只是给他一个理由去留意）。
+  place: reef_rock
+  fits:
+  - 职业
+  - 思想与信念
+- id: tie_own_longevity_lock
+  hook: 调查员身上一直戴着长辈给的长命锁；要是钓鱼事件5拉上来那团旧渔网，网里那把带抓痕的黄铜长命锁会让他心里一沉（AutoKeeper 补全：原作没交代这把锁是谁的，这里只写触动，不认定锁的主人）。
+  place: boat_deck
+  fits:
+  - 宝贵之物
+  - 重要之人
+foreshadow:
+- id: fs_zhang_thermos
+  hint: 老张手边总不离那只保温杯，张罗的空当就拧开喝一口，一早上续了好几回。
+  where: boat_deck
+  pays_off: k_zhang
+  stages:
+  - hint: 日出以后老张喝得更勤了，往往刚拧上杯盖，没说两句话又拧开。
+    when: flag:mirage_risen
+  - hint: 往远海去的路上，老张晃了晃保温杯，已经空了；他没再续茶，顺手把甲板上那桶矿泉水拎到了自己脚边。
+    when: flag:to_reef
+- id: fs_zhang_far_gaze
+  hint: 日出过后，老张干活时总不自觉地停下手，朝远海那个方向望上一会儿，回过神来又接着忙。
+  where: boat_deck
+  pays_off: k_zhang
+  stages:
+  - hint: 老张一边招呼大家钓鱼，一边望着远海出神，望的时间一次比一次长，有人叫他也要喊两声才应。
+    flag: sign_fs_zhang_far_gaze_1
+  - hint: 开往礁石滩时，老张把油门推到底，眼睛死盯着前方海面，仪表一眼都没看，嘴里低声念叨着什么。
+    when: flag:to_reef
+    where: boat_cabin
+- id: fs_radio_static
+  hint: 驾驶室里那台老电台时不时“滋啦”响一声，没有人说话，只有一阵杂音，响完又安静下来。
+  where: boat_cabin
+  pays_off: e_bump
+  stages:
+  - hint: 日出以后，电台的杂音来得比先前频繁，有一回像是有人按下通话键又什么都没说，杂音拖了好几秒才断。
+    when: flag:mirage_risen
+    flag: sign_fs_radio_static_1

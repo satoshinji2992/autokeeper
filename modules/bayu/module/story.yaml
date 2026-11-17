@@ -1,0 +1,232 @@
+conclusions:
+- id: k_mirage
+  text: 近来海上的“海市”蜃气不寻常，会让人看见、听见本不存在的东西
+- id: k_monk
+  text: 传说中的“海和尚”确有其物，就在这片海里，对船上的人怀有敌意
+- id: k_zhang
+  text: 老张不对劲，他像被什么东西驱使着，一心要往深海去
+- id: k_danger
+  text: 远海礁石滩不是寻常钓点，留在那里很危险
+events:
+- id: e_captain_wait
+  title: 船长到了
+  when: D1 04:40 & !flag:zhang_aboard
+  where: wharf
+  present:
+  - zhang
+  sets:
+  - zhang_aboard
+  read_aloud: 一个身材敦实、皮肤晒成古铜色的中年男人穿过路灯下的人群走来，蓝色工装上沾着些油污。他冲你们一咧嘴，露出被烟熏黄的牙：“是你们订的船吧？走走，船就在这儿！”
+  text: 调查员在码头等到 4:40 左右，老张到达，带他们找到并登上乘风破浪888号。
+- id: e_captain_boat
+  title: 船长赶到船边
+  when: knows:players:clue:c_find_boat & !flag:zhang_aboard
+  where: wharf
+  present:
+  - zhang
+  sets:
+  - zhang_aboard
+  read_aloud: 你们刚认出那艘船，身后就传来脚步声。一个身材敦实、皮肤晒成古铜色、穿蓝色工装的中年男人走到船边，嗓门洪亮：“哟，自己找着啦？行，省事儿！走，上船！”
+  text: 调查员凭侦查找到船后，老张到达码头，接待他们并带他们登上乘风破浪888号。
+- id: e_nearshore
+  title: 近海停船
+  when: flag:set_sail & !flag:at_nearshore
+  where: boat_deck
+  present:
+  - zhang
+  sets:
+  - at_nearshore
+  read_aloud: 引擎突突轰鸣，船身微微一震，缓缓离开码头。回头望去，渔人码头的灯火渐渐渺小、模糊，融成一片朦胧的光晕。渔船切开墨蓝色的海面，大约二十分钟后，四周已是一望无际的海。老张关了引擎，船在轻微的摇晃中停下。“好嘞！这片儿早上鱼多，咱们先在这玩玩，等太阳再高点，我带你们去真正的私房钓点！”船失去前进的动力，开始随浪更明显地上下起伏、左右摇摆。
+  text: 船在近海停下。所有调查员进行一次<体质>晕船检定，有出海经验或渔民背景的给一个奖励骰（规则见 keeper_notes【晕船】，用插件 bayu_sea 的 seasick 动作记录）。此后守秘人可引导看日出、垂钓、煮鲅鱼汤三项活动，顺序自由（垂钓可在日出前或后）。
+- id: e_sunrise
+  title: 海上日出
+  when: D1 05:40 & flag:at_nearshore & !flag:mirage_risen
+  where: boat_deck
+  present:
+  - zhang
+  sets:
+  - mirage_risen
+  read_aloud: 东方的天际线毫无征兆地染上一层绚烂的颜色，海面深处透出由深红向亮橙过渡的光带。金色的圆弧从海平面下奋力探出，金光刺破晨霭，整片大海成了流动的金色，连你们的脸庞、发梢和空气里细小的水珠都镀上一层光。就在太阳完全跃出海面的那一刻，一缕淡淡的紫色烟气弥漫上来。
+  text: 所有调查员进行一次<侦查>。成功：见紫雾中的黑森林剪影（c_mirage_forest，理智 0/1D3）；大成功：再听到远处低语（设 whisper_heard，c_mirage_whisper，理智
+    1/1D4）；失败：只觉得雾的颜色有点怪、阳光迷离，日出依然很美。守秘人逐人记下谁看到了幻象。老张呆呆凝望许久，慢吞吞嘟囔“是海市啊……”，然后安抚说换季时海市是正常现象。此刻老张的烙印被唤醒。
+- id: e_bump
+  title: 船底一声闷响
+  when: D1 09:00 & flag:at_nearshore & flag:mirage_risen & !flag:bumped
+  where: boat_deck
+  present:
+  - zhang
+  sets:
+  - bumped
+  read_aloud: 海面上的雾气渐渐散去。你们正收拾渔具、回味鱼汤，只听“咚”的一声闷响——船底被不知什么重物自下而上狠狠击中，整个船身剧烈摇晃起来。
+  text: 所有站在甲板上的调查员进行<体质>检定：成功踉跄几步，抓住船舷或栏杆稳住；失败摔倒在甲板上，受 1 点伤害。稳住后向水里看可<侦查>见黑影（c_shadow）。黑影消失时驾驶室的短波电台亮起红灯，滋啦电流声后传来断续的“……鱼……好大的鱼……鲨鱼……”，可<聆听>（c_radio_bubbles）。老张扒在船沿紧盯黑影消失的方向，格外兴奋，迫不及待要开船：“你们也听见了吧！大鱼！果然有大鱼！刚才船底下那个肯定就是领头的鲅鱼王！看着方向，它们一定是往远海的礁石滩去了！走走走，咱们这就追过去，今天非得钓个大的，绝对不虚此行！”看到过日出幻象的调查员此时会对大鱼产生急切渴望，积极响应。调查员同意或不加阻止时，守秘人设
+    to_reef；坚持返航设 heading_home。
+- id: e_to_reef
+  title: 远海礁石滩
+  when: flag:to_reef & !flag:at_reef
+  where: boat_deck
+  present:
+  - zhang
+  sets:
+  - at_reef
+  advance_to: 09:20
+  read_aloud: 老张拉满了马力，不过二十分钟就到了远海的礁石滩。这里遍布犬牙交错的礁石，海水呈墨蓝色，浪头拍在礁石上发出阵阵闷响。老张把船停在一处面积大些的礁石旁：“这儿鱼群多，常有矶钓的大老远跑来钓大鱼！”说着就在船头忙着换上重型钓组，招呼你们一起打窝撒料。
+  text: 到达时间 9:20 为 AutoKeeper 按“约 9 点出发、20 分钟到达”推算。等待期间调查员可登上礁石休息、调查（reef_rock）。
+- id: e_hooked
+  title: 大鱼上钩
+  when: flag:at_reef & D1 09:35 & !flag:hooked
+  where: boat_deck
+  present:
+  - zhang
+  sets:
+  - hooked
+  read_aloud: 船头鱼竿的绞盘发出吱呀嗡鸣，竿身弯成一个满弧。老张紧握鱼竿一下一下猛抽，想把鱼溜起来，可那东西力气极大，几乎要把他整个人拽进海里。
+  text: 时间按原文“约 15 分钟后”推算。调查员可上船帮忙拉竿，但无论多用力，水下的东西纹丝不动，还在缓慢地把线往深海里拉。老张越来越焦躁，念叨着“使劲……大鱼……”，抓起水壶咕嘟咕嘟灌下大半壶（<侦查>见
+    c_zhang_thirst）。与此同时，日出时看到幻象的调查员各进行一次 0/1 理智检定，失败者喉咙深处毫无征兆地涌起难以忍受的干渴，连船边翻滚的海水都想喝几口。
+- id: e_net
+  title: 网住了什么
+  when: flag:hooked & D1 09:40 & !flag:net_cast
+  where: boat_deck
+  present:
+  - zhang
+  sets:
+  - net_cast
+  sanity: 1/1D6
+  sights:
+  - sea_monk
+  fight:
+  - sea_monk
+  read_aloud: 鱼竿绷得嘎吱作响。“不行，线要断了！”老张红了眼，把鱼竿塞给你们，转身冲下底舱，拖出一张带铅坠的拖网：“这下面肯定是个鱼群窝子，咱们直接下网捞！”大网猛地撒入海中迅速下沉，网绳在船舷边磨出刺耳的声音。片刻后老张掂了掂手上的分量，大喊：“网到了！好重！是个大家伙！快来帮忙！”你们一齐发力——整艘船猛地向一侧倾斜，巨大的拉力像要把小船掀翻。翻涌的水花里，几个浮肿的光头探出水面：没有毛发，皮肤光滑，身上缠着纠结的海藻，漆黑的眼睛死死盯着你们，生蹼的手死死抓着渔网边缘，正把船往深海里拖。并不是你们网住了大鱼，而是水下的东西通过网，抓住了你们。
+  text: 时间按原文“僵持几分钟”补为 9:40（AutoKeeper 补充）。调查员与网进行<力量>对抗后海和尚现身，所有人理智 1/1D6。随即进入逃生：船舷两侧挂钩和船尾固定栓不知何时已被网绳死死缠住；老张死死抱住主绳往上拉，嚷着“别让大鱼跑了！我这辈子都没见过这么大的鱼！”。按
+    keeper_notes【逃生机制】全文结算，用插件 bayu_sea 记录：割绳（cut_rope）、启动引擎（start_engine）、点香或扔小像（calm）。1-3 只海和尚顺网绳爬上甲板。老张若被推入海中，守秘人设
+    zhang_overboard。
+- id: e_sink
+  title: 船被拖翻
+  after_rounds:
+    event: e_net
+    completed: 5
+  when: '!flag:escaped_reef'
+  where: boat_deck
+  sets:
+  - boat_sunk
+  read_aloud: 最后一道网绳仍死死勒着船身。船身一歪，冰冷的墨蓝色海水从船舷漫了上来，乘风破浪888号被一寸寸拖向深处。
+  text: 原文：4-5 轮内未切断绳索并启动渔船，船被拖翻沉没；此处按上限 5 轮，守秘人可视人数提前到第 4 轮由插件或手动设 boat_sunk。船上所有人落水。
+  ending: drowned
+- id: e_escape
+  title: 冲出礁石滩
+  when: flag:escaped_reef & !flag:back_ashore
+  where: boat_deck
+  sets:
+  - back_ashore
+  read_aloud: 引擎一声爆鸣，螺旋桨把剩下的网绳绞得粉碎，乘风破浪888号在海面上极速狂飙。油门推到了底，船身大幅颠簸。当礁石滩终于从视野中消失，海上的雾气也渐渐散去，海面恢复了平静。回头望去，那片逐渐缩小的墨色海域上，一个、两个……紧接着密密麻麻一片苍白的圆点浮出水面。那些肿胀的光头整齐划一地朝向你们，没有表情，没有声音，只是静静地注视。在散去的蜃气中，你们生出一种近乎错觉的认知：它们是在注视一群还未到时机的同类，等着他们在未来的某一天，回到大海的怀抱。
+  text: 返航时<体质>检定未过的调查员被掀得左滚右撞、大吐特吐。随后渔船回到码头，判定结局。
+- id: e_home_with_zhang
+  title: 回到码头
+  when: flag:back_ashore & !flag:zhang_overboard
+  where: boat_deck
+  sets:
+  - home_with_zhang
+  text: 调查员和老张都回到了岸上。
+  ending: both_survive
+  present:
+  - zhang
+- id: e_home_alone
+  title: 空船回港
+  when: flag:back_ashore & flag:zhang_overboard
+  where: boat_deck
+  sets:
+  - home_alone
+  text: 只有调查员回到了码头。
+  ending: alone_survive
+- id: e_heading_home
+  title: 提前返航
+  when: flag:heading_home & !flag:to_reef
+  where: boat_deck
+  present:
+  - zhang
+  text: 调查员感到不妙，在去礁石滩之前坚持返航。因未深入礁石滩，老张不会异变，也不会干扰调查员。守秘人可考虑在返航路上安排一次海和尚袭击（具体由守秘人决定）；船回到码头后设 early_home。
+- id: e_early_home
+  title: 平安靠岸
+  when: flag:early_home
+  where: boat_deck
+  text: 提前返航的渔船回到码头。
+  ending: early_return
+  present:
+  - zhang
+endings:
+- id: both_survive
+  title: 一条人命
+  condition: flag:home_with_zhang
+  text: 老张上岸后大病一场，失去了这段记忆。他把这趟出海的佣金退给了你们，从此对海水有了心理阴影，再也不敢靠近海边半步。你们成功救下了一条人命。
+  reward: 理智 +1D6
+  sanity_gain: 1D6
+- id: alone_survive
+  title: 空荡荡的渔船
+  condition: flag:home_alone
+  text: 你们只能带着空荡荡的渔船回到码头。这场本该轻松的钓鱼之旅成了你们的梦魇，但至少，你们从这次异常事件中逃了出来，保住了小命。受过蜃气影响的人此后留下了后遗症：每当靠近海边，都会无端升起再去一次远海的渴望。
+  reward: 理智 +1D2；日出时看到幻象的调查员留下后遗症
+  sanity_gain: 1D2
+- id: drowned
+  title: 回到大海的怀抱
+  condition: flag:boat_sunk
+  text: 落水的瞬间，冰冷的海水从鼻腔、嘴巴灌进来，预想中的窒息却没有到来，取而代之的是解脱般的清凉，原本干渴得几乎着火的喉咙终于平息。昏暗的水下，你看见自己指间长出近乎透明的薄膜，身边似乎有头发从头皮上脱落，漂散在海水里……你不会死，而是在逐渐变成海和尚，以头发为代价，换来物种的转变。
+  reward: 落水的调查员此后一切数值与海和尚一致
+- id: early_return
+  title: 见好就收
+  condition: flag:early_home
+  text: 你们没有跟着老张去追那条“大鱼”，掉头回了码头。远海的礁石滩上到底有什么，你们终究没有亲眼看见。（AutoKeeper 补充：原作只写了提前回航的处理方式，没有写结局与奖励。）
+showcases:
+- id: sc_opening
+  kind: 开场
+  when: opening
+  title: 拂晓前的渔人码头
+  prompt: 天亮前墨蓝色天幕下的海港码头，几盏昏黄路灯，一排排小渔船整齐停靠，入口处的三轮早餐车挂着一串小灯泡冒着热气，几个钓客搓着手等船。冷色调，淡淡海雾。
+- id: sc_sunrise
+  kind: 重要场景
+  when: event:e_sunrise
+  title: 海上日出
+  prompt: 小渔船船尾甲板上看海上日出，金色的太阳刚跃出海平面，整片海面流金，一缕淡紫色的烟雾从海面升起，远方海平线在雾中隐约扭曲。壮美而略带迷离。
+- id: sc_bump
+  kind: 突发
+  when: event:e_bump
+  title: 船底的闷响
+  prompt: 小渔船猛烈摇晃，甲板上的人踉跄抓住船舷，浑浊的海水里一道巨大的黑影从船底滑过。驾驶室里老式电台亮着红灯。
+- id: sc_reef
+  kind: 重要场景
+  when: visit:reef_rock
+  title: 远海礁石滩
+  prompt: 犬牙交错、表面光滑得异样的黑色礁石，墨蓝色的海水拍打出白浪，一艘小渔船停在大礁石旁。阴沉、寂静、寒冷。
+- id: sc_net
+  kind: 怪物
+  when: event:e_net
+  title: 网里的东西
+  prompt: 倾斜的小渔船旁，翻涌的水花中几个浮肿苍白的光头探出水面，缠着海藻，漆黑的眼睛盯着船上，生蹼的手抓住渔网边缘往下拖。绷紧的网绳缠在船舷挂钩上。
+- id: sc_escape
+  kind: 危机
+  when: event:e_escape
+  title: 回望的海面
+  prompt: 从疾驰的渔船船尾回望，远处墨色海域上密密麻麻浮起无数苍白的圆点，整齐朝向镜头，雾气渐渐散去。
+- id: sc_end_both
+  kind: 结局
+  when: ending:both_survive
+  title: 回到岸上
+  prompt: 清晨的码头，伤痕累累的小渔船靠岸，几个疲惫的人搀扶着一个脸色苍白的中年船长走下跳板。
+- id: sc_end_alone
+  kind: 结局
+  when: ending:alone_survive
+  title: 空荡荡的渔船
+  prompt: 码头边一艘空荡荡的小渔船，甲板上散着断掉的网绳和翻倒的小马扎，几个人沉默地站在岸上回望大海。
+- id: sc_end_drowned
+  kind: 结局
+  when: ending:drowned
+  title: 冰冷的海底
+  prompt: 昏暗的深蓝色水下，一只手的指间长出近乎透明的薄膜，几缕头发漂散开来，下方深处隐约有苍白的身影。
+- id: sc_end_early
+  kind: 结局
+  when: ending:early_return
+  title: 见好就收
+  prompt: 上午的阳光下，小渔船驶回港湾，远处海面平静，码头的轮廓越来越近。
+prelude:
+- art: wharf
+  text: 2025 年春，山东烟台。每年此时的鲅鱼汛期，钓鱼佬们前赴后继地奔向黄海。
+- art: boat
+  text: 当地人说“鲅鱼跳，丈人笑”。你们来这儿旅游，一时兴起，合伙租下了一条渔船。

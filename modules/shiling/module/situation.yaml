@@ -1,0 +1,1380 @@
+
+preparation:
+  scenery:
+    place:agent_home:
+      fingerprint: b99d3389bed59940621ca32cdefd7547cd871d7d47ce2b5747357063f38fcef4
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:adamson_home:
+      fingerprint: 5a479ee733d70962dd93cf9a39b43572f6783767b8045048cccacca50a742560
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:adamson_bedroom:
+      fingerprint: 8d564badea0cc3f838e7d6414adfee02eccbb773fbf275161747deea3bbd7d97
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:nppd_office:
+      fingerprint: e4c6eda5e4d71af143ba20dfb053018e3d5c85f9d570d483a4fa9c87738b50e3
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:adamson_office:
+      fingerprint: c4f325b6b49c76603b0ba8a42e743e47b534861bd380321b7c838f568bdea941
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:horn_media:
+      fingerprint: f471af42bc36de39d836b7cdaa27284b2706831a0551c91b427f019feae37092
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:peter_office:
+      fingerprint: f37be60145abed592d9bbe8eed63e3229bc4f22b8f760c74d6aa1cda3ff95559
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:central_plaza:
+      fingerprint: caf604b5441ffa40a0d7835c07fff5ba4802dab1c56fcb2a3e7f7847c8f52bb7
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:plaza_control:
+      fingerprint: 102ed4fbc350ad524431922c0c57d86341923eaac68d43a3328865c5fcf38f10
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:simpton_building:
+      fingerprint: 44b1b9f383ef738107b62fda511b5ee3b9cc01ad42b0573db718bcda0315ef9b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:bar:
+      fingerprint: 0f506d6ee0128959c35887bf0557da137fb848685d00ecdc5b5fa4edeb9ad7f6
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:bar_cellar:
+      fingerprint: c41413dc1400f49f4ca9a8c470adfe8f0de63dc1e833246425e142b7c9fe46ad
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:greenwood_mansion:
+      fingerprint: 641e00b25ead3280037538e6b448a737ff8f2db8098a4c0ba7909bb06a2e15c5
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:mansion_storage:
+      fingerprint: c21db514bf3752ace7518dcf7a24b4e93b13b0ebc8c1b444098acdf5ac47e06f
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:mansion_study:
+      fingerprint: 0af7c922092816647d0be7b251c0b6596c01e231cc6392db4eea287559ffdcf7
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:mansion_playroom:
+      fingerprint: a99077bbd7fe62257777095e7417f069bb2ad9764f0adca4826342b29e2c67bf
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:jim_bedroom:
+      fingerprint: e5d3b126ce6b6470e052f46caa2488cd8832ffb7374f26f622d499e8d44bfcbb
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:oakland_pd:
+      fingerprint: 4519b99577e2440c47912dd82ed05c1148fdaf0019ec98337e17a8f13bca932c
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:seaside_park:
+      fingerprint: 03b250f4c908dc6027c21e447abb947fdb25517af1184e7dc7500013c1aa6a37
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre:
+      fingerprint: b2486a0a5bee8840b30f54a9fc5ff57e891f1a7127e365fba5c302065d20e8d7
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre_dining:
+      fingerprint: fbeb41f8c1ac6aa2a42be774e65e2f259aceeb4e6b26fbfb4d6bebc49570eb9b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre_scar:
+      fingerprint: 338dcd0ba2509cdb67038e968b47992147e2b936cc36ff10c5ffd4de13cc4cde
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre_childhood:
+      fingerprint: 154f80ae430661977ed39d9e43a9895a68641993976da4dcef363d3910572280
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre_crib:
+      fingerprint: b5c21ab743fbf8d4f4843f8657a6b68536f5fa74f2378f4f412c0060148e54d0
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre_dream:
+      fingerprint: 03184a583c09dddc5646cbce78539eca5b6752abf489344b767b50a93b2d4f86
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre_king:
+      fingerprint: 08a2c77e92b8ee00b657059d43255052d94493fe5b49e8fc22823a6c2134ff3b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:theatre_pleasure:
+      fingerprint: a4c83966ec8347494dffe175892558dcfc15cd291df70ff9c3cf52a43ae6ca1a
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:other_side:
+      fingerprint: fab509e0ebbfc6f8b53c592805e083e25bf21fd9c312428dc46b5c9e85546d76
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:other_home:
+      fingerprint: 62195daa3f2c6f48b10d5af8ee9e1cec8415d873ea8cff0f162f969f3a7d00df
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:other_tower:
+      fingerprint: f69b83805ced70fdd95f4996f56ba87b9013fcb3d7149732861a1e48efdf1741
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:other_whale:
+      fingerprint: 56c3bbc9a919a5a9527474d11e7929e43e922a94ddfd2a62e25a7a85b2f84afe
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:other_station:
+      fingerprint: 5d8f51490b2d6af6ca22b18db6c2dda8bb0e46e54b47ea9c7679373193211591
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:other_edge:
+      fingerprint: 997fa9d65bc926d893b5349b3569f3c98ae3f785d426e32345e022a8db9f4e55
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:home_bedroom:
+      fingerprint: e6005dc245a7863d4c5c0cb4b497be6e2d01651165b65000cc1013661a0cdcf0
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:home_study:
+      fingerprint: bc28ba2087b37bf5ee75b227d4df129c0f0758e579ed932dc995ecc94fe37ec5
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:bar_office:
+      fingerprint: 13ed69d9d5229910c2973b1b6ebb471194f1df4396e14c81d04691b8d5320e4b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:bar_restroom:
+      fingerprint: bd63c3e1122ba90dd272f180d716f1483f37d82426c9b854286e0477068477d4
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    place:mansion_master_bedroom:
+      fingerprint: b4f547d5bf8d0d166fca627689cb5fe689b7abc0b31d130ae71a21cf7d3e8eb5
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对露天、地面与原作天气
+    handout:h_oakland_map:
+      fingerprint: dc8d85f26df7875e942036ae07e2a1c7ca3dd951b373400cec372107263dd817
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+    handout:h_oakland_map_marked:
+      fingerprint: 2b301a7dcbcdb905f9af65eff7e494e3e61c321fafc9071a6c8ce30ee44dcb1b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+    handout:h_invitation:
+      fingerprint: 9d6b510fc6934a710c2d40c0f45c6fb189b510a07c823d46f7cd18d9a047ddf2
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+    handout:h_adamson_house:
+      fingerprint: de9630b8471d00d1cd6489f2187a63016ea659e59eecd65ab0afcf3ca5587948
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+    handout:h_bar_plan:
+      fingerprint: 6900d69bd0feb443508e870e16eedc9c7023e04bd762f7bc92b9f0e2af300a3e
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+    handout:h_mansion_plan:
+      fingerprint: 04cf29e7438780f2e01ec1ed80643dd3b9bbab151884fd3f582f7699ec4f592a
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+    handout:h_mariano_photo:
+      fingerprint: e41157a9d678ba0c61ebaa068d94e4124af2440fafd690e35bcedbd54a17437d
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+    handout:h_dream_machine:
+      fingerprint: d228ecb5398dd3b958cee7c0db48fb5824c9a9d3a6bb608745aa878983f61617
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 已核对材料呈现方式
+  variants:
+    adamson_home:
+      fingerprint: 4cd7c8dc0445f48b3c5140774b3a533d7388075bf9b5b95597aea14b67046320
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原文只有随腐化值出现的幻象（光带、绘本）和可选的温妮来访，前者取决于腐化值不是某人在场，后者是人物本身，不画进背景
+    adamson_bedroom:
+      fingerprint: 5f5f5fce530dcfec7d1d7fe769a8452ec3ca572ecd7810d801aa7fc064c10c7c
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 椅子上的亚当森是人物幻象，由小像显示；邀请函、尸体消失等取决于腐化值，不属于来来去去的布景
+    nppd_office:
+      fingerprint: 34fff0730debb569df4f8d38b2e647e75e1471dd9a9e11054f91b760ba509551
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原文只写日常办公场景，没有时有时无的画面变化
+    adamson_office:
+      fingerprint: a74475db3e1dd96b52f8ff30c66c358eae0ccc44179e3a6c974a124710165ce6
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: “音容宛在”是腐化阈值幻象中的人物，不是布景差分
+    horn_media:
+      fingerprint: 88c510883c8ec53b047dcd10bc2a46baa91955e6998f55c48cd52b57112b3e0f
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 光带折角取决于腐化值，原文没有某人在场或时段带来的画面变化
+    peter_office:
+      fingerprint: 493b79e5523479f52ea213b8c708df05cb51f40522e4d9b5c0a851d5de9207b7
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 落地窗变门取决于腐化阈值；原文没有随时段出现的布景
+    simpton_building:
+      fingerprint: 581e15bc7fc535066d5b1ff06535639cc83580ce369c6f6a3b668cc89abd82bf
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 霓虹灯和营业的门面取决于腐化值是否超过 20，when 语法表达不了，强行用时段写会和原作不符
+    bar_cellar:
+      fingerprint: 098b013cdeb0ed38f3ca096ca3ce1e310502c627b6d72bd46ab9edf695b89574
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 午夜变成列车车厢取决于腐化值达到 30，属于进入剧院，不属于按人物或时段出现的布景
+    mansion_storage:
+      fingerprint: 028a574e628a3892fcaed15eb469b7f6d7e406b7c47e338aa12535459e79fb86
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 钉死的门、污渍都是固定状态，撬开木条是永久改变，不写
+    mansion_study:
+      fingerprint: c0920abde66af0a88de1442d89a28fb5be2faeb95491370c3e13174f36a6463e
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原文只有可选的人物幻象（国王与吉姆、巴特），画面主体是人物，不画进背景
+    jim_bedroom:
+      fingerprint: d8c39f22b7b41e639098f842eb0102319155b007adf39b9ad59698d7556189bb
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 窗外变门取决于腐化阈值；原文没有按时段出现的布景
+    oakland_pd:
+      fingerprint: c7d6234fd195d159e88608ae5545795b8ed494d9fff5076a40771afd97fb16bd
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: AutoKeeper 补充的档案室，原文没有时有时无的画面
+    theatre:
+      fingerprint: 77edb1ca9c65e7fe61848b3c967f254e013d3a99bde5e045c252cb0568a1bc76
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 剧院内景稳定不变，原文写明它始终自洽宁静；轨道越来越不规则是随剧情推进的永久变化
+    theatre_dining:
+      fingerprint: 72ca9862ba08e41c8e861fab90d8ccc53fb26fe2df249ddf37c1b455f87f7ebf
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 餐车里可遇到的人物由小像显示，布景没有变化
+    theatre_scar:
+      fingerprint: 3fb349572d911d130644076ab9ef772ab9a5148d712486873a3736f9a98fcdaf
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 整个场景被定格，原文没有来来去去的布景
+    theatre_childhood:
+      fingerprint: a2068bf853e3b93ab7400e8334a5cf59bf40e1c3e43ba9474d513b2a8e56693f
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 场景是固定的回忆画面，没有差分依据
+    theatre_crib:
+      fingerprint: 206acb1a2d3ede9babed14cd57bdea2376f224cd39849fe2852bb8e0a8e35f67
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 婴儿床与尸体是固定陈设，没有来来去去的布景
+    theatre_dream:
+      fingerprint: 9e9f3889deea9d0e3073aa47286ef1671b42664a8de637122f3859e20a1ba1be
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 造梦机运行时的变化是使用动作的结果，交易后机器也不在这里，原文没写按状态变化的布景
+    theatre_king:
+      fingerprint: db3fa4d270a3de8b371d101f393d0d347709ba212bfa275952cc98b334b2127b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 国王车厢是固定陈设；国王死后的纸片是永久变化
+    theatre_pleasure:
+      fingerprint: f3b887e178d845babafcc030cdd7db1cd9d309a5f8defd54a35315ddf220e6a3
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 车厢基础图已是仪式场面，仪式中的人物由小像显示
+    other_side:
+      fingerprint: 8c8790d2a6f0e26d9413b7e2136f32c64a97074c18ad4ece77d640baabb3de49
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 铜管声响起时行人驻足是声音和人物反应，原文没写画面上多出什么布景
+    other_home:
+      fingerprint: 2379eb639c76e2b96de4efc18179b406f9c9c3ea300ca6e21c9329682b5dfcc9
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 亚当森来访是人物本身，礼盒随人物出现，不另画背景
+    other_tower:
+      fingerprint: 7077b01f48c816d8a0ef79a50e7c08bfa1fdea226710eb2d2c821b256302dea9
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 楼顶碰杯的人群一直在场，基础图已包含
+    other_whale:
+      fingerprint: 6d2bf603a9c7da42619c61eb6ba99762a46ecf343dbf6ccbec53b15af9e6865b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 进入时剧院停在铁轨上，基础图已有铁轨，原文没写可以靠某人在场判断的差分
+    other_edge:
+      fingerprint: b78d81c20f8eb5d843c9812f8ed78d5e4cec58c44e9e014097e7a4c155526c06
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 灰袍人群一直在场，基础图已包含
+    home_bedroom:
+      fingerprint: b7523f0c965d3076c28c9a16b77e6adc82dac6b5f01a5d06ca5de7be7a6d75b0
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 丈夫在床上已写进基础画面，原文没有别的时有时无的布景
+    home_study:
+      fingerprint: af60ca46c934d6ee110a1eef7ef33e7d653eafc7f9597e34e1f33595493cad34
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 只有一台工作电脑，原文没有画面变化
+    bar_office:
+      fingerprint: 15521368694ce4dbbe6c76494607395f5f2e7992d8bfcd4314e481f2186d5d16
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: AutoKeeper 补充的小房间，原文没有布景变化
+    bar_restroom:
+      fingerprint: 2b441c9c048640f9f605cceba94332081e71efefbabeef4d421dd2cc69743d9c
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 幻听是声音，不是画面变化
+    mansion_master_bedroom:
+      fingerprint: 6bf537b7fb71b00179167da44376e30fdf733372897b97753ae16114ec52309b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 主卧的床两周没用过，原文没有时有时无的布景
+    agent_home:
+      fingerprint: 106d3b587ae41072af9d5cf9b9c110eec03c1a39b94cc2f9aad657877846a807
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: e_kandi_arrives
+    central_plaza:
+      fingerprint: 316f29dd27fb537a1ae416eb07601d0931c6800933c3f7362d5e44e4055e606e
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: central_plaza
+    plaza_control:
+      fingerprint: 76b0ceb24fda57000532518c70acb0b0f1657ef791515a720e4ad0f65238481d
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: e_peter_plaza_check
+    bar:
+      fingerprint: bdf1dc75b8f965f7466a02e01229f42173b25199d05effad4a6f135359a67d98
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: bar
+    greenwood_mansion:
+      fingerprint: 539e9c2636e1a5b525e6151a85017f2149100bc3d4b356a92d97bca287bc3269
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: greenwood_mansion
+    mansion_playroom:
+      fingerprint: 94a09e35aa85240f52c7d1e9bdbd26c8d8792d9205d2461002370f86265002a1
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: mansion_playroom
+    seaside_park:
+      fingerprint: a3112fcafa5582f0f4f90ce8c54c41fcd8a7580a2213a06a6de5b4baf4f3ae65
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: e_finale
+    other_station:
+      fingerprint: a2d0e0756fdb115fdab2ccfe39f73f2faf32616a63477d342992c2e942d0cdd0
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: dante
+  closeups:
+    nppd_office:
+      fingerprint: 9e48a93c6db43c57ce6804d0c1fbe2347eb1c4cabf6797c1955142320019cfc4
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 大厅与伯莎办公室是普通政府办公场景，原作无值得单独近看的物件；亚当森办公室已在 adamson_office 做特写。
+    oakland_pd:
+      fingerprint: f3b76a82556f036017427793b530c2b02716a2ac1395fbe7b0d00749b306ec38
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 卷宗内容要说服检定后才看到，柜台与铁柜无特别可看之处，原作未描写可单独呈现的实物。
+    theatre_pleasure:
+      fingerprint: 4401a0d8fdf77bdd9a1f7ba8afaf5f6183b7041cedc3b38f6091d35d24ae4e59
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 场景主体是三人赤裸交媾与血腥仪式，主场景描述已足够，不宜再做露骨近景；台球桌近景已在 mansion_playroom 呈现。
+    bar_office:
+      fingerprint: e51ba03720818d3d6bceaf6802e1333f756456e9b1e7762446bb6dd01fb70a68
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原作只写约瑟芬在这里展示伤口，房间本身无描写；单据堆无线索，不值得单独特写。
+    agent_home:
+      fingerprint: fe012efec5e0575bd0ee60448025d58a47f7062bef89d4bc768bd677973002e0
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: agent_home；开场敲门声
+    adamson_home:
+      fingerprint: 61c67adfd547fc64e61cf2a74dc5c50d94870042f2a5df978f268f8df6c862ee
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: adamson_home；原文 p15 书目
+    adamson_bedroom:
+      fingerprint: bcb91e55e55d2cca1080a86ba87a055f625fa0b4361a01ad96e208a42710d346
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: adamson_bedroom；c_adamson_note1、c_invitation
+    adamson_office:
+      fingerprint: 38459f9649c7368f2cf02d63315b8fb0d000446770d316b3f9a09490a85bf2f4
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: adamson_office；c_adamson_office
+    horn_media:
+      fingerprint: e621350e69266a35eb28fad0bce87a24e43065be4146bbee6e206c211e71eac5
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: horn_media；c_photo_wall
+    peter_office:
+      fingerprint: 47062d1979cff712c3ab9414ad401830d53df2f80d1b4597e7e913c3da8d8f7a
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: peter_office；c_drawer_photos_a、c_drawer_photos_b
+    central_plaza:
+      fingerprint: 4172d52c761e494bbd45b7d77f4af8dd67ba5d6603126835f95ee6e268b4e2f7
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: central_plaza
+    plaza_control:
+      fingerprint: b9f73d997f66c1b20cfc8974a644e6513b122b432594846e971a31c3c4cd59e2
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: plaza_control；c_control_link
+    simpton_building:
+      fingerprint: 24720bfd616db8b09212a231841fcc6c0ddaf60a2c1a37028011a99d1cf5da2f
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: simpton_building；BAR NOT FOUND
+    bar:
+      fingerprint: b5b088a0c83fd09761a239efa84c0ac73759e164fec4c52af1aebe998c9503c4
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: bar；c_bar_blood
+    bar_cellar:
+      fingerprint: 7ffc00d4c594accd95e2f3103960736541704ac0739c46dbe7cbd63ef60d7a73
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: bar_cellar；c_peter_laptop
+    greenwood_mansion:
+      fingerprint: 4c04b301e8499812181496e5aea89cde97532708ed7fac450d446864471ea491
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: greenwood_mansion；c_mansion_rooms
+    mansion_storage:
+      fingerprint: d0bdf6d4b93cb5ec3e52f0bb3453d38192ba348d0b209e1a820310ddc16bed0c
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: mansion_storage；c_storage_stain
+    mansion_study:
+      fingerprint: 8340db611bee86d9f0ea431cc22cfb60a6af725f4edceb29388e98bd175a5dee
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: mansion_study
+    mansion_playroom:
+      fingerprint: 1b3a571a828173bc4c6883a76dd5efbe9c367e8ba4c9af4e734dc11c0a2e6d72
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: mansion_playroom；c_playroom_table
+    jim_bedroom:
+      fingerprint: dc2c4e1809e1b9eb5947f3b78dc5113663d3a9040b66ef006bf03f044cc1dc54
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: jim_bedroom；c_family_photo、c_paper_balls
+    seaside_park:
+      fingerprint: 9e7832283cfb941f535082cc42680e51861ed688945677cafd477af74ecb8490
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: seaside_park；c_seaside_gate
+    theatre:
+      fingerprint: 37bde8bd21f3d01119a9d4c08784c062fb7c97fb120c7a3fb10e59f64d56d08a
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: theatre
+    theatre_dining:
+      fingerprint: a967197dacec23616e07226167a73d35692b771867b337ef89ac8683edd4be19
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: theatre_dining
+    theatre_scar:
+      fingerprint: ade15368fd54a16bb6ac9761062b1c421df669f165a5b7825d3723449d6226e3
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: theatre_scar
+    theatre_childhood:
+      fingerprint: 83b1d54c6025c72ef93faf6d2f40222fbb5d5959d65b09c7c374e9f9417cfed5
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: theatre_childhood；duff_doll
+    theatre_crib:
+      fingerprint: 4f52ddd57e3f8c330c7a687654808adedb21743189b596de143e074486c68035
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: theatre_crib
+    theatre_dream:
+      fingerprint: 5f0892023c63faec682eb827460ebefd441ecb456f6a4065d9031be0e4184d46
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: theatre_dream
+    theatre_king:
+      fingerprint: fbaa53c7e964714dbea7b245df59275e216cd1efad172a8a223deb466d24a06f
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: theatre_king；cabbage_king
+    other_side:
+      fingerprint: 226e916f4fe4d2bf76f39a930e37c585a36b04e9ff857d2ac565b0d513ec7ace
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: other_side
+    other_home:
+      fingerprint: 76a41b87d31907ed26f4a986770c301dd4174d33ef7b3b486f9110b7dfcb4224
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: other_home
+    other_tower:
+      fingerprint: 51151b759321059efdb81862b21a3d089dbc73bede3b8cb2cfadbaa7c0239c5f
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: other_tower
+    other_whale:
+      fingerprint: d8a0311edb85b499c6bb409b1242640e9e94c40d9de01bf1ed168d3614f03629
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: other_whale
+    other_station:
+      fingerprint: 92098e923af1003a5ebb52f8509329d7cc88366ba5be7cb4c9dd28294f7ed4f4
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: other_station；dante
+    other_edge:
+      fingerprint: 154d8ff61a86d15c58695ca724e3daebb3f70337fbfe8e6e00f3469fbe6f99f9
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: other_edge
+    home_bedroom:
+      fingerprint: fd81c0311b60c597be4b8ffb8b7862332ad539584b14f006c528d6b58484f75d
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: home_bedroom；开场
+    home_study:
+      fingerprint: c28df8cd8618ad6f5628fa51c8c715627bc92fea87c3aa7f274e9a52277b4db1
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: home_study
+    bar_restroom:
+      fingerprint: b00c675046e94c16c5f59ac27df41e22484d6fcc7baf965d4431399129cd3e69
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: bar_restroom
+    mansion_master_bedroom:
+      fingerprint: 3d0fb1812c7269be7fba7c8a813cd0c5a83986d9c7859180b7816094a1bab3d5
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: mansion_master_bedroom；c_mansion_rooms
+  present:
+    e_kandi_arrives:
+      fingerprint: e22fe3db217d94a4bc5e4c7b0a1a7d9ce30d6ad0b210cbf13cca5f05cc47d30c
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原作 p11：晚上 12 点联络人坎蒂敲门，请特工到门口车里当面交代任务后驱车离开。开局时特工就在 agent_home，所以坎蒂一定当面出场。
+    e_first_theatre:
+      fingerprint: 35b6af34d1c0022f8d543be7e60b95a4a5c0f876fb71ab4f9c2e08bb16f4aca1
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 这条事件只写特工第一次进入剧院时的走廊景象和 SAN/腐化结算，原作没写有指定 NPC 当场出现。乘客是背景人物，不算 NPC。
+    e_cellar_trapped:
+      fingerprint: 2e26ae08b81ed288b5617506d40998af076ceffdbecbe2f1e4d0bf6161d2b8f5
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原作 p25：悖论是在特工进去之后偷偷锁门，不在她眼前。约瑟芬和吉姆要到午夜才来，只有特工那时还没逃出才见得到，属于要看调查员在不在场的情况，按要求不写。
+    e_feb12:
+      fingerprint: c4c8dc3d1052cee1dc5ae35967bfc4ac56dc643f099371a8492c63b8efdf40f0
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 二月十二日之夜重演预演现场：约瑟芬和服务生清空酒吧中央，吉姆（和达夫）从铁门进入舞池当场跳舞。前史写皮特用藏起的摄像机录下全程，完整录像里他多次出镜调整角度。三人都在特工所在的现场。达夫不是
+        NPC 列表里的角色（duff_doll 是那只狮子玩偶），所以不写。
+    e_pleasure:
+      fingerprint: f4d080d87405a77f3dc3d83548fe24fd8798e6e6876620740993adb837003818
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原作通往愉悦之路：约瑟芬和吉姆在台球桌上当场举行仪式，皮特在旁递工具，三人都在车厢里。仪式结束后亚当森“不知从哪冒出来”，拽着特工往门外跑，同样当面出现。
+    e_adamson_other:
+      fingerprint: dc710d9ca345117c9027ffb896f6bfdfe6a8f83af6ac8a849b3a9de3170dff45
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原作 p50 再会亚当森：亚当森站在门口，亲手交出卡片和礼盒，拥抱后告别。
+    e_peter_plaza_check:
+      fingerprint: bdc3ca3d8899b7e3f3f180f0fae6c85540d3f95296763f3c3b8583b7c371adcf
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 皮特在中央广场做最后检查，触发条件只有时间，没有要求特工在场。特工只有正好在广场才见得到他，属于要看调查员在不在场的情况，不写。
+    e_paradox_arrive:
+      fingerprint: e8f2e6a2eaad56f9769638c8a79af04ba54a681b3a6f83b635ae47380de9c2a4
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原作 p50：悖论 8 点抵达海滨公园，触发条件只有时间。特工要亲自赶到现场才见得到吉姆和酒吧顾客，属于看调查员在不在场的情况，不写。
+    e_finale:
+      fingerprint: 00eb432a532ee09b69cee6b05c9f9d44ef8d126432ea0c4097ccd5e1b2acd013
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 原文 p50：“悖论”晚 8 点抵达海滨公园、8 点 18 分开演；p52：“吉姆只身一人位于舞池的中央”，三人都在现场（打算 peter_to_park、jo_to_park、jim_to_park
+        也是 D4 20:00 到海滨公园）。p52 又写，除约瑟芬和皮特外，特工在酒吧见过的顾客都会出现，可是马蒂亚、托马斯、巴特在不在要看特工见没见过他们（马蒂亚还要看特工帮没帮过她），不是一定在场，所以没写。达夫是演出中从吉姆身上的黑线凝成的，不是狮子玩偶
+        duff_doll，也没有单独的 NPC id，所以没写。灰袍人和旁观群众不是 NPC，也没写。
+    e_plaza_broadcast:
+      fingerprint: 1bda926547d983f5660d9e8d6702493d22e619ba21b898555087735475ffff3b
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 巨幕切换由时间触发。管理人员和人群都不是 NPC，演出画面只是在屏幕上转播，不算当面出现。
+    e_unkillable_short:
+      fingerprint: 6aef6e1153751c7b256900c6529abd81220580525d5734875e4a57112de83317
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 这只是时限状态变化（吉姆从此无法被击杀），本身没有 NPC 当面出场的描写，而且由时间触发，不要求特工在场。
+    e_unkillable_long:
+      fingerprint: 6587cc61257e5054a2b7757acb95d4660b75a5e65b088d46827eb7c62e3ca3f7
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 转播已断时的时限状态变化，同上，没有 NPC 当面出场。
+    e_ritual_complete_short:
+      fingerprint: 115314debb5ae0ee5963f7585e5b22282f8c74fca4b308df89b22401c0d11f7c
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 演出落幕只写现场之人从世界的认知中被抹除，属于结果叙述，由时间触发，没有 NPC 当面出场。
+    e_ritual_complete_long:
+      fingerprint: 5658d6573fee443dde96d79f489fe90ea73cf6785df1f3afb8d2d7e52f8378fc
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 延长后的演出落幕，结果叙述，同上，没有 NPC 当面出场。
+  npcs:
+    kandi:
+      fingerprint: 784f26b7db068ce346ee77f35f92fbb51d4c6f80e3e4fb69a28bcbd7996cc5d8
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 称呼、目标、性格、说话方式、所知都已齐全，内容出自原作 p11–12“幻象：停机行动”“特工坎蒂”和附录C“联系三角洲”，没有空着的字段，保留原状。
+    adamson:
+      fingerprint: 89bb3c0b3fa6f54e372985ff7456b60ff81c9b7cb255a276603ad63a4fd17f44
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: called（椅子上的憔悴男人）、personality、voice、goal、knows 五项都已写好，内容与原作 p9 重要角色、p15 幻象“他仍在这里”、剧院“迷途羔羊”相符（知道特工来意、“寻求选择的意义就是选择本身”、胡话里的关键词、悄悄透露两段遗忘的过去）。没有空着的字段，保留原状。
+    winnie:
+      fingerprint: 6d2fe348d4d3cf8b8ea0d9bc073975e946835d07913679f310f971c0101981b7
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，出自原作 p13、p16“可选：让特工撞见温妮”。原作对她的着墨仅此而已，不另添案情。
+    bertha:
+      fingerprint: dbab47cd4c07c37853d7d1dd23daadd8ef64add2e5a50feda916ee0e5ab057df
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，出自原作 p18“伯莎·史密斯”和“如果特工也在第九区工作”。调任时间前后矛盾，已在 knows 中照录。
+    former_chief:
+      fingerprint: 3bed8cebbc1ec7b9fc1bbb05d282383a9666efc612d3312ce2b597b73dc09987
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 资料里这几项都已经有了：短称呼“电话那头的男人”、性格（守口如瓶）、说话方式、想要什么，以及知道的事（特工就是来收拾亚当森东西的人；交接时说过特工可能受了精神冲击），出自原文 p18“联络前任负责人”和“如果特工也在第九区工作”。原作没写他知道别的，不再添加，保留原状。
+    austin:
+      fingerprint: 3b884bb03df7c95eaadebc1e4b9959bc345c5a35c8957c350f027ad4fceddae1
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，出自原作 p19“奥斯丁·罗德里格”“一件小怪事”和 p20“中控室”（钥匙与密码）；保留原状。
+    peter:
+      fingerprint: fd939509926a1c00c7bee6ed579a70856a25979f90c75e015076d33f2928b633
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 资料里这几项都已经有了：短称呼“戴贝雷帽、抖腿的中年男人”、性格、说话方式（偶尔敲桌面）、想要什么，以及知道的事（正式演出时间；劫持程序和电脑在地窖；亲手录制、剪辑并上传预告片），出自原文
+        p6、p17、p20、p25、p27。没有空着的字段，保留原状。
+    josephine:
+      fingerprint: 8a1e158564bac692125d96ba2022a185886edec0a99823b414ba76798284f08f
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，出自原作 p5–6 前史和 p26“约瑟芬·莱特”；保留原状。
+    jim:
+      fingerprint: c11edc872158db452a72ad5ebf18cb38cbc865a27108377a9818f4ea9853e164
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: called（戴牛仔帽的围巾男子）、personality、voice、goal、knows 五项都已写好，依据原作 p9、p28：夜里独坐吧台、措辞奇怪、两个例外的承认、谈卡尔克萨、绕开目的的反问、对
+        SI 影片的回应。原作没有写他还知道别的事，不另添案情，保留原状。
+    mathia:
+      fingerprint: fbc2a43ba626e0fd718204a091e9416e91b417fa0ef94b8182ff73d159fae764
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，出自原作 p29“马蒂亚·哈尔斯”和《失灵》段落；保留原状。
+    thomas:
+      fingerprint: 999058427cf91c379db1a4db435146c9e22273aabac5bf5d28835e36a1e72b78
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，出自原作 p30“托马斯·汤姆森”“托马斯的末世论”；保留原状。
+    bart:
+      fingerprint: e231608f7f9c25854536fde69f29d67e1bd890cebbbac8a356b5e64b4f51e8ab
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 资料里这几项都已经有了：短称呼“戴细框眼镜的短发男人”、性格、说话方式、想要什么，以及分三种情形写的知道的事（现实电话里的巴特、酒吧里另一个现实的巴特、彼岸摩天大楼上的巴特），出自原文
+        p12“叙诡：特工的家人与队友”和 p30“巴特·伯格曼”。没有空着的字段，保留原状。
+    duff_doll:
+      fingerprint: 3be0e1b4a05c20256d3a4162f79ba653900512d061186f3e0f65114c9af4ee61
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，内容来自剧院事件“吉姆的幼年”（整理资料已写明达夫的称谓、对话与递出绘本）；没有缺项，保留原状。
+    mariano_corpse:
+      fingerprint: c69981243eed11db6fc289522838de654a6fbe7d7a50d3341757f239f0e7eb4e
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，内容来自剧院事件“婴儿床”（整理资料已写明尸体的交流内容与请求）；没有缺项，保留原状。
+    cabbage_king:
+      fingerprint: 2310e98ba159c204d4379e9870740963af25cfeae3637d8361a7bc80532dde6d
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，内容来自剧院事件“国王的车厢”和 NPC 卷心菜国王的资料；没有缺项，保留原状。
+    dante:
+      fingerprint: 84e36fde5559caf76a45f46666063004d4758c0d39d57c40097cd0d876282e74
+      source: 6bdaa822d9c74d659091602e14626554155a7819df9c7c78ff5e31a20b63ecc5
+      reason: 各字段都已齐全，内容来自彼岸“光辉的站台”和 NPC 但丁的资料（邀请函、清单、造梦机交易）；没有缺项，保留原状。
+relations:
+- a: kandi
+  b: players
+  kind: 监管/潜在处决者
+  value: 10
+  why: 幻象中他把“停机行动”交给特工；现实中他按原则不贸然打开任何发给他的信息，特工主动暴露非自然事件被他得知时，他会毫不犹豫地带伙伴歼灭特工
+- a: adamson
+  b: players
+  kind: 战友/诱饵
+  value: 60
+  why: 他是特工记忆中救过她的上司与同伴，也是保护屏障；同时是黄衣之王的诱饵，鼓励特工唤回记忆，后期用性或好奇心引诱她
+- a: bart
+  b: adamson
+  kind: 战友情谊
+  value: 80
+  why: 原小队成员，与亚当森情谊深厚；电话里向“曾经的队友”致敬
+- a: bart
+  b: players
+  kind: 旧同事/戒备
+  value: 10
+  why: 电话里的巴特是友好的前同事；酒吧里的巴特来自另一个现实，正在追踪与特工同代号的特工A，不轻易暴露身份，特工给出惊人一致的证据才会交换信息
+- a: winnie
+  b: players
+  kind: 熟识/托付
+  value: 60
+  why: 诺拉和温妮很熟；温妮搬走时把房子托特工照看并交了钥匙，见面时包容地说“这不是你的错”
+- a: winnie
+  b: adamson
+  kind: 妻子
+  value: 80
+  why: 亚当森的妻子，他牺牲后搬离奥克兰
+- a: adamson
+  b: winnie
+  kind: 丈夫
+  value: 70
+  why: 胡话里会提到“温妮”
+- a: bertha
+  b: players
+  kind: 尊敬/回避
+  value: 40
+  why: 特工在第九区工作时：特工是老员工，受她尊敬；但上级让她不要随意回答亚当森相关的问题，所以她会回避
+- a: former_chief
+  b: players
+  kind: 知情/守口
+  value: 10
+  why: 交接时提醒过要照顾受了冲击的特工，也知道是她收拾的亚当森遗物；被追问多了会起疑并挂断
+- a: austin
+  b: peter
+  kind: 雇佣/担忧
+  value: 30
+  why: 老板为员工自豪，但皮特旷工、怠慢顾客，招来了投诉，他又怒又担心
+- a: austin
+  b: players
+  kind: 客气
+  value: 20
+  why: 奉行“顾客至上”；特工亮出官方身份后他就配合，开放办公室、交出钥匙
+- a: peter
+  b: jim
+  kind: 信徒/技术顾问
+  value: 95
+  why: 被邀为仪式见证者，见到达夫、读完《黄衣之王》后彻底成了信徒——“吉姆！吉姆！吉姆！”
+- a: peter
+  b: josephine
+  kind: 前情人/嫉妒
+  value: 60
+  why: 吉姆回来后，他只能在白天与她交欢；出于嫉妒跟踪偷窥她的夜晚
+- a: peter
+  b: players
+  kind: 戒备
+  value: -20
+  why: 他撒谎隐瞒身份，起疑后也不会动手，但夜里会把特工的存在告诉吉姆；可以当特工与吉姆之间的中介，特工有攻击性时他就拒绝再提供信息
+- a: josephine
+  b: jim
+  kind: 母亲/情人/救世主崇拜
+  value: 100
+  why: 她把吉姆当救世主，无条件支持他的计划，每夜从他的鞭子里得到快感
+- a: josephine
+  b: peter
+  kind: 前情人
+  value: 30
+  why: 皮特是她众多情人之一，现在只在白天相会
+- a: josephine
+  b: players
+  kind: 调情/隐瞒
+  value: 20
+  why: 白天对特工动手动脚地调情，对悖论的事说谎；被引诱后想“把你介绍给吉姆看看”
+- a: josephine
+  b: mariano_corpse
+  kind: 亡夫/包庇真凶
+  value: -40
+  why: 婚姻长年苦闷压抑；马里亚诺死后她立刻知道是吉姆干的，并协助警方草草结了案
+- a: jim
+  b: josephine
+  kind: 母子/仪式伴侣
+  value: 60
+  why: 每夜与她举行性虐的“爱之仪式”，说这让他“回到了一致”
+- a: jim
+  b: peter
+  kind: 盟友
+  value: 50
+  why: 不介意皮特跟踪，邀他做仪式见证者，后来让他当技术顾问
+- a: jim
+  b: players
+  kind: 邀请/劝说
+  value: 40
+  why: 对特工温和宽厚，从不生气；列举她的不幸，问她能否构建永远幸福的生活，终幕劝她放弃阻挠
+- a: jim
+  b: mariano_corpse
+  kind: 弑父
+  value: -80
+  why: 1995年借剧院进入书房，让喀巴奇·劳捆住父亲后枪杀了他
+- a: jim
+  b: cabbage_king
+  kind: 崇拜
+  value: 60
+  why: 谈卡尔克萨时，毫不掩饰对旅途中遇到的喀巴奇·劳国王等人的崇拜
+- a: cabbage_king
+  b: jim
+  kind: 旧同伙/不熟
+  why: 马里亚诺谋杀案中是吉姆的同伙，但和他不熟
+- a: cabbage_king
+  b: players
+  kind: 视回答而定
+  why: 见面就问特工是否认为自己在一本书里：答“是”就友好，答“否”就突然攻击
+- a: mariano_corpse
+  b: jim
+  kind: 怜悯/怀疑
+  value: 50
+  why: 蕴藏着吉姆对自己追求的怀疑，带着强烈感情希望吉姆和约瑟芬得到解脱
+- a: mariano_corpse
+  b: players
+  kind: 求助
+  value: 50
+  why: 请求特工阻止仪式，并告诉她要在子宫之外切除脐带
+- a: mathia
+  b: jim
+  kind: 仰慕
+  value: 50
+  why: 2月8日夜那位年轻客人认可了她的才华，她被这个学识丰富的年轻人震撼，此后灵感大发
+- a: mathia
+  b: players
+  kind: 好奇/潜在援手
+  value: 30
+  why: 出于好奇会帮特工分散店员注意力，特工遇险时会伸手；得到她信任后，她甚至可能在最后一夜协助阻止演出
+- a: dante
+  b: players
+  kind: 交易对象
+  value: 30
+  why: 清单上有特工的名字；他想用造梦机换特工的血和一段回忆，以取回邀请函
+- a: duff_doll
+  b: players
+  kind: 搞怪/托付
+  value: 20
+  why: 把特工当成“格林伍德十世”，递给她未完成的《瓦普内克剧院》
+ties:
+- id: tie_adamson_rescuer
+  hook: 亚当森是曾在一次非自然事件中救下特工、把她带进三角洲同一小组的上司兼战友（原作诺拉设定）；自建调查员可换成调查员背景里那位“救过自己、引自己入行的人”，但他已在黑线行动中牺牲这一点不变。
+  npc: adamson
+  fits:
+  - 重要之人
+  - 职业
+- id: tie_winnie_friend
+  hook: 温妮是特工的旧友，原作写诺拉和她很熟、喜欢她烤的小甜饼；亚当森死后她搬离奥克兰，临走把林登街房子的钥匙托付给了特工（特工不记得这件事）。
+  npc: winnie
+  fits:
+  - 重要之人
+- id: tie_adamson_house
+  hook: 林登街 2441 号是特工常去考克斯夫妇家做客的地方，后来又被她当作安全屋；包里那把考克斯家的钥匙就是这段关系留下的东西。
+  place: adamson_home
+  fits:
+  - 意义非凡之地
+  - 宝贵之物
+- id: tie_bart_teammate
+  hook: 巴特是黑线行动中和特工一起撤离、一起中毒昏迷的原小队队友，事后调离奥克兰；他的电话号码特工应当还留着。
+  npc: bart
+  fits:
+  - 重要之人
+  - 职业
+- id: tie_kandi_handler
+  hook: 坎蒂是特工在绿色三角洲的联络主管，特工熟悉他的习惯（每次行动换一种联络方式，从不在明亮或信号好的地方见面），这正是午夜来访让她觉得不对劲的依据。
+  npc: kandi
+  fits:
+  - 职业
+- id: tie_bertha_boss
+  hook: 特工的公开身份若也在 NPPD 第九区（预设诺拉即是），伯莎就是一月初调来的新上司，敬重她这个老员工，也知道她 9 号起没按要求出勤但不会主动提。
+  npc: bertha
+  fits:
+  - 职业
+- id: tie_blackline_site
+  hook: 奥克兰郊区那座炸塌的废弃化工厂是亚当森死去、特工被救出的地方；它在剧院里以“渐淡的伤疤”重现，背景里的创伤之地可以直接对上这里。
+  place: theatre_scar
+  fits:
+  - 意义非凡之地
+- id: tie_seaside_family
+  hook: （补全，原作没写）海滨公园是奥克兰新一代家庭喜欢去的地方，调查员一家可能常在周末带孩子来这里散步；这只给地点加一层私人分量，不决定终演那晚家人在不在场。
+  place: seaside_park
+  fits:
+  - 意义非凡之地
+  - 重要之人
+- id: tie_dream_capsules
+  hook: 造梦机旁箩筐里的胶囊多半标着特工重要之人的名字（原作），但丁的清单上也有特工和她在意的人；调查员背景里最重要的那个人可以写在其中一枚胶囊上。
+  place: theatre_dream
+  fits:
+  - 重要之人
+- id: tie_jim_happiness
+  hook: 吉姆问起目的时会举出特工生活里的幸事和这几天的不幸，最后问“我们是否可以构建一个永远幸福的生活？”；调查员背景里的信念（比如守护家人的幸福）可以作为他挑战的对象。
+  npc: jim
+  fits:
+  - 思想与信念
+- id: tie_other_home
+  hook: 彼岸里特工的家比记忆中更像她想象中的样子，不幸和矛盾都没有了；调查员背景里的家和家人可以照这个样子在那里出现。
+  place: other_home
+  fits:
+  - 意义非凡之地
+  - 重要之人
+- id: tie_pd_contact
+  hook: 原作写特工可以说服奥克兰市警或“自己熟悉的相关部门”帮忙辨认照片里的人，所以执法背景的调查员可以在警署档案室有个熟人；有熟人也照样要过原作的说服检定，等的时间也照旧。
+  place: oakland_pd
+  fits:
+  - 职业
+- id: tie_horn_media_client
+  hook: （补全，原作没写）广告、传媒或商圈管理背景的调查员可能和鹿角传媒打过交道，认识奥斯丁；看皮特办公室要出示官方身份、拿中控室钥匙要过说服检定，这两条门槛照原作不变。
+  npc: austin
+  fits:
+  - 职业
+- id: tie_mathia_reader
+  hook: （补全，原作没写）爱读或写恐怖小说的调查员可能在本地写作圈里听说过这位旅居奥克兰、还没成名的荷兰作家；借这层关系更容易和她搭上话，但看《失灵》仍要等到夜里，并过原作的交涉检定。
+  npc: mathia
+  fits:
+  - 思想与信念
+  - 职业
+mechanics:
+- name: 腐化值
+  rules: 腐化值＝个体＋环境＋时间，对玩家不可见；到原作所说的“末期”（如抵达海滨公园、e_paradox_arrive 时）才明示，并设 corruption_revealed。个体初值 1；调查本案每过一天
+    +3；第一次目击黄印 +4；第一次向他人传递黄衣之王 +2，之后每次 +1；第一次进入剧院 +6；识破幻象 -2，失败 +2；服用精神抑制类药物临时 -5。环境：亚当森住所 3、皮特办公室 3、闹钟酒吧及地窖
+    5、格林伍德宅邸 10、吉姆卧室 15、剧院与彼岸 30，其余现实地点 0；演出当晚中央广场和海滨公园原文只写“陡升”，由守秘人用 env 动作临时设定。时间：夜晚 18:00–06:00 +10（起止为
+    AutoKeeper 补充），剧院与彼岸不计时间腐化。首次达到 10/20/25/30/35/40/60 时设对应 corr_ 标记，但幻象阈值按此刻数值判断。正文中散见的“腐化+X”由守秘人用
+    add 动作记入，例如：看预告片 +1，反复观看或灵感认出自己 +2；进入酒吧、地窖、宅邸各 +1；哼唱或演奏富鲁格号乐谱 +3；听吉姆谈卡尔克萨 +2；听托马斯的结论 +2；向马蒂亚提供黄衣之王信息，双方各
+    +2；随身听 +1；皮特的舞会 +1；和剧院里的“自己”交流 +2；造梦机每用一次 +4；第一次接触达夫 +5；注视达夫 +4；营救人员进入酒吧 +2。区间表现：1–5 几乎没有幻象；6–20 偶尔出现；21–40
+    持续出现，见到幻想人物，开始注意到剧院；41–60 开始造访彼岸并与现实混淆；更高则难以离开彼岸。
+  why: 全模组：决定酒吧开没开、地窖门、剧院通道、光带、幻象人物和终幕判定
+  plugin: corruption
+  runs: 插件
+- name: 识破幻象
+  rules: 特工怀疑眼前是幻象时：腐化 <40 做意志检定，加一个惩罚骰（原文意志*5-20）；腐化 ≥40 做意志困难检定（原文意志*5-40）。成功腐化 -2，失败 +2（用腐化插件记入）。幻象不真实存在，但会影响功能，例如幻象里手被割伤，现实中仍握不稳枪。腐化
+    20 起部分幻象常驻（黑色巨石、上涨的湖水、天空光带）。
+  why: 附录B 幻象；雨中交合中反抗用同一检定，造梦机戴眼镜也用意志检定加一个惩罚骰
+  runs: 核心规则
+- name: 腐化值检定
+  rules: 掷 D100，不超过此刻腐化值为成功。用在：想主动离开剧院时（失败为“虚假的离场”，之后被揭穿时 SAN 0/1D4）；抵达海滨公园演出现场时做“腐化值+10%”检定，成功则腐化 +5，并被拉入彼岸的边缘；在现实中疯狂发作时，成功则意识再入彼岸或触发彼岸事件。
+  why: 剧院“离开剧院”、终演 e_paradox_arrive、彼岸“现实中”
+  plugin: corruption
+  runs: 插件
+- name: 心想事成
+  rules: 在腐化之地中：简单愿望不需检定；主动或困难的愿望（如离开剧院）要过检定，技能值＝腐化值，且须持续想象。无论成败魔法值 -1D6、理智 0/1D2、腐化 +2。分阶段：前期特工尚未意识到这项能力时，守秘人暗中代掷，成功则以隐晦方式实现并伴随乏力眩晕，只扣魔法值；中期特工主动请求，仍由守秘人掷骰，但公示点数，不解释成败，直接描述结果，受完整惩罚；末期腐化值明示后由特工自己检定，完整惩罚。撑过八次鞭子（whipped）后检定
+    +20。争夺叙事权（如地窖里吉姆召出蛇来捆绑）时，双方以“意志＋腐化值”对抗，特工无论如何都受完整惩罚。愿望总以意想不到的形式实现。NPC 的心想事成：吉姆 60、约瑟芬 35、皮特 20、达夫
+    99。
+  why: 剧院、彼岸、被困地窖、终演中吉姆的恢复
+  plugin: corruption
+  runs: 插件
+- name: 幻象阈值与通道
+  rules: 各处写的“阈值 X”指此刻腐化值的最低要求，要按当下数值判断，不按曾经达到的标记。达到 30：亚当森卧室、皮特办公室、酒吧铁门、宅邸书房、吉姆卧室窗户与储物间柜门都变成通往剧院的门，相应通路的
+    blocked 由守秘人解除。腐化 <30 时去开酒吧铁门，它只是一幅钉在墙上的画，SAN 0/1D3，腐化 +2。地窖门的阈值是 25：低于 25 时它是一幅画着门的装饰画，掀开这幅画就变成木门，SAN
+    0/1D3，腐化 +2。酒吧 ≤20 时看起来是倒闭的玩具店，执意进入 SAN 0/1D3，腐化 +2。巴特阈值 21，托马斯阈值 30；亚当森卧室里“他仍在这里”阈值 7。离开卧室后再回来时若腐化
+    <7，尸体不翼而飞，准备的材料变成潦草的图画。
+  why: 所有地点的守秘人须知与通路
+  runs: 守秘人
+- name: 离开剧院与彼岸
+  rules: 剧院事件结束后可能被动离开（如“吉姆的幼年”之后进入现实中的吉姆卧室）。主动离开要过腐化值检定：成功后，下一个打开的包厢映出扭曲的现实光景，穿过即抵达希望去的地点；没有明确去处就回自己家、亚当森家或进入时的位置；只能回到造访过且已被腐蚀的现实地点。个体腐化
+    >25 时可经剧院进入彼岸。彼岸只有两种离开办法：找到剧院站台登上停靠的剧院（要出示邀请函），或借造梦机回到现实。在剧院或彼岸中行动照样消耗现实时间（“走神”）；终幕只调彼岸与剧院事件的顺序，现实按客观时间走。可选的“时间的把戏”：出入时间不一致，向特工希望的方向偏移。
+  why: 剧院、彼岸、终幕运行建议
+  runs: 守秘人
+- name: 造梦机
+  rules: 尝试理解构造 SAN 0/1；每使用一次腐化 +4。戴上眼镜后被强制拉回“现实”继续行动，并做意志检定（加一个惩罚骰）：成功则清楚知道自己正在用机械观察，可以主动回到车厢。无论成败，现实剧情只前进半天，就被强行拉回车厢：“请植入一枚新的胶囊。”投入新胶囊后以对象的视角进入（同样过意志检定），最多两小时被弹出：“警告。胶囊匹配度过低，已弹出。”它不能逆算，遗传物质耗尽自动暂停。但丁以血液和一段回忆交换造梦机；要用胶囊体验，先得给他血。
+  why: theatre_dream、other_station
+  runs: 守秘人
+- name: 八次鞭子
+  rules: 连续鞭打 8 次，每两次受 1D2 伤害、SAN 0/1，并过体质检定，否则晕倒，醒来时三人已经不在；后背烙下黄印形的伤痕；腐化增加等于仪式中失去的理智总值。撑过后吉姆与约瑟芬邀请特工一同交媾，皮特摊手鼓励；完成整个仪式
+    SAN 0/1D6、腐化 +2，设 whipped，此后心想事成 +20。发现身上刻的是黄印另 SAN 0/1D3、腐化 +2。特工可随时终止逃离，他们不阻拦。伤害、检定、理智按核心规则结算，腐化用插件记入。
+  why: e_pleasure、被困地窖没能逃脱时
+  runs: 守秘人
+- name: 不死与复活
+  rules: 闹钟酒吧和格林伍德宅邸中死亡的人，若腐化 >20，会以诡异姿态复活。剧院乘客不能真正被杀死，被破坏的部分以难解的形式恢复，伤口下是棉花和齿轮。尚与现实有关的人（特工、悖论）在剧院或其他严重腐蚀地之外死亡，会成为永远徘徊的乘客。达夫让吉姆在剧院或彼岸中不会死亡：攻击他只会让另一个可能性的吉姆替代（目击
+    SAN 0/1D4）。只有在被腐蚀之地以外杀死吉姆，或在演出最后半小时之前于现场将他击杀，才能终止仪式。
+  why: 酒吧、宅邸、剧院、二月十二日之夜、k_stop
+  runs: 守秘人
+- name: 达夫的特性
+  rules: 第一次接触达夫腐化 +5。注视达夫：视线被黑线吸住无限放大，SAN 1/1D8、腐化 +4。攻击达夫进入“静止姿态”：特工以为自己已经攻击过，实际上什么也没做（弹夹仍满，人还在原地），察觉这个悖论
+    SAN 0/1D4。在被腐蚀的空间里达夫有实体和绝对话语权，其他地方依附在吉姆身上；行为不受吉姆控制，但更倾向于吉姆的想法，特工可以尝试改变它，非常困难。
+  why: 通往愉悦之路、二月十二日之夜、终演
+  runs: 守秘人
+- name: 终演时限与吉姆的恢复
+  rules: 8 点 18 分开演，持续 2 小时；中央广场转播被切断则延长到 4 小时。外面无法向吉姆开枪，须挤入人群；挤进去后来到彼岸的边缘，配枪不知所踪，吉姆劝说特工，交谈后回到人群。参与者受攻击都不反抗。吉姆借心想事成恢复，起初抵消不了子弹等高杀伤武器，之后越来越快；进入最后半小时（jim_unkillable）后无法被击杀，只能等仪式结束。吉姆一死，仪式立即结束（performance_stopped），腐化在短时间内大幅下降。钟点由事件
+    e_finale、e_unkillable_*、e_ritual_complete_* 触发。
+  why: 终幕“终止演出”“射杀吉姆”
+  runs: 守秘人
+- name: 耗时与技能门槛
+  rules: 耗时：狂热观众 1D6+2 小时后回复（每项信息各 50 美元）；市警协助认人约 1D6 小时；破解中控电脑密码要计算机使用（困难）检定加 1D4 小时；发现中控电脑在与远程交换数据 1D2
+    小时，解除皮特控制或植入病毒再 1D2 小时；看懂劫持代码 1D3 小时；读《黄衣之王》1 小时、《无门之界》2D4 小时、《火车的历史》1D6+3 小时、《卡尔克萨王族食谱》2D6 小时；地窖转变为剧院约半小时。原文的技能门槛：艺术与手艺(音乐)
+    ≥20 认出皮特的磁带，并让他分享随身听（也可用魅力检定）；计算机使用 ≥30 旁敲侧击出皮特懂计算机，以及看懂代码；历史 ≥20 辨出托马斯的埃及史；科学(物理) ≥20 认出热寂假说；科学(司法科学)
+    ≥40 认出纸团笔迹；艺术与手艺(音乐) ≥20 听出铜管奏的是 SI 旋律。线索表里写成检定的，原文是门槛：达到即可。
+  why: 调查悖论、中控室、地窖、酒吧人物、吉姆卧室、彼岸边缘
+  runs: 守秘人
+- name: 三角洲的怀疑与监视
+  rules: 怪异行径（旷工太久）、主动联络暴露自己可能已被腐化，或表明自己“正在执行某项行动”，都会引起怀疑（delta_suspects）；后者是最高等级怀疑，可能被监视甚至处决。被怀疑后 3D4
+    小时内外地调来的小队盯上特工；离开建筑时侦查检定可发现跟踪。小队几乎不干涉，发现“反常”的危险举动时镇压。终幕前已被监视的，终幕请求帮助时坎蒂立刻同意并挂断，整装的队伍出现但拒绝交流。试图甩掉或敌对：坎蒂召开新简报会暗中评估，必要时当场击杀；逃出则要避开组织已掌握的地点，不久小队可能闯入酒吧。要联系三角洲须有适当证据；以
+    YouTube 视频和被修改的屏幕代码为由申请网络管理权限，要过说服检定。
+  why: 附录C、坎蒂、end_delta
+  runs: 守秘人
+- name: 当患者被拘束
+  rules: 借警方或精神病院拘束约瑟芬、皮特、吉姆，不超过两天，他们会在夜里打开新的剧院通道（窗户或门）消失，消息经官方渠道传给特工。在监视画面或摄像头里看到对方仿佛穿过媒介消失 SAN 0/1D3；腐化
+    ≥30 的人看见通道生成过程 SAN 0/1D6、腐化 +3。
+  why: 附录C；约瑟芬、皮特拒绝离开腐蚀地界
+  runs: 守秘人
+- name: 家人察觉与心理医生
+  rules: 深夜出门会吵醒家人，他们可能看到特工对着空气比划，宽容地说“不会有事的，但你需要休息”。多次目睹后，家人会偷偷联络心理医生；医生傍晚来电“您明天有时间吗？或许我们可以聊聊。”，语气反映特工的腐化程度。特工做出费解之事或严重伤害亲密关系时，可能在街上发现伴侣背着自己做某些事。
+  why: 叙述性诡计、附录C
+  runs: 守秘人
+- name: 结局奖励与后续
+  rules: end_shadow：阻止最终演出 +2D6 理智，并减少等量腐化；另外成功阻止中央广场转播，再 +1D6 理智、减少等量腐化。end_delta：成功阻止转播 +1D6 理智、减少等量腐化。找到《黄衣之王》而没读的，腐化
+    -1D8。end_delta 和 end_remember 按最终个体腐化分档（<25 / 25–50 / …，其余分档见原文）决定特工此后的生活。特工完全疯狂时，可让玩家短暂扮演失忆后的马蒂亚，以她的视角讲述结局。
+  why: 结局
+  runs: 守秘人
+history:
+- when: 1980 年至 1995 年
+  text: 约瑟芬 1980 年嫁给马里亚诺，改姓格林伍德。马里亚诺 1976 年接手的家族油漆厂 1992 年破产，此后他酗酒，把屈辱以非暴力的方式发泄在约瑟芬身上，家里长年压抑。吉姆在卧室墙上乱画，借画画躲开这一切。
+  who:
+  - josephine
+  - mariano_corpse
+  - jim
+  where: greenwood_mansion
+- when: 1995 年 3 月 21 日起
+  text: 10 岁的吉姆常去路边一家不起眼的书店，店主送他一本无名红皮小书（《黄衣之王》最早的英译本）。吉姆照着它画出绘本《瓦普内克剧院》，在宅邸里找到通往卡尔克萨的“剧院”。约瑟芬拿着绘本跑了好几家出版社，都以“对孩子心理不利”为由拒绝。约瑟芬是绘本的第一位读者。
+  who:
+  - jim
+  - josephine
+  where: greenwood_mansion
+- when: 1995 年 11 月
+  text: 吉姆经剧院的门进入父亲马里亚诺的书房，让喀巴奇·劳捆住马里亚诺，伪造自杀现场后开枪打死他，再从剧院离开，造成门窗反锁的密室。他的思想在无意中影响了这个空间，引导警方很快判为自杀。
+  who:
+  - jim
+  - cabbage_king
+  - mariano_corpse
+  where: mansion_study
+- when: 1995 年 11 月
+  text: 马里亚诺死后，约瑟芬立刻明白这是吉姆干的，相信那是神迹、吉姆一定会回来。她协助警方草草结了自杀案，后来也让吉姆失踪案草草了结。
+  who:
+  - josephine
+  - jim
+  where: greenwood_mansion
+- when: 1995 年末（自杀案结案后不久）
+  text: 吉姆从自己的卧室消失，进入剧院，在卡尔克萨里长途旅行。约瑟芬报警，警方连续搜查数日一无所获，按失踪结案。
+  who:
+  - jim
+  - josephine
+  where: jim_bedroom
+- when: 1996 年
+  text: 约瑟芬恢复原名约瑟芬·莱特，卖掉马里亚诺除宅邸以外的全部遗产，买下辛普敦大厦负一楼的罗伯特书店，改成“凌晨十二点闹钟”酒吧，从此在酒吧里等吉姆回来。
+  who:
+  - josephine
+  where: bar
+- when: 1996 年至 2007 年
+  text: 约瑟芬在纸团上一遍遍写“吉姆·格林伍德”，有的落了 1996 到 2007 年的日期。纸团堆在吉姆卧室的书桌上。
+  who:
+  - josephine
+  where: jim_bedroom
+- when: 2007 年 11 月 20 日至 12 月 24 日
+  text: 坎蒂启动“黑线行动”，召集特工、亚当森、巴特三人小组调查斑衣笛手贩卖黑色致幻粉末一案。12 月 24 日，小组追到奥克兰郊区的废弃工厂，那里是陷阱：亚当森作前锋识破后通知特工撤离，随即爆炸，亚当森被倒塌的厂房掩埋，当场死亡；特工和巴特撤离时吸入毒气昏迷，被救援人员在工厂附近发现。
+  who:
+  - kandi
+  - adamson
+  - bart
+- when: 2007 年 12 月底至 2008 年 1 月
+  text: 黑线行动之后，后续追查移交其他小组，巴特被调离奥克兰；三角洲担心亚当森之死给特工留下心理创伤，暗中把她调离前线。三角洲处理掉亚当森的大部分材料，第九区前任负责人也被调走。
+  who:
+  - kandi
+  - bart
+  - former_chief
+  where: nppd_office
+- when: 2007 年 12 月底至 2008 年 1 月
+  text: 特工亲自去第九区办公室收拾亚当森的东西。前任负责人交接时提醒，特工可能在和亚当森的共同任务中受了精神冲击，需要照顾。
+  who:
+  - former_chief
+  where: adamson_office
+- when: 亚当森牺牲后不久
+  text: 亚当森的妻子温妮搬离奥克兰，临走托特工照看林登街的房子并交了钥匙。此后特工一直把那里当安全屋用（特工自己不记得）。
+  who:
+  - winnie
+  where: adamson_home
+- when: 黑线行动之后
+  text: 组织把一张纸条转交给特工，上面用她和亚当森约定的加密法写着亚当森的电脑密码。
+  who:
+  - kandi
+  where: adamson_bedroom
+- when: 2007 年 12 月 25 日
+  text: 吉姆在剧院中凭想象和对黄衣之王的崇拜创造了“兄弟”达夫·格林伍德（诞生于剧院婴儿床里马里亚诺尸体的子宫），随后与达夫一起回到现实，创立“芝诺悖论”，当天开始在 YouTube 发表现代舞。约瑟芬立刻和吉姆开始乱伦与性虐关系，每夜从吉姆的鞭子里获得快感，成为第二个读《黄衣之王》的人。
+  who:
+  - jim
+  - josephine
+  where: greenwood_mansion
+- when: 2008 年 1 月初
+  text: 伯莎·史密斯调任 NPPD 第九区负责人（原文另处写“一个月前”，她自己说“一两周”，原文矛盾）。上级告诉她亚当森死于一次针对网络恐怖分子的联合调查，并指示她不要随意回答与亚当森有关的问题。
+  who:
+  - bertha
+  where: nppd_office
+- when: 2007 年底至 2008 年 1 月 10 日
+  text: 皮特原是约瑟芬的情人之一。吉姆回来后，他只能在白天与约瑟芬交欢。出于嫉妒，他跟踪约瑟芬，在宅邸对面窥视、偷拍母子的仪式（照片集中在开局前约一个半月），之后尾随二人穿过剧院，被邀请做仪式的见证者，见到了达夫，读完《黄衣之王》，成了信徒。1
+    月 10 日他加入悖论。
+  who:
+  - peter
+  - jim
+  - josephine
+  where: greenwood_mansion
+- when: 2008 年 1 月 18 日起
+  text: 皮特为悖论搭建私人网站，开始夜不归宿，筹划把演出连上互联网，并修改程序、劫持中央广场四块大屏。最近一两个月他工作心不在焉。
+  who:
+  - peter
+  where: central_plaza
+- when: 开局前约两周
+  text: 中央广场的广告商要求更换广告，皮特一直没有落实，也开始忽视顾客的其他请求。
+  who:
+  - peter
+  where: horn_media
+- when: 2008 年 2 月 8 日
+  text: 特工从悖论的网站嗅到非自然气息，开始用亚当森卧室里的电脑追查悖论。
+  where: adamson_bedroom
+- when: 2008 年 2 月 8 日夜
+  text: 吉姆在闹钟酒吧和恐怖小说作家马蒂亚聊天，认可她的才华，建议她用“从脑海里浮现、却不知道含义的符号”写恐怖故事。马蒂亚随即动笔写小说《失灵》。
+  who:
+  - jim
+  - mathia
+  where: bar
+- when: 2008 年 2 月 9 日起
+  text: 特工没有按要求到第九区出勤。伯莎注意到了，但不会主动提起。
+  who:
+  - bertha
+  where: nppd_office
+- when: 2008 年 2 月 10 日夜
+  text: 皮特经剧院回到鹿角传媒的办公室取走自己的电脑，为预演做准备。奥斯丁下班时听见里面有响动，敲门后皮特说顾客着急要处理。奥斯丁不知道当天没人看见皮特走进办公室。
+  who:
+  - peter
+  - austin
+  where: peter_office
+- when: 2008 年 2 月 11 日
+  text: 特工用钓鱼程序向 zeno@paradox.com 发邮件。皮特在夜里的混乱中点开，特工由此拿到他电脑的 IP（指向辛普敦大厦），并在那台电脑上留下后门。第二天白天，皮特觉得自己犯了错，心存侥幸，把当作网站服务器的电脑草草藏进酒吧地窖。
+  who:
+  - peter
+  where: bar_cellar
+- when: 2008 年 2 月 12 日夜
+  text: SI 在闹钟酒吧预演，吉姆与达夫主舞，约瑟芬在场，皮特用藏起的摄像机录下全程。特工在准备不足时闯进来，目击了整场演出，在极度兴奋和疯癫中与剧院建立联系，之后因保护性失忆忘了这一切，把这段调查记忆嫁接到亚当森身上。现场多数观众同样忘了演出，却会下意识回到酒吧。
+  who:
+  - jim
+  - josephine
+  - peter
+  where: bar
+- when: 2008 年 2 月 13 日凌晨
+  text: 皮特剪掉暴露位置和身份的片段，把 SI 预告片上传到 YouTube。
+  who:
+  - peter
+  where: bar
+agendas:
+- npc: kandi
+  goals:
+  - 幻象中：让特工完成“停机行动”
+  - 现实中：不让非自然事件扩大，必要时除掉被腐化的特工
+  steps:
+  - id: kandi_vision_followup
+    text: 幻象中的坎蒂说过：特工带着足够线索联系他，他会考虑提供掩护或人手；被问到邮件真伪时保证邮件是真的
+    meet: true
+    once: false
+    source: kandi；c_halting_brief
+  - id: kandi_real_contact
+    text: 特工联系真实的三角洲并当面出示证据（如 YouTube 视频、被改过的中央广场屏幕代码）申请网络管理权限：要过说服检定；他可以给出大部分黑线行动资料，包括亚当森已死
+    meet: true
+    once: false
+    only_if: 特工实际向坎蒂出示了手里已有的证据；出示屏幕代码的前提是特工已经从皮特电脑里读到了劫持代码（c_laptop_code）
+    source: 守秘人须知·联系三角洲；附录C
+  - id: kandi_contact_result
+    text: 说服检定的结果，以及他是否因特工的说法起疑（特工若声称自己“正在执行某项行动”，就是最高等级怀疑），由守秘人裁定，可能设 delta_contacted 或 delta_suspects
+    ruling: true
+    source: 守秘人须知·联系三角洲；规则·三角洲的怀疑与监视
+  - id: kandi_suspect_tail
+    text: 三角洲起疑后 3D4 小时内，外地调来的小队盯上特工；她离开建筑时可以过侦查检定发现跟踪。小队几乎不干涉，看到反常的危险举动时出手镇压
+    when: flag:delta_suspects
+    meet: false
+    source: 规则·三角洲的怀疑与监视
+  - id: kandi_suspect_hostile
+    text: 特工想甩掉小队或与组织敌对：坎蒂召开新的简报会暗中评估，必要时当场击杀她；她逃脱后，不久小队可能闯进酒吧
+    when: flag:delta_suspects
+    only_if: 特工确实试图甩掉监视，或对小队、组织做出敌对举动
+    ruling: true
+    source: 规则·三角洲的怀疑与监视
+  - id: kandi_finale_help
+    text: 特工终幕前已经被监视、终幕时又请求帮助的：坎蒂立刻同意并挂断电话，一支整装的队伍随后出现，但拒绝和她交流
+    meet: true
+    once: true
+    only_if: 特工在终幕当晚亲自打电话请求支援，并且之前已经处在三角洲监视下
+    source: 规则·三角洲的怀疑与监视
+  - id: kandi_exposure_kill
+    text: 特工主动暴露非自然事件并被他得知时，他和伙伴会毫不犹豫出手歼灭特工
+    only_if: 坎蒂通过实际的渠道（特工的报告、发给他的带黄印的图片等）得知特工在扩散或暴露非自然事件
+    ruling: true
+    source: kandi 秘密；附录A 奥德里奇
+- npc: adamson
+  goals:
+  - 鼓励特工唤回记忆
+  - 配合特工完成“任务”，在呓语中迎接“死亡”
+  steps:
+  - id: adamson_chair
+    text: 腐化达到 7 时坐在卧室的椅子上，间歇地问候她，像同时在和好几个人说话；对她的来意了然于心，不反抗“处理”
+    meet: true
+    once: false
+    source: adamson_bedroom 幻象“他仍在这里”；adamson
+  - id: adamson_ghost_talk
+    text: 交谈时间歇地说夹杂非英语的问候，像同时在和几个人说话，胡话里冒出特工的名字、“温妮”、“瓦普内克”；问到邮件里的“选择”只摇头：“寻求选择的意义就是选择本身。”守秘人可以让他的话变成一团乱麻，借此悄悄透露特工忘掉的两段过去（从
+      2 月 8 日至 12 日追查悖论的经历中选取）
+    meet: true
+    once: false
+    source: adamson_bedroom 幻象“他仍在这里”（阈值 7）；c_adamson_ghost
+  - id: adamson_after_death
+    text: 被“处理”以后，特工离开再回来时，腐化≥7 他仍平静地品味着死亡；腐化<7 尸体不翼而飞，准备好的材料变成潦草的图画
+    when: flag:halting_done
+    meet: true
+    once: false
+    source: adamson_bedroom·再会，亚当森
+  - id: adamson_lure
+    text: 随着腐化升高，他越来越脱离她理想中的形象，用性或好奇心引诱她；腐化≥30 时可在街上从背后拍她的肩（示例“雨中交合”）
+    when: flag:corr_30
+    only_if: 守秘人按此刻腐化≥30、特工独处或在室外时引入
+    ruling: true
+    source: 重要角色·亚当森；bar 示例“雨中交合”
+  - id: adamson_theatre
+    text: 在剧院里可以鼓励她对抗，也可以劝她停手回到生活，或者讲卡尔克萨的知识，几种态度之间快速切换
+    meet: true
+    once: false
+    source: 剧院·迷途羔羊的羔羊
+- npc: peter
+  goals:
+  - 让演出连上网络，转播到中央广场的大屏
+  - 保护地窖里的电脑
+  steps:
+  - id: peter_day_corner
+    text: 白天窝在酒吧角落听随身听、敲节奏，不想理人；被问到网站就装傻，自称磁带收藏家；有人跟他聊音乐、聊得在行，他愿意多说几句
+    meet: true
+    once: false
+    source: peter；p27
+  - id: peter_cellar_check
+    text: 每天下午两点左右进地窖检查中央广场的程序，其余时间在大厅
+    when: hour:14-15
+    does: at:peter:bar_cellar
+    source: p27
+  - id: peter_back_hall
+    text: 检查完回到大厅的角落
+    when: hour:15-23
+    does: at:peter:bar
+    source: p27
+  - id: peter_admit
+    text: 拿出确凿证据证明他的身份，他就停下抖腿，承认自己是悖论成员，除了演出时间什么都不说；特工一有攻击性他就拒绝再提供信息，但愿意当中间人把她介绍给吉姆
+    meet: true
+    once: false
+    source: p27；c_peter_admits
+  - id: peter_tell_jim
+    text: 起疑或身份暴露后不动手，照常行事，夜里把特工的事告诉吉姆
+    when: hour:18-6
+    meet: false
+    only_if: 皮特在当面交谈中对特工起了疑，或身份已经被她揭穿
+    source: p27
+  - id: peter_notice_cellar
+    text: 悖论成员发现特工进了地窖，就在她进去以后偷偷锁上门
+    meet: false
+    only_if: 皮特、约瑟芬或吉姆亲眼看见，或听员工说特工进了地窖
+    source: bar_cellar；e_cellar_trapped
+  - id: peter_ritual
+    text: 午夜经剧院去宅邸，做吉姆与约瑟芬仪式的见证人，持续约两小时
+    when: hour:0-2
+    does: at:peter:mansion_playroom
+    source: 格林伍德宅邸·监视；理解为三人都在场
+  - id: peter_fix_screens
+    text: 每天远程检查时发现屏幕被动过，就立刻离开酒吧赶去中央广场维修
+    meet: false
+    only_if: 特工在演出前解除了皮特对中控电脑的控制或植入了病毒，皮特在每天的远程检查中发现
+    source: central_plaza；p20
+  - id: peter_final_check
+    text: 演出当天白天在中控室做最后检查
+    when: D4 12:00
+    does: at:peter:plaza_control
+    source: p20；e_peter_plaza_check
+  - id: peter_to_park
+    text: 跟悖论一起经现实前往海滨公园
+    when: D4 20:00
+    does: at:peter:seaside_park
+    source: p50；e_paradox_arrive
+- npc: josephine
+  goals:
+  - 获取幸福
+  - 帮吉姆完成理想
+  steps:
+  - id: jo_day
+    text: 白天心不在焉，前言不搭后语，讲酒吧怎么经营，偶尔把特工当成前几天的情人，动手动脚；问起悖论、血迹、网站，就照她的谎话回答
+    meet: true
+    once: false
+    source: josephine；p26
+  - id: jo_cellar_ok
+    text: 特工申请进地窖，她干脆地答应
+    meet: true
+    once: false
+    source: bar_cellar
+  - id: jo_night
+    text: 夜里不再放荡，目光止不住地朝吧台旁的吉姆看
+    when: hour:18-24
+    meet: true
+    once: false
+    source: p26
+  - id: jo_midnight
+    text: 午夜从铁门溜进剧院
+    when: hour:0-1
+    does: at:josephine:theatre
+    source: c_josephine_midnight
+  - id: jo_ritual
+    text: 在宅邸娱乐室与吉姆举行“爱之仪式”，约两小时
+    when: hour:0-2
+    does: at:josephine:mansion_playroom
+    source: 格林伍德宅邸·监视；mansion_playroom
+  - id: jo_back_bar
+    text: 仪式结束后回到酒吧
+    when: hour:2-24
+    does: at:josephine:bar
+    source: p26（约瑟芬日夜都在酒吧）
+  - id: jo_cellar_visit
+    text: 特工被锁在地窖里时，午夜和吉姆一起去地窖找她（见 e_cellar_trapped）
+    when: flag:cellar_locked
+    meet: false
+    source: e_cellar_trapped
+  - id: jo_to_park
+    text: 跟悖论一起前往海滨公园
+    when: D4 20:00
+    does: at:josephine:seaside_park
+    source: p50
+- npc: jim
+  goals:
+  - 用 SI 统一众人的思想，把剧院推向永远即将抵达王的宴会的那一刻
+  steps:
+  - id: jim_bar_night
+    text: 天黑后推开铁门走进酒吧，带着平静的微笑独自坐在吧台旁喝酒
+    when: hour:18-24
+    does: at:jim:bar
+    source: p28
+  - id: jim_talk
+    text: 对谁都温和宽厚，不生气，还会出面阻止冲突；问到杀父、施虐，毫不犹豫地承认；问到目的就绕开话题，最后反问她能否构建永远幸福的生活
+    meet: true
+    once: false
+    source: jim；p28
+  - id: jim_ritual
+    text: 午夜在宅邸娱乐室与约瑟芬举行仪式，约两小时
+    when: hour:0-2
+    does: at:jim:mansion_playroom
+    source: 格林伍德宅邸·监视
+  - id: jim_day_theatre
+    text: 白天不出现在酒吧，在剧院或卡尔克萨中（白天的去处原文没写，是补写）
+    when: hour:6-18
+    does: at:jim:theatre
+    source: 补写
+  - id: jim_to_park
+    text: 前往“很早以前就决定了的地方”海滨公园，8 点 18 分开演（见 e_finale）
+    when: D4 20:00
+    does: at:jim:seaside_park
+    source: p50；c_camera_footage
+  - id: jim_plea
+    text: 特工挤进人群、来到彼岸的边缘时，吉姆欢迎她，由衷地劝她放弃阻挠；她接受，就离场或留下参与演出
+    when: flag:finale_started
+    meet: true
+    once: true
+    source: c_jim_plea；p52
+- npc: mathia
+  goals:
+  - 成为优秀的恐怖小说作家
+  steps:
+  - id: mathia_help
+    text: 出于好奇，答应帮特工分散店员的注意力；简单的警告反而勾起她的兴趣；特工遇险时她会伸手
+    meet: true
+    once: false
+    source: mathia；p29
+  - id: mathia_final_night
+    text: 得到她的信任后，她可能在最后一夜协助特工阻止演出
+    only_if: 特工在此前的接触中实际赢得了她的信任，并在最后一夜向她求助
+    ruling: true
+    source: p29
+  - id: mathia_lost
+    text: 特工没帮过她的，她渐渐被黄衣之王影响，在最后的演出中陷入疯狂与失忆
+    when: D4 20:00
+    does: at:mathia:seaside_park
+    only_if: 特工一直没有帮助她、取得她的信任
+    source: p29
+- npc: bart
+  goals:
+  - 执行另一个现实里的“停机行动”，追踪特工 A
+  steps:
+  - id: bart_probe
+    text: 腐化≥21 时出现在酒吧，不暴露身份，像特工一样主动向她提问；她拿出惊人一致的证据，他才交换信息
+    meet: true
+    once: false
+    source: bart；p30
+foreshadow:
+- id: fs_knuckle_rhythm
+  hint: 阿尔伯特看报时，指关节在茶几上一下一下敲着一段短促又不太规整的节奏，他自己好像没察觉。
+  where: agent_home
+  pays_off: e_plaza_broadcast
+  stages:
+  - hint: 早餐桌边，爱丽丝用勺子柄敲着盘沿，敲的是同一段节奏；问她，她说是“好听的歌”，却哼不出来。
+    when: D2 08:00
+  - hint: 街上、广场上，越来越多陌生人的手指在扶手、手机壳上敲着那段节奏，彼此并不看对方。
+    when: D4 08:00
+    where: central_plaza
+- id: fs_kandi_papers
+  hint: 坎蒂留下的那几张安眠药发票摸上去有点潮，印刷的字迹边缘发虚，像没干透的墨。
+  where: agent_home
+  pays_off: k_adamson_dead
+  stages:
+  - hint: 再翻出那叠材料，伪造遗书的一角已经洇成一团意义不明的线条，像小孩的涂鸦。
+    when: D2 08:00
+- id: fs_unconscious_notes
+  hint: 床头柜上压着一张纸，字是你的笔迹，你却不记得写过，也读不太出来写的是什么。
+  where: home_bedroom
+  pays_off: k_agent_self
+  stages:
+  - hint: 衣柜深处挂着一件你从没买过的灰色粗布长袍，叠在下面的还有一样苍白、光滑的东西。
+    when: flag:corr_20
+    flag: sign_fs_unconscious_notes_1
+- id: fs_wall_voice
+  hint: 四下安静时，隔间的墙里像有人在很远很深的地方说话，带着浓重的回声，一个字也听不清。
+  where: bar_restroom
+  pays_off: k_stop
+  stages:
+  - hint: 墙里的声音近了些，语气急切，像在恳求什么人；中间夹着一下下液体滴落的声音。
+    when: flag:corr_25
+- id: fs_light_band
+  hint: 晴朗的天上横着一道极淡的光，像有人用手指在天幕上抹过，路人谁也没抬头。
+  where: adamson_home
+  pays_off: k_site
+  stages:
+  - hint: 那道光带在头顶折了一个角，和另一道光带接上，朝城东海边的方向拖过去。
+    where: horn_media
+  - hint: 站在宅子前抬头，两道光带又在这里拐了个弯，比之前更亮，像地图上画出的折线。
+    where: greenwood_mansion
+- id: fs_plaza_water
+  hint: 明明没下雨，广场的路面却积着一层薄水，水沟口卡着几片发白的碎贝壳。
+  where: central_plaza
+  pays_off: e_plaza_broadcast
+  stages:
+  - hint: 积水漫过了鞋面，有死去的小鱼贴着脚踝漂过，商场门口的人照常进出，鞋都是干的。
+    when: D4 08:00
+    flag: sign_fs_plaza_water_1
+- id: fs_stale_ad
+  hint: 东北角那块大屏还在循环放一则早就过期的情人节促销广告，日期停在上周。
+  where: central_plaza
+  pays_off: k_broadcast
+  stages:
+  - hint: 那则过期广告仍旧没换；屏幕下面的商场保安抬头看了一眼，嘟囔着“又没人管”。
+    when: D3 08:00
