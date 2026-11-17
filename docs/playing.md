@@ -4,7 +4,7 @@
 
 ## 安装
 
-AutoKeeper 在 PyPI 上提供 Windows（x64）和 Linux（x86_64，glibc 2.28 及以上）的安装包，需要 Python 3.12。macOS 支持与后续版本发布已暂停。只加入朋友的房间时，用浏览器打开房间网址即可，不用安装。
+AutoKeeper 在 PyPI 上提供 Windows（x64）和 Linux（x86_64，glibc 2.28 及以上）的安装包，需要 Python 3.12。不支持 mac 系统。只加入朋友的房间时，用浏览器打开房间网址即可，不用安装。
 
 安装脚本先安装 [uv](https://docs.astral.sh/uv/)，再通过 uv 安装 Python 3.12 和 AutoKeeper，最后运行 `autokeeper setup`：
 
@@ -41,14 +41,14 @@ uv tool install --python 3.12 autokeeper
 
 ### 文件存储位置
 
-| | Linux、macOS | Windows |
+| | Linux | Windows |
 |---|---|---|
 | 配置与 API Key（`config.toml`、`.env`） | `~/.config/autokeeper/` | `%APPDATA%\autokeeper\` |
 | 存档、角色卡、导入的模组 | `~/.local/share/autokeeper/` | `%LOCALAPPDATA%\autokeeper\` |
 | 缓存（本地模型、知识库、预处理图片） | `~/.cache/autokeeper/` | `%LOCALAPPDATA%\autokeeper\Cache\` |
 | 导出的角色卡 | `~/Documents/AutoKeeper/角色卡导出/` | 「文档」里的 `AutoKeeper\角色卡导出\` |
 
-Linux 和 macOS 上优先使用 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME` 指定的目录。`autokeeper doctor` 会列出实际使用的存档和配置路径。设置 `AUTOKEEPER_HOME` 可将数据集中存储在指定目录。
+Linux 上优先使用 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME` 指定的目录。`autokeeper doctor` 会列出实际使用的存档和配置路径。设置 `AUTOKEEPER_HOME` 可将数据集中存储在指定目录。
 
 ## 模型与花费
 
@@ -210,7 +210,7 @@ autokeeper --preset deepseek --budget 5
 
 ## 规则书与守秘人卡组
 
-规则书和《克苏鲁的呼唤守秘人卡组》不随游戏提供。有相应文件时可自行导入；未导入不影响游戏内置规则的使用。它们默认放在数据文件夹里的 `rule/`（Linux、macOS 为 `~/.local/share/autokeeper/rule/`，Windows 为 `%LOCALAPPDATA%\autokeeper\rule\`）。环境变量 `AUTOKEEPER_RULES` 可以换成别的文件夹。导入生成的索引和卡组数据保存在本机缓存中，不纳入项目的 Git 版本管理。
+规则书和《克苏鲁的呼唤守秘人卡组》不随游戏提供。有相应文件时可自行导入；未导入不影响游戏内置规则的使用。它们默认放在数据文件夹里的 `rule/`（Linux 为 `~/.local/share/autokeeper/rule/`，Windows 为 `%LOCALAPPDATA%\autokeeper\rule\`）。环境变量 `AUTOKEEPER_RULES` 可以换成别的文件夹。导入生成的索引和卡组数据保存在本机缓存中，不纳入项目的 Git 版本管理。
 
 ### 规则书检索
 
