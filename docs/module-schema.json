@@ -447,7 +447,7 @@
    "properties": {
     "summary": {
      "default": "",
-     "description": "原作对车卡的说明，短，原文意思，给玩家看",
+     "description": "原作面向玩家的角色要求，包括身份背景、居住地、既有关系、推荐技能和车卡说明；保留建议与必须的区别",
      "title": "Summary",
      "type": "string"
     },

@@ -238,7 +238,7 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 ## 安装
 
-当前版本 **0.0.9.6**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
+当前版本 **0.0.9.7**，支持 Windows（x64）、macOS（Apple 芯片）和 Linux（x86_64）。
 
 ```bash
 # Linux、macOS、WSL
@@ -306,3 +306,5 @@ autokeeper replay 存档名 --compact
 终端界面基于 [Textual](https://github.com/Textualize/textual) 构建，照片转字符画使用 [chafa](https://hpjansson.org/chafa/)，掷骰与骰娘指令使用 [BCDice](https://github.com/bcdice/BCDice)，智能体编排与原文检索分别基于 [LangGraph](https://github.com/langchain-ai/langgraph)、[LangChain](https://github.com/langchain-ai/langchain) 与 [LightRAG](https://github.com/HKUDS/LightRAG)。
 
 AutoKeeper 程序不开源。本仓库公开玩法文档、项目网页、模组格式与样例、自带模组，授权见 [LICENSE](LICENSE)；[`examples/module/`](examples/module/) 是 CC0 格式样例。自带模组《追书人》（改编自 Chaosium 出版、Bret Kramer 著 *Paper Chase*）、《冬雪之下》与《有些人油盐不进》均为同人改编，原作版权归各自原作者与出版方所有，仓库不含原模组文本与原版插图；模组选用的历史照片均来自 Wikimedia Commons，署名与授权见各模组的 `art/credits.yaml`（[追书人](modules/zhuishuren/art/credits.yaml)、[冬雪之下](modules/dongxuezhixia/art/credits.yaml)、[有些人油盐不进](modules/fallout3-youxierenyouyanbujin/art/credits.yaml)）。「画面跟着故事变」截图中的农舍墙面照片为 A S M Jobaer 的 *Weathered brick wall with peeling plaster 02*（[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)），其差分图依原照片改画，同样按 CC BY-SA 4.0 提供；主街的差分图依 Steve Shook 的照片（CC BY 2.0）改画。标题画面背景取自 Dominique Signoret 的画作 *Cthulhu and R'lyeh*（[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)，[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg)）。Call of Cthulhu 是 Chaosium Inc. 的注册商标，本项目与 Chaosium 无关。
+
+模组下载与投稿：[公开模组库](https://github.com/satoshinji2992/autokeeper/tree/mod_library) · [使用说明](docs/module-library.md)。
