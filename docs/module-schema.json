@@ -1238,6 +1238,30 @@
   },
   "Geography": {
    "properties": {
+    "palette": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/MapPalette"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "原图或设定有明确制图风格时填写，其他情况留空"
+    },
+    "traced": {
+     "default": false,
+     "description": "由编译器记录本图是否依据原图描绘",
+     "title": "Traced",
+     "type": "boolean"
+    },
+    "source_stamp": {
+     "default": "",
+     "description": "编译器记录的原图签名",
+     "title": "Source Stamp",
+     "type": "string"
+    },
     "title": {
      "description": "地图上的大字标题：故事所在的镇、村或地方的名字，照模组原文",
      "title": "Title",
@@ -1714,7 +1738,8 @@
       "woods",
       "graveyard",
       "street",
-      "other"
+      "other",
+      "marker"
      ],
      "title": "Glyph",
      "type": "string"
@@ -1777,6 +1802,30 @@
      },
      "title": "Sides",
      "type": "array"
+    },
+    "palette": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/MapPalette"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "原图或设定有明确制图风格时填写，其他情况留空"
+    },
+    "traced": {
+     "default": false,
+     "description": "由编译器记录本布局是否依据原图描绘",
+     "title": "Traced",
+     "type": "boolean"
+    },
+    "source_stamp": {
+     "default": "",
+     "description": "编译器记录的原图签名",
+     "title": "Source Stamp",
+     "type": "string"
     },
     "basis": {
      "default": "",
@@ -1916,6 +1965,12 @@
      "default": null,
      "description": "在哪个地点里面：外面那个地点的 id，比如书房在某户人家里、陵墓在公墓里；地图上会画在它里面。只写确实在里面的，相邻或同一条街上不算；不在别处里面就留空",
      "title": "Within"
+    },
+    "map_area": {
+     "default": "",
+     "description": "跨地区调查时填写该地点所属的城市或独立探索区域，供玩家地图显示。室内地点继承 within 外层；单地区模组留空。",
+     "title": "Map Area",
+     "type": "string"
     },
     "scene_root": {
      "default": false,
@@ -2057,6 +2112,28 @@
    "title": "Look",
    "type": "object"
   },
+  "MapPalette": {
+   "properties": {
+    "paper": {
+     "description": "原图或模组指定的底色",
+     "pattern": "^#[0-9a-fA-F]{6}$",
+     "title": "Paper",
+     "type": "string"
+    },
+    "ink": {
+     "description": "与底色明暗分明的线条和文字色",
+     "pattern": "^#[0-9a-fA-F]{6}$",
+     "title": "Ink",
+     "type": "string"
+    }
+   },
+   "required": [
+    "paper",
+    "ink"
+   ],
+   "title": "MapPalette",
+   "type": "object"
+  },
   "MapPlace": {
    "properties": {
     "place": {
@@ -2075,7 +2152,7 @@
      "type": "array"
     },
     "glyph": {
-     "description": "画成什么：church 教堂、clinic 诊所医院、house 普通住家、farm 谷仓农场、ruin 废屋、shop 邮局商铺饭馆、public 学校警局银行车站等公共建筑、hill 山丘、woods 树林、graveyard 墓地、street 街道广场、other 别的",
+     "description": "画成什么：church 教堂、clinic 诊所医院、house 普通住家、farm 谷仓农场、ruin 废屋、shop 邮局商铺饭馆、public 学校警局银行车站等公共建筑、hill 山丘、woods 树林、graveyard 墓地、street 街道广场、marker 中性定位点（外形不详或画法不适用）、other 其他建筑",
      "enum": [
       "church",
       "clinic",
@@ -2088,7 +2165,8 @@
       "woods",
       "graveyard",
       "street",
-      "other"
+      "other",
+      "marker"
      ],
      "title": "Glyph",
      "type": "string"
@@ -2100,6 +2178,39 @@
     "glyph"
    ],
    "title": "MapPlace",
+   "type": "object"
+  },
+  "MapSource": {
+   "properties": {
+    "image": {
+     "description": "原图在模组 art/ 下的图片键",
+     "minLength": 1,
+     "title": "Image",
+     "type": "string"
+    },
+    "building": {
+     "default": "",
+     "description": "室内图所属建筑 id，室外图留空",
+     "title": "Building",
+     "type": "string"
+    },
+    "area": {
+     "default": "",
+     "description": "室外分图的 map_area 地区名，全局图留空",
+     "title": "Area",
+     "type": "string"
+    },
+    "caption": {
+     "default": "",
+     "description": "原图标题或所画的地区、楼层，供编译时识图",
+     "title": "Caption",
+     "type": "string"
+    }
+   },
+   "required": [
+    "image"
+   ],
+   "title": "MapSource",
    "type": "object"
   },
   "Mechanic": {
@@ -3017,12 +3128,13 @@
   "Region": {
    "properties": {
     "kind": {
-     "description": "woods 树林、fields 农田牧场、hills 山丘、water 湖河水面",
+     "description": "woods 树林、fields 农田牧场、hills 山丘、water 湖河水面、surface 原图或文字中的其他地表或建筑轮廓",
      "enum": [
       "woods",
       "fields",
       "hills",
-      "water"
+      "water",
+      "surface"
      ],
      "title": "Kind",
      "type": "string"
@@ -3041,6 +3153,25 @@
      "minItems": 3,
      "title": "Shape",
      "type": "array"
+    },
+    "pattern": {
+     "default": "plain",
+     "description": "surface 的制图填纹：平涂、排线、点纹、已明确建成区的概略街廓",
+     "enum": [
+      "plain",
+      "hatch",
+      "stipple",
+      "blocks"
+     ],
+     "title": "Pattern",
+     "type": "string"
+    },
+    "color": {
+     "default": "#b6aa91",
+     "description": "surface 在图纸上的颜色，照原图或按材质选择",
+     "pattern": "^#[0-9a-fA-F]{6}$",
+     "title": "Color",
+     "type": "string"
     },
     "near": {
      "default": "",
@@ -3831,6 +3962,44 @@
    },
    "title": "Plans",
    "type": "array"
+  },
+  "area_maps": {
+   "additionalProperties": {
+    "$ref": "#/$defs/Geography"
+   },
+   "description": "按 map_area 地区名索引的独立室外图，各自有独立的局部坐标",
+   "title": "Area Maps",
+   "type": "object"
+  },
+  "map_sources": {
+   "description": "模组作者指定的原图。只供地图编译读取。",
+   "items": {
+    "$ref": "#/$defs/MapSource"
+   },
+   "title": "Map Sources",
+   "type": "array"
+  },
+  "area_coordinates": {
+   "additionalProperties": {
+    "maxItems": 2,
+    "minItems": 2,
+    "prefixItems": [
+     {
+      "maximum": 180,
+      "minimum": -180,
+      "type": "number"
+     },
+     {
+      "maximum": 90,
+      "minimum": -90,
+      "type": "number"
+     }
+    ],
+    "type": "array"
+   },
+   "description": "真实地区名（map_area）对应的 [经度, 纬度]，WGS84。虚构或位置不详的地区留空。",
+   "title": "Area Coordinates",
+   "type": "object"
   },
   "geography": {
    "anyOf": [

@@ -181,7 +181,7 @@ NPC 有各自的动机、秘密和牵挂。他们会帮忙、隐瞒、撒谎，�
 
 ## 安装
 
-当前版本 **0.0.10.3**。支持 Windows x64 和 Linux x86_64（不支持 mac 系统）。
+当前版本 **0.0.10.4**。支持 Windows x64 和 Linux x86_64（不支持 mac 系统）。
 
 **Windows PowerShell**
 
