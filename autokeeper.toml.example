@@ -1,4 +1,4 @@
-# 复制为 autokeeper.toml 后修改。backend 可选 claude / langchain / codex。
+# 复制为 autokeeper.toml 后修改。backend 可选 claude / langchain / codex / gemini-cli。
 module = "zhuishuren"
 theme = "amber"          # amber / phosphor / lavender / blood
 # tips = false           # 关掉新手提示（游戏里按 F1，新手指南底下也能开关）
@@ -13,7 +13,8 @@ backend = "claude"
 model = "claude-haiku-5-5"
 effort = "medium"
 
-# 换成 Gemini（需要 GOOGLE_API_KEY / GEMINI_API_KEY）：
+# 若复用 Gemini CLI 登录，选 backend = "gemini-cli"，model = "default" 或 CLI 支持的模型 ID。
+# Gemini API 示例（需要 GOOGLE_API_KEY / GEMINI_API_KEY）：
 # [roles.investigator]
 # backend = "langchain"
 # model = "google_genai:gemini-3.5-flash"
