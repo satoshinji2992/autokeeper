@@ -4,13 +4,20 @@
 # 没有 uv 就先装 uv，再用 uv tool 装好 autokeeper 命令；再运行一次就是更新。
 # 已经有 uv 的话，这个脚本做的就是：uv tool install autokeeper，然后 autokeeper setup。
 # 可选环境变量：
+#   AUTOKEEPER_REGION=cn  使用国内 PyPI 镜像
 #   AUTOKEEPER_VERSION  装哪个版本，如 0.0.7（默认最新）
 #   AUTOKEEPER_EXTRAS   可选组件，如 graphrag（模组原文检索，约 1 GB）
+#   AUTOKEEPER_NO_LOGIN=1  跳过交互式模型设置
 #   AUTOKEEPER_NO_MODIFY_PATH=1  不改 shell 配置文件里的 PATH
 set -euo pipefail
 
 VERSION="${AUTOKEEPER_VERSION:-}"
 EXTRAS="${AUTOKEEPER_EXTRAS:-}"
+REGION="${AUTOKEEPER_REGION:-}"
+INSTALL_OPTIONS=()
+if [ "$REGION" = "cn" ]; then
+  INSTALL_OPTIONS=(--default-index https://pypi.tuna.tsinghua.edu.cn/simple --python-preference system)
+fi
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
@@ -23,8 +30,9 @@ fi
 if ! command -v uv >/dev/null; then
   say "安装 uv（Python 环境管理）…"
   command -v curl >/dev/null || die "需要 curl 来下载 uv：Debian/Ubuntu 用 sudo apt install curl"
+  if [ -n "${AUTOKEEPER_NO_MODIFY_PATH:-}" ]; then export UV_NO_MODIFY_PATH=1; fi
   curl -LsSf https://astral.sh/uv/install.sh | sh || die "uv 没装好：上面是它的报错。检查网络后再运行一次。"
-  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  export PATH="${UV_INSTALL_DIR:-$HOME/.local/bin}:$HOME/.cargo/bin:$PATH"
   command -v uv >/dev/null || die "uv 装好了但找不到，开一个新终端再运行一次"
 fi
 
@@ -42,12 +50,12 @@ fi
 spec="$name${VERSION:+==$VERSION}"
 
 say "安装 autokeeper 命令（第一次要下载依赖，几分钟）…"
-uv tool install --force --refresh-package autokeeper --python 3.12 "$spec" \
+uv tool install --force --refresh-package autokeeper --python 3.12 "${INSTALL_OPTIONS[@]}" "$spec" \
   || die "autokeeper 没装好：上面是 uv 的报错。检查网络后再运行一次。"
 BIN="$(uv tool dir --bin)"
 
 say "初始化…"
-if { : </dev/tty; } 2>/dev/null; then  # a terminal to ask in; curl | bash gives the script stdin
+if [ -z "${AUTOKEEPER_NO_LOGIN:-}" ] && { : </dev/tty; } 2>/dev/null; then  # a terminal to ask in; curl | bash gives the script stdin
   "$BIN/autokeeper" setup </dev/tty || die "初始化没完成：上面是报错。解决后运行 autokeeper setup。"
 else
   "$BIN/autokeeper" setup --no-login || die "初始化没完成：上面是报错。解决后运行 autokeeper setup。"

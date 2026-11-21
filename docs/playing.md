@@ -24,6 +24,10 @@ irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1
 uv tool install --python 3.12 autokeeper
 ```
 
+### 中国大陆免代理安装
+
+国内线路通过清华 PyPI 镜像安装游戏及 Python 依赖。一键脚本与手动安装命令见[官网安装区](https://satoshinji2992.github.io/autokeeper/#install)。首次还会获取所需的 Python 或 Node.js，并安装掷骰组件。
+
 使用 Claude 时，安装 `"autokeeper[claude]"`（DeepSeek、OpenAI 兼容接口和本地模型不需要）；需要模组原文检索时，安装 `"autokeeper[graphrag]"`（约 1 GB，首次使用还会下载嵌入模型）。脚本里对应的环境变量是 `AUTOKEEPER_EXTRAS`，`AUTOKEEPER_VERSION` 可以装指定版本（如 `0.0.7`）。
 
 安装完成后，在任意目录运行 `autokeeper`。首次启动会在用户目录安装掷骰组件，并引导选择模型服务、填写 API Key。也可提前运行 `autokeeper setup` 完成初始化。
@@ -38,6 +42,12 @@ uv tool install --python 3.12 autokeeper
 | Windows | 一键脚本自动安装；手动安装用 `winget install --id OpenJS.NodeJS.LTS -e`，建议在 Windows Terminal 中运行 |
 
 图片渲染组件随程序安装，初始化时会检查其可用性。组件不可用时无法显示照片，请按错误提示修复。运行 `autokeeper login` 可配置模型与 API Key；运行 `autokeeper doctor` 可检查环境，加 `--ping` 可发送测试请求，检查各模型的连通性和响应时间。
+
+### 卸载
+
+关闭游戏，在原来安装它的环境执行 `uv tool uninstall autokeeper`。通过 pipx 安装时执行 `pipx uninstall autokeeper`。Windows 原生和 WSL 是各自的安装环境。
+
+卸载后仍可使用原有存档、角色卡、模组和配置。如果要清理个人数据，先运行 `autokeeper doctor` 确认实际目录，备份存档和人物卡，再清理下表的目录。
 
 ### 文件存储位置
 

@@ -230,6 +230,11 @@
 </li>
             </ul>
             <p class="module-empty" id="module-empty" hidden>没有找到符合条件的模组。</p>
+            <details class="module-note">
+                <summary>模组下载超时</summary>
+                <p>使用备用源下载。将 <code>bayu</code> 换成模组详情页上的安装名称。</p>
+                <pre data-copy><code>autokeeper library get bayu --server https://gh-proxy.com/https://raw.githubusercontent.com/satoshinji2992/autokeeper/mod_library/catalog/mirror</code></pre>
+            </details>
             <p class="module-note">游戏另附《追书人》《冬雪之下》《有些人油盐不进》，可直接从「新的调查」开始。</p>
         </section>
 
@@ -254,13 +259,24 @@
         <section id="install">
             <h2>开始你的调查</h2>
             <p>支持 Windows x64 和 Linux x86_64（不支持 mac 系统）。</p>
-            <pre data-copy><span class="label"># Linux、WSL</span><code>curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash</code></pre>
-            <pre data-copy><span class="label"># Windows PowerShell</span><code>irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex</code></pre>
+            <h3>中国大陆免代理安装</h3>
+            <p>安装脚本从清华镜像下载游戏与 Python 依赖。Linux 和 WSL 请先准备 Node.js 22+ 和 npm，Windows 脚本会检查并安装 Node.js。</p>
+            <pre data-copy><span class="label"># Linux、WSL</span><code>curl -fsSL https://satoshinji2992.github.io/autokeeper/install.sh | AUTOKEEPER_REGION=cn bash</code></pre>
+            <pre data-copy><span class="label"># Windows PowerShell</span><code>$env:AUTOKEEPER_REGION = 'cn'
+irm https://satoshinji2992.github.io/autokeeper/install.ps1 | iex</code></pre>
+            <details>
+                <summary>已有 uv，直接用镜像安装</summary>
+                <pre data-copy><code>uv tool install --python 3.12 --default-index https://pypi.tuna.tsinghua.edu.cn/simple autokeeper
+autokeeper setup</code></pre>
+            </details>
             <ol class="steps">
                 <li>运行 <code>autokeeper</code>，选择模型并填写密钥。</li>
                 <li>选择「新的调查」，挑选模组与调查员。</li>
                 <li>写下你的第一步行动。</li>
             </ol>
+            <h3>卸载</h3>
+            <pre data-copy><code>uv tool uninstall autokeeper</code></pre>
+            <p>在原来安装的终端执行，存档、角色卡和设置会保留。通过 pipx 安装时使用 <code>pipx uninstall autokeeper</code>。</p>
             <p>支持 DeepSeek、Claude、Codex、Ollama 和 OpenAI 兼容接口。朋友加入房间只需浏览器，无需单独配置模型。安装与游玩帮助见<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>。</p>
         </section>
     </main>
