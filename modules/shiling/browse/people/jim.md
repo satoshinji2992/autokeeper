@@ -29,7 +29,6 @@ gates:
   c_jim_offer:
     skill: 心理学
 location: bar
-portrait: jim
 stats:
   力量: 45
   体质: 60

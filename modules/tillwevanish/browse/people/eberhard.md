@@ -26,7 +26,6 @@ lies:
 clues:
 - c_mistress
 location: cemetery
-portrait: eberhard
 stats:
   力量: 70
   体质: 90

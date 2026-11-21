@@ -29,6 +29,5 @@ gates:
   c_caleb_sale:
     skill: 话术
 location: library_office
-portrait: caleb
 called: 整理书堆的方脸助理
 ```

@@ -22,7 +22,6 @@ features:
 - 柜台
 - 摊位旁的椅子
 - 路中央的人流
-art: night_market
 public: true
 aliases:
 - 鱼市

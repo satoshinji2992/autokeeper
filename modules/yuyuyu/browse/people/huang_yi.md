@@ -23,6 +23,5 @@ gates:
   c_diary:
     skill: 说服
 location: huang_home
-portrait: huang_yi
 called: 楼梯口甩袖子的女孩
 ```

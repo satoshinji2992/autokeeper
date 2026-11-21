@@ -22,7 +22,6 @@ features:
 - 壁炉
 - 屋后的小巷
 - 屋后北面崖边
-art: ledbetter_house
 public: true
 aliases:
 - 梅家

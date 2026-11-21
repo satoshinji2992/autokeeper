@@ -17,6 +17,5 @@ knows:
 clues:
 - c_tide_rhyme
 location: shipowei
-portrait: abao
 called: 工地边的老渔民
 ```

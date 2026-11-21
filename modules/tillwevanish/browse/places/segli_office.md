@@ -10,7 +10,6 @@ keeper: 书柜里压着拉丁语打字转录本和塞格利手绘的图册。原
 features:
 - 书柜里的打字稿与图册
 - 墙上的模具设计图
-art: segli_office
 within: steelworks
 outdoors: false
 ground: building

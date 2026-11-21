@@ -33,7 +33,6 @@ npcs:
     goal: 体面地送走丈夫
     knows: [丈夫 2 月 6 日去世]
     location: cemetery
-    portrait: lotte
   - id: eberhard
     name: 艾伯哈德·冯·赫施伯格
     role: 阿克塞尔的小儿子
@@ -57,7 +56,6 @@ npcs:
       - 被问到制服上的肩章勋章，暧昧地说是情人分别前送的
     clues: [c_mistress]
     location: cemetery
-    portrait: eberhard
     important: true
     stats: {力量: 70, 体质: 90, 体型: 60, 敏捷: 50, 智力: 80, 意志: 125, 外貌: 75, 教育: 80, 生命: 15, 魔法值: 25, 格斗(斗殴): 80, 格斗(斧): 80, 闪避: 25, 移动: 8, 图书馆使用: 80, 取悦: 60, 话术: 50, 心理学: 50, 乔装: 80, 机械维修: 50}
     attacks:
@@ -182,7 +180,6 @@ npcs:
     goal: 保住情报网
     knows: [沃德蒙特交出的全部胶卷，已被他取走]
     secrets: [他是双面间谍]
-    portrait: calvin
   - id: old_woman
     name: 韦伯的老邻居
     role: 韦伯的另一个邻居，老太太

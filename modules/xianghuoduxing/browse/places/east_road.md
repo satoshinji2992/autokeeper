@@ -19,7 +19,6 @@ features:
 - 两块岩石间的窄道
 - 坡下的棚屋
 - 村口守卫
-art: east_road
 public: true
 scene_root: true
 outdoors: true

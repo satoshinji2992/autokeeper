@@ -831,3 +831,9 @@ pictures:
     based_on: null
     width: 1024
     height: 683
+  cora_bedroom:
+    title: 二楼卧室
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    based_on: {title: cora_blanket_bed, license: AI 生成（Codex image_gen）}

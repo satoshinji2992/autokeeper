@@ -64,7 +64,6 @@ locations:
   aliases:
   - 阿宁家
   - 阮家
-  art: ruan_home
   scene_root: true
   outdoors: true
   ground: building
@@ -243,7 +242,6 @@ locations:
   aliases:
   - 鱼市
   - 夜市仔
-  art: night_market
   public: true
   scene_root: true
   outdoors: true

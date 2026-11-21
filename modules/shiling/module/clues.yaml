@@ -1089,13 +1089,11 @@ handouts:
     kind: 地图
     paper: card
     text: 奥克兰市区街道图（CITY OF OAKLAND），无标注。
-    images: [oakland_map]
   - id: h_oakland_map_marked
     title: 标注过的奥克兰地图
     kind: 地图
     paper: card
     text: 七处地点被红钉标出：亚当森住所、鹿角传媒、中央广场、特工的家、海滨公园、闹钟酒吧、格林伍德宅邸。（确定演出地点后才给出）
-    images: [oakland_map_marked]
   - id: h_invitation
     title: 邀请函
     kind: 信件
@@ -1103,34 +1101,28 @@ handouts:
     text: |
       We regret that we were unable to express our full respect on our last parting.
       We would like to invite you to our evening party.
-    images: [invitation_card]
   - id: h_adamson_house
     title: 亚当森住所资料
     kind: 照片与平面图
     paper: card
     text: 亚当森住所的正面照、亚当森的拍立得照片，以及一、二楼平面图。
-    images: [adamson_house_plan]
   - id: h_bar_plan
     title: 闹钟酒吧平面图
     kind: 平面图
     paper: card
     text: 闹钟酒吧北半部平面：储物间、办公室、员工通道、厨房、卫生间、吧台。
-    images: [bar_plan]
   - id: h_mansion_plan
     title: 格林伍德宅邸平面图
     kind: 平面图
     paper: card
     text: 宅邸三层平面：储物间、客厅、餐厅、车库、厨房；书房、主卧、阳台；儿童卧室、娱乐室、露台。
-    images: [mansion_plan_lower, mansion_plan_upper]
   - id: h_mariano_photo
     title: 一张旧照片
     kind: 照片
     paper: card
     text: 灰白络腮胡的中年男人。（原图无名，AutoKeeper 推断为马里亚诺，查阅自杀案报道时可给出）
-    images: [mariano_photo]
   - id: h_dream_machine
     title: 造梦机
     kind: 图片
     paper: card
     text: 一台青绿屏幕、吐出纸卷的复古机械。
-    images: [dream_machine]

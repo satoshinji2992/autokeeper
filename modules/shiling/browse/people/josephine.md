@@ -38,7 +38,6 @@ gates:
   c_josephine_body:
     skill: 魅惑
 location: bar
-portrait: josephine
 stats:
   力量: 55
   体质: 50

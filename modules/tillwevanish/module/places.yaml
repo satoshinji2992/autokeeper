@@ -151,7 +151,6 @@ locations:
   - id: segli_office
     name: 总工程师办公室
     within: steelworks
-    art: segli_office
     read_aloud: 堆满图纸和计算尺的办公室，墙上钉着冲压模具的设计图，书柜里塞得满满当当。
     keeper: 书柜里压着拉丁语打字转录本和塞格利手绘的图册。原文说转录本也可能在艾伯哈德卧室或塞格利卧室。
     features: [书柜里的打字稿与图册, 墙上的模具设计图]
@@ -175,7 +174,6 @@ locations:
   - id: factory_floor
     name: 生产车间
     within: steelworks
-    art: factory_floor
     weather: [embers]
     read_aloud: 巨大的车间里冲压机一下下砸落，传送带上排着成箱的手枪握把，远处吊机吊着坦克车体的外壳。
     keeper: 多条产线（包括坦克）装着刻花纹的冲压模具，塞格利会坦诚说这是钢铁厂的特色标识。

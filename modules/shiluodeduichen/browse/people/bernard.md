@@ -20,6 +20,5 @@ gates:
   c_spare_key:
     skill: 说服
 location: bernard_room
-portrait: bernard
 called: 满身酒气的邻居
 ```

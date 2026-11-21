@@ -15,7 +15,6 @@ keeper: '§128/§134：一路窒闷、晕车，中途有体格粗壮的女人上
 features:
 - 司机座位
 - 窗外风景
-art: bus
 scene_root: true
 outdoors: false
 ground: building

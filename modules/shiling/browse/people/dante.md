@@ -22,7 +22,6 @@ gates:
     skill: 心理学
     difficulty: 困难
 location: other_station
-portrait: dante
 stats:
   力量: 40
   体质: 40

@@ -10,7 +10,6 @@ keeper: 没有任何不寻常的地方。
 features:
 - 浴缸
 - 洗手池
-art: cora_bath
 within: cora_house
 outdoors: false
 ground: building

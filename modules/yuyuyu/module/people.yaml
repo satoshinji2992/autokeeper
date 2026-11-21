@@ -88,7 +88,6 @@ npcs:
     c_diary:
       skill: 说服
   location: huang_home
-  portrait: huang_yi
 - id: huang_grandma
   name: 黄懿的阿嫲
   called: 摇椅上读书的阿嫲
@@ -153,7 +152,6 @@ npcs:
   - c_yang_interview
   - c_busker_talk
   location: music_square
-  portrait: yang_zongxi
   important: true
 - id: toy_vendor
   name: 塑料玩具摊主
@@ -214,7 +212,6 @@ npcs:
   clues:
   - c_tide_rhyme
   location: shipowei
-  portrait: abao
 - id: chen_gong
   name: 陈工
   called: 穿旧工装的女工头

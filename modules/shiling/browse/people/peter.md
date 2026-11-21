@@ -33,7 +33,6 @@ gates:
   c_peter_walkman:
     skill: 艺术与手艺(音乐)
 location: bar
-portrait: peter
 stats:
   力量: 75
   体质: 65

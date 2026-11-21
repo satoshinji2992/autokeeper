@@ -13,6 +13,5 @@ goal: 体面地送走丈夫
 knows:
 - 丈夫 2 月 6 日去世
 location: cemetery
-portrait: lotte
 called: 用手帕捂脸的遗孀
 ```

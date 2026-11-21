@@ -21,6 +21,5 @@ clues:
 - c_king_lore
 - c_king_murder
 location: theatre_king
-portrait: cabbage_king
 called: 戴金冠的卷心菜
 ```

@@ -17,6 +17,5 @@ knows:
 clues:
 - c_thomas_math
 location: bar
-portrait: thomas
 called: 穿中东服饰的大胡子
 ```

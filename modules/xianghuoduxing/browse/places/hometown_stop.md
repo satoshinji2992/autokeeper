@@ -15,7 +15,6 @@ features:
 - 随身的车票
 - 车顶行李架
 - 烟草店
-art: hometown_stop
 public: true
 aliases:
 - 奥斯本药店

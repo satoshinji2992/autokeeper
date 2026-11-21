@@ -14,6 +14,5 @@ knows:
 - 沃德蒙特交出的全部胶卷，已被他取走
 secrets:
 - 他是双面间谍
-portrait: calvin
 called: 说英国口音德语的男人
 ```

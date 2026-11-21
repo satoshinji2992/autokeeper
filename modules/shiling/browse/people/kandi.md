@@ -24,7 +24,6 @@ lies:
 clues:
 - c_halting_brief
 - c_adamson_email
-portrait: kandi
 stats:
   力量: 50
   体质: 65

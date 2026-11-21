@@ -205,7 +205,6 @@ locations:
   - id: cora_bath
     name: 二楼浴室
     within: cora_house
-    art: cora_bath
     read_aloud: 一间极小的浴室，和楼下一样落满灰尘。
     keeper: 没有任何不寻常的地方。
     features: [浴缸, 洗手池]

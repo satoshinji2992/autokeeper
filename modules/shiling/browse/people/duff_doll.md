@@ -16,6 +16,5 @@ knows:
 clues:
 - c_duff_doll
 location: theatre_childhood
-portrait: duff_doll
 called: 会说话的狮子玩偶
 ```

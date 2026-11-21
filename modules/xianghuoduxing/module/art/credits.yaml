@@ -1479,3 +1479,15 @@ pictures:
     based_on: null
     width: 1024
     height: 683
+  central_street:
+    title: 中央大街
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    based_on: {title: street_to_beacon, license: AI 生成（Codex image_gen）}
+  forest_road:
+    title: 东去林间路
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    based_on: {title: forest_mossy_trail, license: AI 生成（Codex image_gen）}

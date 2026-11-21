@@ -20,7 +20,6 @@ clues:
 - c_yang_interview
 - c_busker_talk
 location: music_square
-portrait: yang_zongxi
 important: true
 called: 挎相机的青年女子
 ```

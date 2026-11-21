@@ -24,7 +24,6 @@ gates:
     skill: 说服
     difficulty: 困难
 location: bar
-portrait: bart
 stats:
   力量: 75
   体质: 65

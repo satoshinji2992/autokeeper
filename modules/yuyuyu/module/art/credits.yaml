@@ -1493,3 +1493,9 @@ pictures:
     based_on: null
     width: 768
     height: 1024
+  shipowei:
+    title: 石坡尾
+    license: AI 生成（Codex image_gen）
+    artist: Codex image_gen
+    kind: scene
+    based_on: {title: shipowei_north_steps, license: AI 生成（Codex image_gen）}

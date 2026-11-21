@@ -15,6 +15,5 @@ knows:
 clues:
 - c_beacon_lighting
 location: beacon
-portrait: old_gentleman
 called: 拄手杖的老绅士
 ```

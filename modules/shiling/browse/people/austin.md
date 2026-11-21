@@ -25,6 +25,5 @@ gates:
   c_plaza_password:
     skill: 说服
 location: horn_media
-portrait: austin
 called: 穿休闲西装的中年男人
 ```

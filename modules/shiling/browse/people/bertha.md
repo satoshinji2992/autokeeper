@@ -23,7 +23,6 @@ gates:
   c_bertha_word:
     skill: 说服
 location: nppd_office
-portrait: bertha
 stats:
   力量: 45
   体质: 45

@@ -15,6 +15,5 @@ knows:
 lies:
 - 被问电报时说“不知道，我们要拍给谁？”（§84）
 location: village_hall
-portrait: grey_woman
 called: 穿灰衣的女人
 ```

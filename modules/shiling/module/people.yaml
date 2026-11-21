@@ -22,7 +22,6 @@ npcs:
   - c_halting_brief
   - c_adamson_email
   location: null
-  portrait: kandi
   important: true
   stats:
     力量: 50
@@ -93,7 +92,6 @@ npcs:
     c_bertha_word:
       skill: 说服
   location: nppd_office
-  portrait: bertha
   stats:
     力量: 45
     体质: 45
@@ -144,7 +142,6 @@ npcs:
     c_plaza_password:
       skill: 说服
   location: horn_media
-  portrait: austin
 - id: peter
   name: 皮特·戴维斯
   role: 鹿角传媒的电器维修员（中央广场技术顾问），悖论的技术顾问
@@ -176,7 +173,6 @@ npcs:
     c_peter_walkman:
       skill: 艺术与手艺(音乐)
   location: bar
-  portrait: peter
   important: true
   arc: 起疑或暴露也不主动攻击，保持自己的步调，晚上把特工的存在告诉吉姆。不愿离开酒吧；强行带离也不会好转。
   stats:
@@ -225,7 +221,6 @@ npcs:
     c_josephine_body:
       skill: 魅惑
   location: bar
-  portrait: josephine
   important: true
   arc: 不愿离开被腐蚀的地界；强行带离也不会好转（附录C：当患者被拘束）。
   stats:
@@ -265,7 +260,6 @@ npcs:
     c_jim_offer:
       skill: 心理学
   location: bar
-  portrait: jim
   important: true
   arc: 白天不在酒吧；夜里推开铁门进入酒吧，经剧院往来于酒吧、宅邸和剧院。
   stats:
@@ -299,7 +293,6 @@ npcs:
     c_mathia_novel:
       skill: 说服
   location: bar
-  portrait: mathia
   arc: 获得信任会在酒吧里帮助特工（例如分散约瑟芬或店员的注意力），甚至在最后一夜协助阻止演出；没被帮助则逐渐被影响，在最后的演出中陷入疯狂与失忆。向她提供黄衣之王信息，双方腐化 +2。
   stats:
     力量: 40
@@ -326,7 +319,6 @@ npcs:
   clues:
   - c_thomas_math
   location: bar
-  portrait: thomas
 - id: bart
   name: 巴特·伯格曼（特工霍华德）
   role: 特工的前同事；酒吧里的他来自另一个现实
@@ -349,7 +341,6 @@ npcs:
       skill: 说服
       difficulty: 困难
   location: bar
-  portrait: bart
   stats:
     力量: 75
     体质: 65
@@ -378,7 +369,6 @@ npcs:
   clues:
   - c_duff_doll
   location: theatre_childhood
-  portrait: duff_doll
 - id: mariano_corpse
   name: 马里亚诺的尸体
   role: 婴儿床里的尸体，蕴藏着吉姆对自己追求的怀疑
@@ -415,7 +405,6 @@ npcs:
   - c_king_lore
   - c_king_murder
   location: theatre_king
-  portrait: cabbage_king
 - id: dante
   name: 但丁·阿利吉耶里
   role: 造梦机的发明人，丢了邀请函的“意大利”诗人
@@ -436,7 +425,6 @@ npcs:
       skill: 心理学
       difficulty: 困难
   location: other_station
-  portrait: dante
   stats:
     力量: 40
     体质: 40

@@ -225,7 +225,6 @@ locations:
     prompt: 低矮的下层船舱里堆着渔具、网具和备用箱子，一张缀着铅坠的大拖网叠在角落，空气里是机油和鱼腥味
 - id: reef_rock
   name: 礁石滩的大礁石
-  art: reef_rock
   scene_root: true
   outdoors: true
   ground: water

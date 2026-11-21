@@ -21,7 +21,6 @@ features:
 - 幸运石石椅
 - 剥豆的阿婆们
 - 门前的排水沟
-art: ruan_home
 aliases:
 - 阿宁家
 - 阮家

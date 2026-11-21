@@ -145,7 +145,6 @@ npcs:
     look: 红肿的老眼，拄着手杖
     voice: 说起灯塔就有点得意
     location: beacon
-    portrait: old_gentleman
     knows:
       - 灯塔明天晚上点亮，二十里外都看得见（§57）
     clues: [c_beacon_lighting]
@@ -158,7 +157,6 @@ npcs:
     look: 一身灰衣
     voice: 回答简短，不愿多说
     location: village_hall
-    portrait: grey_woman
     knows:
       - 文特斯上午不开门，下午再来（§84）
     lies:
@@ -194,7 +192,6 @@ npcs:
     look: 四个一组，拿着农具和棍棒，其中一个长着猿猴般的眉骨
     voice: 粗声粗气，“你和我们一起走”
     location: east_road
-    portrait: village_guards
     personality: 粗鲁，守久了有些厌烦，但对外人起疑
     goal: 守住南、西村口，不让外人出村，也不放别人离开岗位
     knows:
@@ -204,7 +201,6 @@ npcs:
     role: 村里派来刺杀阿博加斯特的人
     called: 脸涂焦油的黑影
     look: 脸上涂着焦油，眼里满是仇恨，一个持长刀，一个持钝器
-    portrait: assassins
     personality: 凶狠、仇恨，下手利落
     voice: 袭击时不开口，只在被火焰灼烧时尖叫
     goal: 杀死阿博加斯特
@@ -263,7 +259,6 @@ pregens:
     sex: 女
     residence: 新罕布什尔州普利茅斯
     birthplace: 新罕布什尔州普利茅斯
-    portrait: eleanor_hale
     known_locations: [hometown_stop]
     backstory:
       来历: AutoKeeper 补充。普利茅斯本地报纸的特约撰稿人，刚被《阿卡姆公报》录用，这次独自南下赴任。

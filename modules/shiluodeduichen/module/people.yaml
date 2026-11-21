@@ -27,7 +27,6 @@ npcs:
     gates:
       c_spare_key: {skill: 说服}
     location: bernard_room
-    portrait: bernard
     called: 满身酒气的邻居
   - id: holcomb
     name: 玛杰里·霍尔科姆
@@ -68,7 +67,6 @@ npcs:
     gates:
       c_caleb_sale: {skill: 话术}
     location: library_office
-    portrait: caleb
     called: 整理书堆的方脸助理
   - id: ruby
     name: 鲁比·托伦斯
@@ -126,7 +124,6 @@ pregens:
     sex: 男
     residence: 波士顿
     birthplace: 马萨诸塞州伍斯特
-    portrait: walter_price
     characteristics: {力量: 50, 体质: 55, 体型: 60, 敏捷: 55, 外貌: 50, 智力: 80, 意志: 60, 教育: 70}
     luck: 55
     skills: {科学(数学): 60, 图书馆使用: 50, 侦查: 45, 心理学: 30, 说服: 35, 外语(拉丁文): 30, 历史: 30, 潜行: 30, 信用评级: 20}

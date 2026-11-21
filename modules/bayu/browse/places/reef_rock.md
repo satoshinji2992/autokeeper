@@ -15,7 +15,6 @@ features:
 - 脚下的礁石
 - 礁石缝隙
 - 礁石边的海水
-art: reef_rock
 scene_root: true
 weather:
 - fog

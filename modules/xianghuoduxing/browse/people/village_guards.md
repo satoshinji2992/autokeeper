@@ -13,6 +13,5 @@ goal: 守住南、西村口，不让外人出村，也不放别人离开岗位
 knows:
 - 他们奉命拿着农具棍棒把守村口；对说“灯塔那边需要他们”的人起疑，要把人带在身边一起走（自己的岗位）
 location: east_road
-portrait: village_guards
 called: 持农具的村民
 ```

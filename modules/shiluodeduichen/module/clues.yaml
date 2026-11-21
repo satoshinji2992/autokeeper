@@ -255,7 +255,6 @@ handouts:
     kind: 草图
     paper: card
     text: 一张纸上用钢笔画着的奇怪几何图形：一个圆，十字基准线穿过圆心，圆内是锯齿形的折线和一条贯穿的斜线。
-    images: [h_sigil]
   - id: h_postcard
     title: 科拉阿姨的明信片
     kind: 明信片
@@ -265,7 +264,6 @@ handouts:
       如果你能偶尔来看一下我就好了。
       当然，我会做我拿手的烘肉卷。
       你最爱的阿姨，科拉。
-    images: [h_postcard]
   - id: h_note
     title: 手稿上的便条
     kind: 便条

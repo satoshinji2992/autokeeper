@@ -23,7 +23,6 @@ gates:
   c_mathia_novel:
     skill: 说服
 location: bar
-portrait: mathia
 stats:
   力量: 40
   体质: 60

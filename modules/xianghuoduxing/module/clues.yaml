@@ -392,19 +392,16 @@ handouts:
     kind: 车票
     paper: card
     text: 拉赫曼与科斯特洛长途车行，普利茅斯至奥西皮。
-    images: [bus_ticket]
   - id: h_village_map
     title: 烬头村地图
     kind: 地图
     paper: card
     text: 烬头村的布局：灯塔、村会堂、工坊、学校、杂货店、莱德贝特住宿和几条道路。
-    images: [village_map]
   - id: h_fomalhaut
     title: 北落师门星图
     kind: 星图
     paper: card
     text: 从飞马座往右下方找，贴近地平线的那颗亮星就是北落师门。
-    images: [fomalhaut_chart]
   - id: h_manuscript
     title: 阿尼奥洛夫斯基博士手稿（残）
     kind: 手稿

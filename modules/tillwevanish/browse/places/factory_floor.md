@@ -10,7 +10,6 @@ keeper: 多条产线（包括坦克）装着刻花纹的冲压模具，塞格利
 features:
 - 冲压机和模具
 - 坦克壳体
-art: factory_floor
 within: steelworks
 weather:
 - embers
