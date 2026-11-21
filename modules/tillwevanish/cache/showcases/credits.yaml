@@ -1,37 +1,4 @@
 pictures:
-  sc_coffin-fa753f81.photo:
-    title: A wooden casket adorned with vibrant floral arrangements rests on a green platfo
-    page: https://www.memorialplanning.com/wp-content/uploads/2024/09/5362830236_7c810421d2_b.jpg
-    thumb: https://www.memorialplanning.com/wp-content/uploads/2024/09/5362830236_7c810421d2_b.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_coffin-fa753f81:
-    title: 棺材起火
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月，纳粹德国，德国鲁尔区埃森，赫施伯格钢铁厂（德军武器供应商）及其周边.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 雨中的墓园，墓穴边的棺材从缝里窜出火焰，吊唁的人群惊慌后退，一位戴黑纱的妇人捂着手
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: A wooden casket adorned with vibrant floral arrangements rests on a green platfo
-      page: https://www.memorialplanning.com/wp-content/uploads/2024/09/5362830236_7c810421d2_b.jpg
-      thumb: https://www.memorialplanning.com/wp-content/uploads/2024/09/5362830236_7c810421d2_b.jpg
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
-      kind: scene
-    width: 1024
-    height: 576
   sc_lab-0d4ec468:
     title: 地下实验室
     page: ''
@@ -41,51 +8,24 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月，纳粹德国，德国鲁尔区埃森，赫施伯格钢铁厂（德军武器供应商）及其周边.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 地下室里没有管线的冶炼设备，半面墙的巨大焚尸炉透着红光，两个金属柜，混凝土墙
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 地下室里没有管线的冶炼设备，半面墙的巨大焚尸炉透着红光，两个金属柜，混凝土墙
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
-      title: File:Eddystone, Pennsylvania - Railroad parts. Baldwin Locomotive Works. A modern blacksmith's furnace (or forge) in the... - NARA - 518708.jpg
+      title: File:Eddystone, Pennsylvania - Railroad parts. Baldwin Locomotive Works.
+        A modern blacksmith's furnace (or forge) in the... - NARA - 518708.jpg
       page: https://commons.wikimedia.org/wiki/File:Eddystone,_Pennsylvania_-_Railroad_parts._Baldwin_Locomotive_Works._A_modern_blacksmith%27s_furnace_(or_forge)_in_the..._-_NARA_-_518708.jpg
       thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Eddystone%2C_Pennsylvania_-_Railroad_parts._Baldwin_Locomotive_Works._A_modern_blacksmith%27s_furnace_%28or_forge%29_in_the..._-_NARA_-_518708.jpg/500px-Eddystone%2C_Pennsylvania_-_Railroad_parts._Baldwin_Locomotive_Works._A_modern_blacksmith%27s_furnace_%28or_forge%29_in_the..._-_NARA_-_518708.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
       license: Public domain
       artist: Lewis Hine
       width: 3000
       height: 2124
-      kind: scene
-    width: 1024
-    height: 576
-  sc_duel-ab2a17a4.photo:
-    title: A burning factory interior at night glows with fierce orange flames consuming th
-    page: https://media.istockphoto.com/id/903850552/photo/burning-large-industrial-building-warehouse-hall-fire-inside-factory-interior.jpg?s=170667a&w=0&k=20&c=KXjoemMdfnDC7WMijxexk1AOXcTb_VpJ6DoDqil64yY=
-    thumb: https://media.istockphoto.com/id/903850552/photo/burning-large-industrial-building-warehouse-hall-fire-inside-factory-interior.jpg?s=170667a&w=0&k=20&c=KXjoemMdfnDC7WMijxexk1AOXcTb_VpJ6DoDqil64yY=
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_duel-ab2a17a4:
-    title: 爱的誓言
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月，纳粹德国，德国鲁尔区埃森，赫施伯格钢铁厂（德军武器供应商）及其周边.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 兵工厂地下实验室，火焰四起，机床和吊机的剪影，一个瘦高的人影站在火光中央
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: A burning factory interior at night glows with fierce orange flames consuming th
-      page: https://media.istockphoto.com/id/903850552/photo/burning-large-industrial-building-warehouse-hall-fire-inside-factory-interior.jpg?s=170667a&w=0&k=20&c=KXjoemMdfnDC7WMijxexk1AOXcTb_VpJ6DoDqil64yY=
-      thumb: https://media.istockphoto.com/id/903850552/photo/burning-large-industrial-building-warehouse-hall-fire-inside-factory-interior.jpg?s=170667a&w=0&k=20&c=KXjoemMdfnDC7WMijxexk1AOXcTb_VpJ6DoDqil64yY=
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
       kind: scene
     width: 1024
     height: 576
@@ -107,10 +47,15 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月，纳粹德国，德国鲁尔区埃森，赫施伯格钢铁厂（德军武器供应商）及其周边.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 军械库里一排排手枪，握柄上的花纹在灯下发亮，远处街上有火光
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 军械库里一排排手枪，握柄上的花纹在灯下发亮，远处街上有火光
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:HMS Warrior pistol display.jpg
       page: https://commons.wikimedia.org/wiki/File:HMS_Warrior_pistol_display.jpg
@@ -123,7 +68,8 @@ pictures:
     width: 1024
     height: 576
   sc_end_world-ad0f40cb.photo:
-    title: File:Photograph of objects on President Truman's desk in the Oval Office of the White House. - NARA - 199452.jpg
+    title: File:Photograph of objects on President Truman's desk in the Oval Office
+      of the White House. - NARA - 199452.jpg
     page: https://commons.wikimedia.org/wiki/File:Photograph_of_objects_on_President_Truman%27s_desk_in_the_Oval_Office_of_the_White_House._-_NARA_-_199452.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8b/Photograph_of_objects_on_President_Truman%27s_desk_in_the_Oval_Office_of_the_White_House._-_NARA_-_199452.jpg/500px-Photograph_of_objects_on_President_Truman%27s_desk_in_the_Oval_Office_of_the_White_House._-_NARA_-_199452.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: Public domain
@@ -131,39 +77,6 @@ pictures:
     width: 3000
     height: 2440
     kind: scene
-  sc_end_london-c6913f5c.photo:
-    title: A wooden boardwalk extends into the misty distance, flanked by tall poles with g
-    page: https://c8.alamy.com/comp/2N6R1EP/old-slipway-leading-down-to-the-thames-estuary-at-southend-on-sea-essex-uk-on-a-foggy-day-thick-fog-hanging-over-the-river-thames-2N6R1EP.jpg
-    thumb: https://c8.alamy.com/comp/2N6R1EP/old-slipway-leading-down-to-the-thames-estuary-at-southend-on-sea-essex-uk-on-a-foggy-day-thick-fog-hanging-over-the-river-thames-2N6R1EP.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_end_london-c6913f5c:
-    title: 雾中的伦敦
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月，纳粹德国，德国鲁尔区埃森，赫施伯格钢铁厂（德军武器供应商）及其周边.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 雾中的泰晤士河码头，一个穿大衣的男人回头望向海峡对岸
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: A wooden boardwalk extends into the misty distance, flanked by tall poles with g
-      page: https://c8.alamy.com/comp/2N6R1EP/old-slipway-leading-down-to-the-thames-estuary-at-southend-on-sea-essex-uk-on-a-foggy-day-thick-fog-hanging-over-the-river-thames-2N6R1EP.jpg
-      thumb: https://c8.alamy.com/comp/2N6R1EP/old-slipway-leading-down-to-the-thames-estuary-at-southend-on-sea-essex-uk-on-a-foggy-day-thick-fog-hanging-over-the-river-thames-2N6R1EP.jpg
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
-      kind: scene
-    width: 1024
-    height: 576
   sc_end_ashes-f1258340:
     title: 一捧灰
     page: ''
@@ -173,15 +86,20 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月，纳粹德国，德国鲁尔区埃森，赫施伯格钢铁厂（德军武器供应商）及其周边.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment: 空荡荡的制服平摊在地上，里面只剩一捧灰，旁边落着一把手枪
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment: 空荡荡的制服平摊在地上，里面只剩一捧灰，旁边落着一把手枪
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 576
   sc_end_loyalty-16fe7805.photo:
-    title: File:Cased Pair of Double-Barreled Turn-Off Flintlock Pistols MET LC-28 196 5 6a c-031.jpg
+    title: File:Cased Pair of Double-Barreled Turn-Off Flintlock Pistols MET LC-28
+      196 5 6a c-031.jpg
     page: https://commons.wikimedia.org/wiki/File:Cased_Pair_of_Double-Barreled_Turn-Off_Flintlock_Pistols_MET_LC-28_196_5_6a_c-031.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/Cased_Pair_of_Double-Barreled_Turn-Off_Flintlock_Pistols_MET_LC-28_196_5_6a_c-031.jpg/500px-Cased_Pair_of_Double-Barreled_Turn-Off_Flintlock_Pistols_MET_LC-28_196_5_6a_c-031.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC0
@@ -207,24 +125,6 @@ pictures:
     width: 600
     height: 445
     kind: scene
-  sc_coffin-4fef98af.photo:
-    title: A coffin engulfed in flames sits on a concrete slab, its wooden structure consum
-    page: https://www.shutterstock.com/shutterstock/videos/2903152/thumb/1.jpg?ip=x480
-    thumb: https://www.shutterstock.com/shutterstock/videos/2903152/thumb/1.jpg?ip=x480
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_dinner-cd09fda7.photo:
-    title: A romantic dinner table is beautifully set with candles, a wine glass filled wit
-    page: http://generalwax.com/cdn/shop/articles/romantic-candlelight-dinner-ideas-1.jpg?v=1719835109
-    thumb: http://generalwax.com/cdn/shop/articles/romantic-candlelight-dinner-ideas-1.jpg?v=1719835109
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
   sc_end_resign-4e9b0cb2:
     title: 辞呈
     page: ''
@@ -234,10 +134,15 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 办公桌上一封辞呈和一把手枪，窗外钢铁厂烟囱冒黑烟
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 办公桌上一封辞呈和一把手枪，窗外钢铁厂烟囱冒黑烟
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Germán Busch - Desk.jpg
       page: https://commons.wikimedia.org/wiki/File:Germ%C3%A1n_Busch_-_Desk.jpg
@@ -267,15 +172,6 @@ pictures:
     width: 500
     height: 333
     kind: scene
-  sc_end_heydrich-cd7d1c26.photo:
-    title: A smoking pistol with a polished wooden grip emits a delicate wisp of smoke from
-    page: https://images.fineartamerica.com/images/artworkimages/mediumlarge/1/pistol-smoking-dan-friend.jpg
-    thumb: https://images.fineartamerica.com/images/artworkimages/mediumlarge/1/pistol-smoking-dan-friend.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
   sc_end_london-05832bb4:
     title: 雾中的伦敦
     page: ''
@@ -285,77 +181,15 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment: 浓雾里的泰晤士河岸，一个穿大衣的人回头望
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment: 浓雾里的泰晤士河岸，一个穿大衣的人回头望
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
-    width: 1024
-    height: 576
-  sc_end_suicide-d9fc4cf2.photo:
-    title: A fierce fire rages through a cemetery at night, engulfing trees and illuminatin
-    page: https://i.redd.it/oezew562qowy.jpg
-    thumb: https://i.redd.it/oezew562qowy.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_end_ashes-2bf82a0b.photo:
-    title: A weathered skeleton, partially buried in gray ash, reveals its curved ribcage e
-    page: https://livinglegacyforest.com/wp-content/uploads/2025/07/Cremation-Ashes-Composition-Full-Breakdown.jpg
-    thumb: https://livinglegacyforest.com/wp-content/uploads/2025/07/Cremation-Ashes-Composition-Full-Breakdown.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_dinner-cd09fda7:
-    title: 丝绒帘后的晚餐
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 烛光下的高档餐厅单间，丝绒帘子，桌边坐着戴面纱、穿华贵长裙的高个子身影
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: A romantic dinner table is beautifully set with candles, a wine glass filled wit
-      page: http://generalwax.com/cdn/shop/articles/romantic-candlelight-dinner-ideas-1.jpg?v=1719835109
-      thumb: http://generalwax.com/cdn/shop/articles/romantic-candlelight-dinner-ideas-1.jpg?v=1719835109
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
-      kind: scene
-    width: 1024
-    height: 576
-  sc_coffin-4fef98af:
-    title: 棺材起火
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 雨中的棺材突然燃起熊熊烈火，送葬人群惊慌后退，黑伞散落一地
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: A coffin engulfed in flames sits on a concrete slab, its wooden structure consum
-      page: https://www.shutterstock.com/shutterstock/videos/2903152/thumb/1.jpg?ip=x480
-      thumb: https://www.shutterstock.com/shutterstock/videos/2903152/thumb/1.jpg?ip=x480
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
-      kind: scene
     width: 1024
     height: 576
   sc_end_coup-50fc62a9:
@@ -367,10 +201,15 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜里的柏林街头，坦克和士兵，探照灯划破天空
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 夜里的柏林街头，坦克和士兵，探照灯划破天空
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Soviet tanks - Hradcany Square Prague - via Swiss embassy 1968-08-21.png
       page: https://commons.wikimedia.org/wiki/File:Soviet_tanks_-_Hradcany_Square_Prague_-_via_Swiss_embassy_1968-08-21.png
@@ -391,10 +230,15 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 1939 年 2 月（纳粹德国），德国鲁尔区埃森市，赫施伯格钢铁厂所在地.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 装满回收手枪的木箱被搬上卡车，雨夜里的探照灯
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 装满回收手枪的木箱被搬上卡车，雨夜里的探照灯
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Pushing exhibit cases and crates onto truck (3329274340).jpg
       page: https://commons.wikimedia.org/wiki/File:Pushing_exhibit_cases_and_crates_onto_truck_(3329274340).jpg

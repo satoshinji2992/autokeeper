@@ -1,37 +1,4 @@
 pictures:
-  sc_chase-a14e4397.photo:
-    title: The stone drainage tunnel features a curved archway constructed from brown and g
-    page: https://i.redd.it/zr5op6jjya151.jpg
-    thumb: https://i.redd.it/zr5op6jjya151.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_chase-a14e4397:
-    title: 积水里的扑通声
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 古老的石砌排水通道，石缝里长满白色贝壳，手电光照亮脚下的积水，远处黑暗里几双反光的大眼睛和水花
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: The stone drainage tunnel features a curved archway constructed from brown and g
-      page: https://i.redd.it/zr5op6jjya151.jpg
-      thumb: https://i.redd.it/zr5op6jjya151.jpg
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
-      kind: scene
-    width: 1024
-    height: 576
   sc_gate-08867962.photo:
     title: File:Close up of Mill sluice gates - geograph.org.uk - 768369.jpg
     page: https://commons.wikimedia.org/wiki/File:Close_up_of_Mill_sluice_gates_-_geograph.org.uk_-_768369.jpg
@@ -48,12 +15,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 手电光里一道锈蚀的旧闸门，闸板歪斜留出一道窄缝，海水从缝里渗出，缝前坐着一个穿浅色短袖的小小背影，看不见脸
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 手电光里一道锈蚀的旧闸门，闸板歪斜留出一道窄缝，海水从缝里渗出，缝前坐着一个穿浅色短袖的小小背影，看不见脸
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Close up of Mill sluice gates - geograph.org.uk - 768369.jpg
       page: https://commons.wikimedia.org/wiki/File:Close_up_of_Mill_sluice_gates_-_geograph.org.uk_-_768369.jpg
@@ -81,12 +54,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 清晨的老城小巷，早餐摊的热气，路边排水沟旁蹲着一个背影，把手泡在水里
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 清晨的老城小巷，早餐摊的热气，路边排水沟旁蹲着一个背影，把手泡在水里
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Alley in Old Town Stockholm.jpg
       page: https://commons.wikimedia.org/wiki/File:Alley_in_Old_Town_Stockholm.jpg
@@ -114,12 +93,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 天刚亮的街道上几个孩子的影子，队伍里空着一个位置，地上一张湿透的卡片
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 天刚亮的街道上几个孩子的影子，队伍里空着一个位置，地上一张湿透的卡片
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:The Skate Park Shadows.jpg
       page: https://commons.wikimedia.org/wiki/File:The_Skate_Park_Shadows.jpg
@@ -147,12 +132,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 台风夜后的城市，医院走廊灯光惨白，远处海面涨落，黑色的水道口
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 台风夜后的城市，医院走廊灯光惨白，远处海面涨落，黑色的水道口
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Corridor on the second level - NÄL hospital 3.jpg
       page: https://commons.wikimedia.org/wiki/File:Corridor_on_the_second_level_-_N%C3%84L_hospital_3.jpg

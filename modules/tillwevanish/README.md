@@ -4,6 +4,8 @@
 
 ![《直到我们灰飞烟灭》封面](cover.webp)
 
+[封面来源](../../catalog/cover-credits.md#tillwevanish)
+
 Till We Vanish
 
 | 规则 | 时代 | 人数 | 时长 |
@@ -135,7 +137,6 @@ Till We Vanish
 - [people.yaml](module/people.yaml)
 - [places.yaml](module/places.yaml)
 - [situation.yaml](module/situation.yaml)
-- [source](module/source)
 - [story.yaml](module/story.yaml)
 
 ## 游戏内安装

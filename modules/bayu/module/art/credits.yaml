@@ -18,7 +18,8 @@ pictures:
     height: 2809
     kind: scene
   boat_cabin:
-    title: File:Leaving Loch Clash and setting course for The Butt - geograph.org.uk - 726766.jpg
+    title: File:Leaving Loch Clash and setting course for The Butt - geograph.org.uk
+      - 726766.jpg
     page: https://commons.wikimedia.org/wiki/File:Leaving_Loch_Clash_and_setting_course_for_The_Butt_-_geograph.org.uk_-_726766.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/Leaving_Loch_Clash_and_setting_course_for_The_Butt_-_geograph.org.uk_-_726766.jpg/500px-Leaving_Loch_Clash_and_setting_course_for_The_Butt_-_geograph.org.uk_-_726766.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY-SA 2.0
@@ -48,8 +49,11 @@ pictures:
 
       Subject (场景): 乘风破浪888号：一艘十几米长的小型捕鱼船，整体有些陈旧，边角处有磕碰和修补的痕迹，但甲板冲洗得很干净。船舱分上下两层，下层休息和放杂物，上层是驾驶室；船尾是开放式甲板。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -66,20 +70,14 @@ pictures:
 
       Subject (场景): 渔具铺子：渔具铺子简陋得多。一个抽旱烟的老头坐在小马扎上，面前铺着块油腻的蓝布，摊上挂着各种闪闪发亮的假饵、鱼线，还有一个用红布蒙着口的深色大陶罐。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
-  reef_rock:
-    title: Powerful waves crash against a rugged offshore rock, sending a dramatic spray of
-    page: https://thumbs.dreamstime.com/b/wave-crashing-offshore-rock-california-coast-breaking-just-sending-sea-spray-flying-air-located-crystal-cove-93612742.jpg
-    thumb: https://thumbs.dreamstime.com/b/wave-crashing-offshore-rock-california-coast-breaking-just-sending-sea-spray-flying-air-located-crystal-cove-93612742.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
   wharf_berth_boats:
     title: wharf_berth_boats
     page: ''
@@ -93,8 +91,11 @@ pictures:
 
       Subject (场景): 芝罘湾渔人码头·泊位上并排的渔船：拂晓前墨蓝色的天色下，昏黄路灯照着一排并排停靠的小型近海渔船，船身漆着“鲁-烟-渔”开头的编号和各式船名，“一帆风顺号”“海的女儿号”“必胜客号”，海浪拍着船身和堤岸
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -111,8 +112,11 @@ pictures:
 
       Subject (场景): 早餐铺子·三轮早餐车的菜单和锅：收拾干净的三轮小餐车，车头夹着一串小灯泡，车身上手写菜单“鲅鱼水饺”“现烙海菜饼”“热豆浆”；锅里翻腾着热气，漏勺捞起白白胖胖的水饺
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -129,8 +133,11 @@ pictures:
 
       Subject (场景): 底舱：下层船舱低矮，是休息和放杂物的地方，堆着渔具、网具和备用的箱子，空气里有机油和鱼腥味。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -147,8 +154,11 @@ pictures:
 
       Subject (场景): 渔具铺子·红布蒙口的陶罐：油腻的蓝布摊上放着一个深色大陶罐，罐口用红布蒙住，掀开一角能看到里面一大团蠕动的暗红色肥硕沙蚕，湿漉漉地纠缠在一起
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -165,8 +175,11 @@ pictures:
 
       Subject (场景): 渔具铺子·摊上的假饵与旧木盒：小灯泡下，蓝布摊上挂着一排排闪闪发亮的假饵和成卷的鱼线，旁边放着一个磨旧了的小木盒，地上搁着旱烟杆
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -183,8 +196,11 @@ pictures:
 
       Subject (场景): 船尾甲板·角落里的卡式炉和锅：甲板角落摞着一个小卡式炉和不锈钢锅，旁边是桶装矿泉水、一碟姜片和几瓶简单调味料
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -201,8 +217,11 @@ pictures:
 
       Subject (场景): 船尾甲板·船舷内侧：渔船船舷边绑着一圈防撞的旧轮胎，内侧漆面有些凹痕和剐蹭，边角有修补痕迹
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -219,8 +238,11 @@ pictures:
 
       Subject (场景): 船尾甲板·日出时的海面：海平面上金色的太阳刚刚跃出，海面由深红到亮橙再到流动的金色，一缕淡紫色的烟气在海面上弥漫开
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -237,8 +259,11 @@ pictures:
 
       Subject (场景): 船尾甲板·缠成一团的旧渔网：湿淋淋的甲板上摊着一大团缠在一起的旧渔网，网线纠结，挂着海水和泥污
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -255,8 +280,11 @@ pictures:
 
       Subject (场景): 驾驶室·窗沿上的木雕小像：玻璃窗沿上放着一个有些发黑的木雕小像，被摸得油光发亮，看不清雕的是哪路神佛
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -273,8 +301,11 @@ pictures:
 
       Subject (场景): 驾驶室·驾驶室窗户角落：驾驶室正面玻璃窗的角落，窗框接缝处积着灰和盐渍，窗外是开阔的海面
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -291,8 +322,11 @@ pictures:
 
       Subject (场景): 驾驶室·老式短波电台：驾驶室仪表旁一台老式短波电台，旋钮和指示灯泛旧，旁边挂着一个手持通话器，空气里有柴油和烟味
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -309,8 +343,11 @@ pictures:
 
       Subject (场景): 驾驶室·舵盘和油门推杆：玻璃窗下的舵盘、一根油门推杆和一排排仪表，把手磨得发亮
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -327,8 +364,11 @@ pictures:
 
       Subject (场景): 底舱·底舱的杂物和拖网：低矮的下层船舱里堆着渔具、网具和备用箱子，一张缀着铅坠的大拖网叠在角落，空气里是机油和鱼腥味
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -345,8 +385,11 @@ pictures:
 
       Subject (场景): 礁石滩的大礁石·礁石缝隙：两块湿黑礁石之间的狭窄缝隙，积着海水和碎沫
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -363,13 +406,17 @@ pictures:
 
       Subject (场景): 礁石滩的大礁石·脚下的礁石：犬牙交错的礁石间，墨蓝色海水拍上来；脚下的礁石格外光滑，表面没有一点贝壳或藤壶
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
   auntie:
-    title: File:Smiling older woman in a patterned headscarf in Santa Lucía, Maracaibo, Venezuela.jpg
+    title: File:Smiling older woman in a patterned headscarf in Santa Lucía, Maracaibo,
+      Venezuela.jpg
     page: https://commons.wikimedia.org/wiki/File:Smiling_older_woman_in_a_patterned_headscarf_in_Santa_Luc%C3%ADa,_Maracaibo,_Venezuela.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/Smiling_older_woman_in_a_patterned_headscarf_in_Santa_Luc%C3%ADa%2C_Maracaibo%2C_Venezuela.jpg/500px-Smiling_older_woman_in_a_patterned_headscarf_in_Santa_Luc%C3%ADa%2C_Maracaibo%2C_Venezuela.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC0
@@ -378,7 +425,8 @@ pictures:
     height: 996
     kind: portrait
   old_man:
-    title: File:Man in front of a sheerlegs crane after GREYCLIFFE disaster, November 1927 (7546525786).jpg
+    title: File:Man in front of a sheerlegs crane after GREYCLIFFE disaster, November
+      1927 (7546525786).jpg
     page: https://commons.wikimedia.org/wiki/File:Man_in_front_of_a_sheerlegs_crane_after_GREYCLIFFE_disaster,_November_1927_(7546525786).jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/Man_in_front_of_a_sheerlegs_crane_after_GREYCLIFFE_disaster%2C_November_1927_%287546525786%29.jpg/500px-Man_in_front_of_a_sheerlegs_crane_after_GREYCLIFFE_disaster%2C_November_1927_%287546525786%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: No restrictions
@@ -404,12 +452,16 @@ pictures:
     kind: portrait
     prompt: 'A picture for a Call of Cthulhu horror game set in 现代（2025 年春），中国山东烟台芝罘湾渔人码头，以及黄海近海与远海的礁石滩.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 身材敦实，皮肤晒成古铜色的中年男人，穿一身沾了些油污的蓝色工装，牙齿因抽烟而泛黄。随身带着保温杯。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -421,15 +473,6 @@ pictures:
     artist: Ermell
     width: 5184
     height: 3888
-    kind: item
-  item-statue:
-    title: A wooden sculpture of a contemplative woman with her head resting on her hand si
-    page: https://m.media-amazon.com/images/I/71MbH79iWzL.jpg
-    thumb: https://m.media-amazon.com/images/I/71MbH79iWzL.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
     kind: item
   item-trawl_net:
     title: File:Fishing net Karystos Euboea Greece.jpg
@@ -449,12 +492,16 @@ pictures:
     kind: portrait
     prompt: 'A picture for a Call of Cthulhu horror game set in 现代（2025 年春），中国山东烟台芝罘湾渔人码头，以及黄海近海与远海的礁石滩.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 赵海峰，电子工程师，35 岁，通信设备公司的工程师，休年假和朋友出来散心，自称“钓鱼佬预备役”。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -467,12 +514,16 @@ pictures:
     kind: portrait
     prompt: 'A picture for a Call of Cthulhu horror game set in 现代（2025 年春），中国山东烟台芝罘湾渔人码头，以及黄海近海与远海的礁石滩.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 林晓，摄影师，28 岁，自由摄影师，专拍旅行和美食，听说海上日出漂亮就跟着来了。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -503,13 +554,18 @@ pictures:
     kind: creature
     prompt: 'A picture for a Call of Cthulhu horror game set in 现代（2025 年春），中国山东烟台芝罘湾渔人码头，以及黄海近海与远海的礁石滩.
 
-      This one creature seen from the front, head and upper body filling the frame, facing the viewer as if about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of
-      it falls away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4).
+      This one creature seen from the front, head and upper body filling the frame,
+      facing the viewer as if about to lunge; lit from below by a dim sickly light,
+      its eyes catching the light; the rest of it falls away into darkness against
+      a pure black background, with nothing else in the picture (portrait, about 3:4).
 
       Subject (怪物): 水里探出的浮肿光头：身体肿胀泛白，皮肤光滑没有毛发，身上缠着纠结的海藻、贝壳和类似袈裟的深色腐烂纹理；漆黑的眼睛，手上生蹼。没有思想，只守护沉睡之地，袭击未被感染的入侵者。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 768
     height: 1024
@@ -526,7 +582,8 @@ pictures:
 
       Show it after this change: 浪头里浮起一颗湿漉漉的脑袋，嘴巴大张，直勾勾地盯着船上
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: zhang
       page: ''
@@ -536,12 +593,16 @@ pictures:
       kind: portrait
       prompt: 'A picture for a Call of Cthulhu horror game set in 现代（2025 年春），中国山东烟台芝罘湾渔人码头，以及黄海近海与远海的礁石滩.
 
-        A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+        A head-and-shoulders portrait of this one person, the face clearly visible
+        and lit, against a plain dark background.
 
         Subject (人物头像): 身材敦实，皮肤晒成古铜色的中年男人，穿一身沾了些油污的蓝色工装，牙齿因抽烟而泛黄。随身带着保温杯。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 936
@@ -560,7 +621,8 @@ pictures:
 
       Show it after this change: 一排船中认出一艘船身写着“乘风破浪888号”的陈旧小渔船
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: wharf_berth_boats
       page: ''
@@ -574,8 +636,11 @@ pictures:
 
         Subject (场景): 芝罘湾渔人码头·泊位上并排的渔船：拂晓前墨蓝色的天色下，昏黄路灯照着一排并排停靠的小型近海渔船，船身漆着“鲁-烟-渔”开头的编号和各式船名，“一帆风顺号”“海的女儿号”“必胜客号”，海浪拍着船身和堤岸
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -594,7 +659,8 @@ pictures:
 
       Show it after this change: 不显眼的角落里露出几道很深的旧划痕，呈爪形，像被什么用力抓握过
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: deck_gunwale
       page: ''
@@ -608,8 +674,11 @@ pictures:
 
         Subject (场景): 船尾甲板·船舷内侧：渔船船舷边绑着一圈防撞的旧轮胎，内侧漆面有些凹痕和剐蹭，边角有修补痕迹
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -628,7 +697,8 @@ pictures:
 
       Show it after this change: 紫雾里远方海平线上短暂浮现一片扭曲的黑色剪影，像从海底升起的森林
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: deck_sunrise_sea
       page: ''
@@ -642,8 +712,11 @@ pictures:
 
         Subject (场景): 船尾甲板·日出时的海面：海平面上金色的太阳刚刚跃出，海面由深红到亮橙再到流动的金色，一缕淡紫色的烟气在海面上弥漫开
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -662,7 +735,8 @@ pictures:
 
       Show it after this change: 网线中缠着一个红绳串着、严重腐蚀的黄铜长命锁，刻着模糊的“长命富贵”，一侧有几道深深的抓痕
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: deck_old_net
       page: ''
@@ -676,8 +750,11 @@ pictures:
 
         Subject (场景): 船尾甲板·缠成一团的旧渔网：湿淋淋的甲板上摊着一大团缠在一起的旧渔网，网线纠结，挂着海水和泥污
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -696,7 +773,8 @@ pictures:
 
       Show it after this change: 看清小像雕的是一个盘坐在底座上、面目模糊的光头，不是龙王或妈祖
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: cabin_statue
       page: ''
@@ -710,8 +788,11 @@ pictures:
 
         Subject (场景): 驾驶室·窗沿上的木雕小像：玻璃窗沿上放着一个有些发黑的木雕小像，被摸得油光发亮，看不清雕的是哪路神佛
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -730,7 +811,8 @@ pictures:
 
       Show it after this change: 玻璃接缝处用透明胶带贴着一张小小的、已经褪色的黄纸符
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: cabin_window_corner
       page: ''
@@ -744,8 +826,11 @@ pictures:
 
         Subject (场景): 驾驶室·驾驶室窗户角落：驾驶室正面玻璃窗的角落，窗框接缝处积着灰和盐渍，窗外是开阔的海面
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -764,7 +849,8 @@ pictures:
 
       Show it after this change: 缝隙里卡着半只亮黄色塑胶手套，断口参差不齐，像被巨力扯开
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: reef_crevice
       page: ''
@@ -778,8 +864,11 @@ pictures:
 
         Subject (场景): 礁石滩的大礁石·礁石缝隙：两块湿黑礁石之间的狭窄缝隙，积着海水和碎沫
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683

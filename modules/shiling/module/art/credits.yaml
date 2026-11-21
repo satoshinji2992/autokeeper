@@ -1,241 +1,7 @@
 pictures:
-  adamson_house_plan:
-    source: source/images/p71_image01.png
-    original: true
-    purpose: document
-  oakland_map:
-    source: source/original.pdf
-    page: 70
-    region:
-    - 0.045
-    - 0.119
-    - 0.499
-    - 0.585
-    dpi: 300
-    purpose: document
-    original: true
-  oakland_map_marked:
-    source: source/original.pdf
-    page: 70
-    region:
-    - 0.528
-    - 0.433
-    - 0.962
-    - 0.879
-    dpi: 300
-    purpose: document
-    original: true
-  kandi:
-    source: source/original.pdf
-    page: 70
-    region:
-    - 0.142
-    - 0.607
-    - 0.402
-    - 0.828
-    dpi: 300
-    purpose: document
-    original: true
-  invitation_card:
-    source: source/original.pdf
-    page: 72
-    region:
-    - 0.087
-    - 0.153
-    - 0.919
-    - 0.531
-    dpi: 300
-    purpose: document
-    original: true
-  bertha:
-    source: source/original.pdf
-    page: 72
-    region:
-    - 0.087
-    - 0.618
-    - 0.348
-    - 0.845
-    dpi: 300
-    purpose: document
-    original: true
-  austin:
-    source: source/original.pdf
-    page: 72
-    region:
-    - 0.657
-    - 0.618
-    - 0.92
-    - 0.845
-    dpi: 300
-    purpose: document
-    original: true
-  bar_plan:
-    source: source/original.pdf
-    page: 73
-    region:
-    - 0.564
-    - 0.164
-    - 0.947
-    - 0.362
-    dpi: 300
-    purpose: document
-    original: true
-  thomas:
-    source: source/original.pdf
-    page: 73
-    region:
-    - 0.688
-    - 0.413
-    - 0.948
-    - 0.64
-    dpi: 300
-    purpose: document
-    original: true
-  peter:
-    source: source/original.pdf
-    page: 73
-    region:
-    - 0.058
-    - 0.673
-    - 0.317
-    - 0.899
-    dpi: 300
-    purpose: document
-    original: true
-  mathia:
-    source: source/original.pdf
-    page: 73
-    region:
-    - 0.374
-    - 0.673
-    - 0.634
-    - 0.899
-    dpi: 300
-    purpose: document
-    original: true
-  bart:
-    source: source/original.pdf
-    page: 73
-    region:
-    - 0.688
-    - 0.673
-    - 0.948
-    - 0.899
-    dpi: 300
-    purpose: document
-    original: true
-  mansion_plan_lower:
-    source: source/original.pdf
-    page: 74
-    region:
-    - 0.227
-    - 0.167
-    - 0.774
-    - 0.342
-    dpi: 300
-    purpose: document
-    original: true
-  mansion_plan_upper:
-    source: source/original.pdf
-    page: 74
-    region:
-    - 0.227
-    - 0.381
-    - 0.465
-    - 0.524
-    dpi: 300
-    purpose: document
-    original: true
-  josephine:
-    source: source/original.pdf
-    page: 74
-    region:
-    - 0.09
-    - 0.654
-    - 0.351
-    - 0.882
-    dpi: 300
-    purpose: document
-    original: true
-  jim:
-    source: source/original.pdf
-    page: 74
-    region:
-    - 0.386
-    - 0.654
-    - 0.647
-    - 0.882
-    dpi: 300
-    purpose: document
-    original: true
-  mariano_photo:
-    source: source/original.pdf
-    page: 74
-    region:
-    - 0.683
-    - 0.496
-    - 0.915
-    - 0.66
-    dpi: 300
-    purpose: document
-    original: true
-  young_jim_photo:
-    source: source/original.pdf
-    page: 74
-    region:
-    - 0.683
-    - 0.692
-    - 0.915
-    - 0.856
-    dpi: 300
-    purpose: document
-    original: true
-  duff_doll:
-    source: source/original.pdf
-    page: 75
-    region:
-    - 0.146
-    - 0.105
-    - 0.41
-    - 0.343
-    dpi: 300
-    purpose: document
-    original: true
-  cabbage_king:
-    source: source/original.pdf
-    page: 75
-    region:
-    - 0.59
-    - 0.11
-    - 0.853
-    - 0.346
-    dpi: 300
-    purpose: document
-    original: true
-  dream_machine:
-    source: source/original.pdf
-    page: 75
-    region:
-    - 0.07
-    - 0.4
-    - 0.48
-    - 0.69
-    dpi: 300
-    purpose: document
-    original: true
-  dante:
-    source: source/original.pdf
-    page: 75
-    region:
-    - 0.51
-    - 0.36
-    - 0.932
-    - 0.89
-    dpi: 300
-    purpose: document
-    original: true
   agent_home:
-    title: File:Living room in apartment of Condomínio do Edifício Zaher, Le Blond, Rio de Janeiro, Brazil.jpg
+    title: File:Living room in apartment of Condomínio do Edifício Zaher, Le Blond,
+      Rio de Janeiro, Brazil.jpg
     page: https://commons.wikimedia.org/wiki/File:Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher,_Le_Blond,_Rio_de_Janeiro,_Brazil.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg/500px-Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC0
@@ -244,7 +10,8 @@ pictures:
     height: 4492
     kind: scene
   adamson_home:
-    title: File:Henry W. and Mary Noyes Sprague House, Buffalo, New York, October 2012.jpg
+    title: File:Henry W. and Mary Noyes Sprague House, Buffalo, New York, October
+      2012.jpg
     page: https://commons.wikimedia.org/wiki/File:Henry_W._and_Mary_Noyes_Sprague_House,_Buffalo,_New_York,_October_2012.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Henry_W._and_Mary_Noyes_Sprague_House%2C_Buffalo%2C_New_York%2C_October_2012.jpg/500px-Henry_W._and_Mary_Noyes_Sprague_House%2C_Buffalo%2C_New_York%2C_October_2012.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY 2.0
@@ -274,8 +41,11 @@ pictures:
 
       Subject (场景): NPPD 第九区办公室：国土安全部国家保护与计划局第九区的加州办公室。大厅里电话声此起彼伏，靠墙一排独立办公室隔着玻璃和百叶窗，其中一间的百叶窗拉着，门牌还没换。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -292,8 +62,11 @@ pictures:
 
       Subject (场景): 亚当森的办公室：独立办公室，与大厅隔着隔音很好的玻璃和百叶窗。桌上有一台个人电脑、一架飞机模型、一本日历、一堆散乱的文件，还有一张亚当森和温妮的合照。一切都摆在原处，却干净得过分。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -319,8 +92,11 @@ pictures:
 
       Subject (场景): 皮特的办公室：写字楼的一角，一面落地窗对着街景。靠窗的磁带架倒了，磁带散落一地。办公桌空荡得反常。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -346,13 +122,17 @@ pictures:
 
       Subject (场景): 中控室：一间上锁的小房间，一台电脑控制着广场四块大屏，机柜的指示灯一闪一闪。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
   simpton_building:
-    title: File:Commercial building storefront, 317 N. Charles Street, Baltimore, MD 21201 (41373797394).jpg
+    title: File:Commercial building storefront, 317 N. Charles Street, Baltimore,
+      MD 21201 (41373797394).jpg
     page: https://commons.wikimedia.org/wiki/File:Commercial_building_storefront,_317_N._Charles_Street,_Baltimore,_MD_21201_(41373797394).jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d6/Commercial_building_storefront%2C_317_N._Charles_Street%2C_Baltimore%2C_MD_21201_%2841373797394%29.jpg/500px-Commercial_building_storefront%2C_317_N._Charles_Street%2C_Baltimore%2C_MD_21201_%2841373797394%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC0
@@ -391,8 +171,11 @@ pictures:
 
       Subject (场景): 格林伍德宅邸：奥克兰东南部的罗伯勒多大道，紧邻一条穿过市中心的铁道。一栋三层楼的宅子，带独立车库和不太大的庭前花园。花园里不对称地立着两座大理石喷泉，杂草歪倒；米白的墙面喷了漆，正面门廊和对着花园的窗户雕花复杂，却久未打理。门窗紧闭，窗帘拉得死死的。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -418,13 +201,17 @@ pictures:
 
       Subject (场景): 马里亚诺的书房：二楼的书房，气派的书桌背靠窗户。曾经的奇珍异宝都卖光了，地上只留下一些说不出用途的底座，墙面光秃秃的。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
   mansion_playroom:
-    title: File:Snooker Room, Effingham Golf Club, Effingham, Surrey - September 2025 - 02.jpg
+    title: File:Snooker Room, Effingham Golf Club, Effingham, Surrey - September 2025
+      - 02.jpg
     page: https://commons.wikimedia.org/wiki/File:Snooker_Room,_Effingham_Golf_Club,_Effingham,_Surrey_-_September_2025_-_02.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Snooker_Room%2C_Effingham_Golf_Club%2C_Effingham%2C_Surrey_-_September_2025_-_02.jpg/500px-Snooker_Room%2C_Effingham_Golf_Club%2C_Effingham%2C_Surrey_-_September_2025_-_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC0
@@ -499,8 +286,11 @@ pictures:
 
       Subject (场景): 吉姆的幼年：你推开门，视线忽然变得低矮。你坐在一张狭小卧室的床上，怀里抱着一个玩偶，耳边是门刚被摔上的回响。你光着身子，衣服被丢在床的另一角。深蓝色的窗帘遮住整扇窗，月光透进来，把房间照成一种幽暗而宁静的蓝。楼下传来玻璃砸碎的声音，一个女人啜泣着咒骂，一个男人在哼哼。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -535,8 +325,11 @@ pictures:
 
       Subject (场景): 国王的车厢：一节空阔的车厢，没有包厢也没有桌子。地上散落着各式玩具，画着毛线球和屎壳郎的纸团到处都是。四面墙上是水粉画的日常图案，车厢中间摆着一张纸做的长桌，手绘的图案让它像一张台球桌。一个卷心菜模样的生物坐在正中。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -562,8 +355,11 @@ pictures:
 
       Subject (场景): 彼岸·奥克兰：这里和奥克兰极其相似，只是整座城市完全浸没在湖水之下。维多利亚式装潢的铁制电车悬浮着驶过，摩天大楼的棱角上布满复杂的浮雕，天空中漂浮着一盏盏电灯，上面插满铜质的喇叭。没有白天，两轮月亮永恒地悬在水面之上。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -572,12 +368,14 @@ pictures:
     page: https://commons.wikimedia.org/wiki/File:Interior,_living_room,_family_Fortepan_60522.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/Interior%2C_living_room%2C_family_Fortepan_60522.jpg/500px-Interior%2C_living_room%2C_family_Fortepan_60522.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY-SA 3.0
-    artist: 'FOTO:Fortepan — ID 60522: Adományozó/Donor: Gárdos György. archive copy at the Wayback Machine'
+    artist: 'FOTO:Fortepan — ID 60522: Adományozó/Donor: Gárdos György. archive copy
+      at the Wayback Machine'
     width: 5604
     height: 3652
     kind: scene
   other_tower:
-    title: File:2022.06.09 Capital Pride Rooftop Pool Party, Washington, DC USA 160 155355 (52137130186).jpg
+    title: File:2022.06.09 Capital Pride Rooftop Pool Party, Washington, DC USA 160
+      155355 (52137130186).jpg
     page: https://commons.wikimedia.org/wiki/File:2022.06.09_Capital_Pride_Rooftop_Pool_Party,_Washington,_DC_USA_160_155355_(52137130186).jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/2022.06.09_Capital_Pride_Rooftop_Pool_Party%2C_Washington%2C_DC_USA_160_155355_%2852137130186%29.jpg/500px-2022.06.09_Capital_Pride_Rooftop_Pool_Party%2C_Washington%2C_DC_USA_160_155355_%2852137130186%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY-SA 2.0
@@ -598,8 +396,11 @@ pictures:
 
       Subject (场景): 彼岸·鲸鱼堡垒：格林伍德宅邸的位置上卧着一座巨大的鲸鱼堡垒。窗户是鲸鱼的眼睛，门廊是一张张开的嘴，内部是湿滑粘腻的细胞墙。一条铁轨穿过鲸尾，一直连到天际。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -616,8 +417,11 @@ pictures:
 
       Subject (场景): 彼岸·光辉的站台：闹钟酒吧的位置上是一座富丽堂皇的车站，宽阔明亮的大门里人潮涌动，卖报纸和饮料的机械玩偶在人群中游走。铁轨一直连到天际线，一列火车停在站台上。站台上没有时刻表。大门旁摆着一张小木桌和一条凳子。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -634,8 +438,11 @@ pictures:
 
       Subject (场景): 彼岸的边缘：一道巨大的海底沟壑，深不见底，像一片虚空。远处立着一道像是由若干面镜子组成的遮罩，对面隐约是另一个彼岸的痕迹，一条铁轨穿过遮罩，通向看不见的终点。地面上埋着许多铜管乐器，喇叭口朝上露出地面，连成一条边界线，发出肃穆低沉的声音。数百名灰袍、戴面具的人围成一圈，堵住了通往中心的路，念着颂歌。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -661,8 +468,11 @@ pictures:
 
       Subject (场景): 书房：一间小书房，书桌上放着你的工作电脑。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -706,8 +516,11 @@ pictures:
 
       Subject (场景): 特工的家·门廊的门与猫眼：深夜，客厅通往门廊的木门紧闭，门上一枚小小的猫眼，门缝底下透进一线路灯的冷光，门边挂着外套和钥匙。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -724,8 +537,11 @@ pictures:
 
       Subject (场景): 特工的家·茶几上的座机：客厅茶几上一部家用座机电话，听筒搁在机座上，旁边有遥控器和几本杂志，台灯光线昏黄。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -742,8 +558,11 @@ pictures:
 
       Subject (场景): 亚当森的住所·桌上的一摞书：昏暗屋里的桌面上摞着几本书，最上面是一本小说集和一本纸牌魔术书的第二卷，桌面有擦拭过的痕迹，四周空气潮闷。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -760,8 +579,11 @@ pictures:
 
       Subject (场景): 亚当森的住所·屋后的小公园：房子背面的小公园，一架掉漆的旧秋千和一座小滑梯，草地上没有人，灰白的天光。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -778,8 +600,11 @@ pictures:
 
       Subject (场景): 亚当森的卧室·书桌上的两张纸：凌乱的书桌上压着一张皱巴巴的打印纸，上面是工整的手写乱码；旁边一支笔尖歪掉的钢笔躺在四散的墨水里，桌角堆着发臭的快餐盒。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -796,8 +621,11 @@ pictures:
 
       Subject (场景): 亚当森的卧室·拔了电源的电脑：书桌上一台台式电脑歪斜地放着，电源线被粗暴地从插口扯出来垂在桌边，屏幕漆黑，旁边是一部座机。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -814,8 +642,11 @@ pictures:
 
       Subject (场景): 亚当森的卧室·挡住窗户的床：一张床被拖到窗边竖着掀起，床板和床垫把整扇窗户挡得严严实实，地上散落着纸张，只有缝隙里漏进一点外面的光。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -832,8 +663,11 @@ pictures:
 
       Subject (场景): 亚当森的办公室·干净得过分的办公桌：玻璃隔间里的办公桌：一台个人电脑、一架飞机模型、一本台历、一堆散乱摊开的文件，还有一张一对夫妇的相框合照；桌面一尘不染，像是有人刻意清理过。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -850,8 +684,11 @@ pictures:
 
       Subject (场景): 加州鹿角传媒公司·员工照片墙：写字楼进门走廊上一排装框的员工照片，每张下面贴着姓名和职务的小标签，背景是清爽明亮的办公区。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -868,8 +705,11 @@ pictures:
 
       Subject (场景): 皮特的办公室·空荡的办公桌：办公桌上空空荡荡，只剩显示器底座留下的印子和一截空的电源线，抽屉合着。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -886,8 +726,11 @@ pictures:
 
       Subject (场景): 皮特的办公室·倒下的磁带架：落地窗边一只磁带架翻倒在地，上百盒磁带散落一地，窗外是白天的街景。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -904,8 +747,11 @@ pictures:
 
       Subject (场景): 奥克兰中央广场·商城腰部的巨幕：两条商业街交汇的广场，四角的商城大厦腰部各挂着一块巨大的电子屏，正在播放乏味的商品广告，楼下行人匆匆。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -922,8 +768,11 @@ pictures:
 
       Subject (场景): 中控室·中控电脑与机柜：狭小的中控室里，一台电脑屏幕停在密码输入框，旁边的机柜指示灯一闪一闪，后面是捆扎好的线缆。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -940,8 +789,11 @@ pictures:
 
       Subject (场景): 辛普敦大厦·负一楼积灰的玻璃门：通往地下一层的台阶下面，一间像是正在转让的老玩具店，装潢俗套过时，临街玻璃门积着厚厚的灰，透过玻璃看进去空无一人。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -958,8 +810,11 @@ pictures:
 
       Subject (场景): 凌晨十二点闹钟酒吧·舞池的血迹：酒吧中间的小舞池，地上一大摊新鲜血迹，溅到墙上的装饰画上；旁边是一张坏掉的凳子和一张破沙发，紫绿色灯光照着一旁的架子鼓。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -976,8 +831,11 @@ pictures:
 
       Subject (场景): 凌晨十二点闹钟酒吧·墙上的装饰画：光滑的水泥墙上不规律地挂着几幅笔触粗粝的油画肖像，墙脚贴着蓝黑相间的瓷砖，高处镶着各色金属块。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -994,8 +852,11 @@ pictures:
 
       Subject (场景): 凌晨十二点闹钟酒吧·角落的杂物堆：酒吧角落堆着旧纸箱、折叠椅和缠成一团的电线，上面落了灰。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1012,8 +873,11 @@ pictures:
 
       Subject (场景): 凌晨十二点闹钟酒吧·角落的小桌：昏暗角落的小桌上放着一摞磁带和一杯苏打水，椅背上搭着一条咖啡色毛毯，桌面有被指节反复敲打的旧痕。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1030,8 +894,11 @@ pictures:
 
       Subject (场景): 酒吧地窖·地窖两侧的架子：窄长的地窖，中间两人宽的通道，两侧架子上摆满瓶瓶罐罐和酒箱，临街墙高处一个窄小的通风口透进街上的声音和光。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1048,8 +915,11 @@ pictures:
 
       Subject (场景): 格林伍德宅邸·客厅中央的血迹：沙发和桌子被胡乱堆到客厅角落，空出来的地板正中是新鲜的、像被剐蹭过的深褐色血迹，窗帘拉得死死的。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1066,8 +936,11 @@ pictures:
 
       Subject (场景): 格林伍德宅邸·庭前花园：不太大的庭前花园里，两座大理石喷泉不对称地立着，被歪倒的杂草围住；后面是米白墙面和雕花复杂却久未打理的门廊与窗户。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1084,8 +957,11 @@ pictures:
 
       Subject (场景): 宅邸储物间·地上的人形污渍：撬开木条的门后是不足十平米的空房间，地面正中一圈人形的黄色污渍，门框上还挂着拔出钉子的木条。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1102,8 +978,11 @@ pictures:
 
       Subject (场景): 马里亚诺的书房·背窗的书桌：气派的书桌背靠窗户，地上散着几个说不出用途的空底座，墙面光秃秃的，只留下挂过东西的印子。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1120,8 +999,11 @@ pictures:
 
       Subject (场景): 宅邸娱乐室·斑驳的台球桌：标准大小的台球桌，绿色台呢上布满斑驳的褐色血迹，有些还很新鲜，几把靠椅围在旁边。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1138,8 +1020,11 @@ pictures:
 
       Subject (场景): 宅邸娱乐室·鞭子与刑具架：门把手上挂着一条沾血的鞭子；原本放球杆的架子上挂满奇形怪状、像刑具一样的金属制品和粗细不一的绑带，几根台球杆靠在角落。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1156,8 +1041,11 @@ pictures:
 
       Subject (场景): 吉姆的卧室·堆满纸团的书桌：书桌上满是水粉笔触，被一大堆揉皱的纸团覆盖，工具盒里是水粉笔和干掉的颜料；一张家庭照片被撕掉了三分之一，剩下的人站在有水上游乐设施的地方，背景是半截招牌。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1174,8 +1062,11 @@ pictures:
 
       Subject (场景): 吉姆的卧室·靠桌的书柜：书桌边的书柜塞满书，从百科全书到爱情读物，书脊新旧不一，有的翻得破烂，海蓝色墙上的鲸鱼灯影在书脊上晃动。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1192,8 +1083,11 @@ pictures:
 
       Subject (场景): 海滨公园·喷泉围着的旧大门：公园中心一扇旧的游乐园大门作为纪念品立着，被一圈现代喷泉环绕，水声哗哗。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1210,8 +1104,11 @@ pictures:
 
       Subject (场景): 海滨公园·草坪上的巨型玩偶：草坪上立着章鱼、鲸鱼形状的巨型橡胶玩偶，内部的灯透出柔光；步道边排着用水滑梯零件改成的长椅。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1228,8 +1125,11 @@ pictures:
 
       Subject (场景): 剧院·画着海底生物的包厢门：维多利亚式列车走廊，一扇扇包厢小门上绘着海底动植物的工笔画，红白图案的厚地毯铺满地面，铜质壁灯泛着暖光。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1246,8 +1146,11 @@ pictures:
 
       Subject (场景): 剧院·窗外的湖水：车窗外是迟钝的液体，不知何处喷出的蒸汽状物质在水中漂动，拖出模糊的黑色轨迹。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1264,8 +1167,11 @@ pictures:
 
       Subject (场景): 餐车·L 形吧台与侍者：维多利亚餐车一端的 L 形吧台后，一个动作机械的侍者摇晃着调酒杯，两排铺着白桌布的长方形桌子分列两侧。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1282,8 +1188,11 @@ pictures:
 
       Subject (场景): 渐淡的伤疤·暂停的爆炸中心：海床上的废弃工业园区，一座倒塌一半的工厂，爆炸中心闪烁着，卷起的沙石凝固在半空，一个男人被炸得腾在空中一动不动；头顶水面的波光组成飘动的网。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1300,8 +1209,11 @@ pictures:
 
       Subject (场景): 渐淡的伤疤·园区门口：工业园区门口，一个持枪待命的人影被定在原处，身后是凝固的烟尘与倒塌的厂房。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1318,8 +1230,11 @@ pictures:
 
       Subject (场景): 吉姆的幼年·怀里的狮子玩偶：低矮的视角，怀里抱着一个棕褐色的狮子毛绒玩偶；深蓝色窗帘遮住整扇窗，月光透进来，把小卧室照成幽暗的蓝。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1345,8 +1260,11 @@ pictures:
 
       Subject (场景): 造梦机车厢·造梦机：一台蒸汽时代风格的机械：中央古旧的二色曲面显示器，下方两个喇叭和一个投币口，右侧一根带圆球的扳手，上方窄缝伸出一条很长的纸带，左侧挂着一副望远镜似的笨重眼镜。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1363,8 +1281,11 @@ pictures:
 
       Subject (场景): 造梦机车厢·箩筐里的胶囊：机器旁的箩筐里堆着卷起的空白纸带和一个个圆形透明小盒，每个小盒上贴着手写标签。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1381,8 +1302,11 @@ pictures:
 
       Subject (场景): 国王的车厢·纸做的长桌与卷心菜：空阔的车厢里一张纸做的长桌，手绘图案让它像一张台球桌；正中坐着一个由纸页构成的卷心菜模样的生物，戴着金黄纸冠；地上满是玩具和画着毛线球、屎壳郎的纸团，四壁是水粉画。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1399,8 +1323,11 @@ pictures:
 
       Subject (场景): 彼岸·奥克兰·天上的喇叭电灯：浸没在湖水下的城市，天空中漂浮着一盏盏插满铜质喇叭的电灯，维多利亚式铁制电车悬浮着驶过雕满浮雕的摩天大楼，水面之上悬着两轮月亮。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1417,8 +1344,11 @@ pictures:
 
       Subject (场景): 彼岸·特工的家·收拾中的行李：温馨明亮的家中，客厅地上摊开几只行李箱，衣物叠了一半，像一家人正准备出远门。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1435,8 +1365,11 @@ pictures:
 
       Subject (场景): 彼岸·摩天大楼·楼顶俯瞰：最高摩天大楼的楼顶，人们举杯交谈；俯瞰之下整座水下城市上空覆盖着一个巨大的黄色印记，巨型飞行器和水生生物在头顶漂浮，两轮月亮悬在水面上。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1453,8 +1386,11 @@ pictures:
 
       Subject (场景): 彼岸·鲸鱼堡垒·鲸鱼堡垒的嘴：一座巨大的鲸鱼堡垒，窗户是一只只鲸鱼的眼睛，门廊是一张张开的嘴，嘴里是湿滑粘腻的细胞墙；一条铁轨穿过鲸尾，一直连到天际。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1471,8 +1407,11 @@ pictures:
 
       Subject (场景): 彼岸·光辉的站台·大门旁的小木桌：富丽堂皇的车站大门旁，一张小木桌和一条凳子，凳子上坐着一位穿袖口磨损红袍、双手杵着拐杖的瘦老人，桌上摆着一台复古的蒸汽装置。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1489,8 +1428,11 @@ pictures:
 
       Subject (场景): 彼岸·光辉的站台·站台上的列车：明亮的站台上停着一列维多利亚式火车，铁轨连到天际线，卖报纸和饮料的机械玩偶在人潮中游走，站台上找不到时刻表。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1507,8 +1449,11 @@ pictures:
 
       Subject (场景): 彼岸的边缘·镜子般的遮罩：深不见底的海底沟壑对面，立着一道由许多面镜子组成的遮罩，一条铁轨穿过它通向看不见的尽头。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1525,8 +1470,11 @@ pictures:
 
       Subject (场景): 彼岸的边缘·埋在地下的铜管：地面上埋着一排排铜管乐器，喇叭口朝上露出地面连成边界线；远处数百名灰袍戴面具的人围成圆圈。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1543,8 +1491,11 @@ pictures:
 
       Subject (场景): 二楼卧室·床头的电子钟：黑暗卧室的床头柜上，一只电子钟亮着红色数字，旁边是台灯和一杯水，床上有人平稳地睡着。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1561,8 +1512,11 @@ pictures:
 
       Subject (场景): 书房·书房的工作电脑：小书房书桌上一台工作电脑，显示器亮着浏览器窗口，旁边是笔记本、笔和一杯冷掉的咖啡。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1579,8 +1533,11 @@ pictures:
 
       Subject (场景): 卫生间·洗手台与镜子：狭小卫生间的洗手台上方一面斑驳的镜子，水龙头滴着水，隔墙传来闷闷的鼓声。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1597,8 +1554,11 @@ pictures:
 
       Subject (场景): 二楼主卧·积灰的床：主卧的床上被套掀开着，上面盖着一层厚灰，墙上有几道黑色或绿色的划痕。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1684,7 +1644,8 @@ pictures:
     height: 4220
     kind: item
   item-walkman:
-    title: File:Sony Walkman WM-FX151 Personal Cassette Tape Portable Stereo Radio FM AM Tuner.jpg
+    title: File:Sony Walkman WM-FX151 Personal Cassette Tape Portable Stereo Radio
+      FM AM Tuner.jpg
     page: https://commons.wikimedia.org/wiki/File:Sony_Walkman_WM-FX151_Personal_Cassette_Tape_Portable_Stereo_Radio_FM_AM_Tuner.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d7/Sony_Walkman_WM-FX151_Personal_Cassette_Tape_Portable_Stereo_Radio_FM_AM_Tuner.jpg/500px-Sony_Walkman_WM-FX151_Personal_Cassette_Tape_Portable_Stereo_Radio_FM_AM_Tuner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY-SA 4.0
@@ -1693,11 +1654,13 @@ pictures:
     height: 2073
     kind: item
   item-king_in_yellow:
-    title: File:Trivulzio book of hours - KW SMC 1 - Back side of red morocco leather binding from the 18th century with gilt stamped.jpg
+    title: File:Trivulzio book of hours - KW SMC 1 - Back side of red morocco leather
+      binding from the 18th century with gilt stamped.jpg
     page: https://commons.wikimedia.org/wiki/File:Trivulzio_book_of_hours_-_KW_SMC_1_-_Back_side_of_red_morocco_leather_binding_from_the_18th_century_with_gilt_stamped.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/Trivulzio_book_of_hours_-_KW_SMC_1_-_Back_side_of_red_morocco_leather_binding_from_the_18th_century_with_gilt_stamped.jpg/500px-Trivulzio_book_of_hours_-_KW_SMC_1_-_Back_side_of_red_morocco_leather_binding_from_the_18th_century_with_gilt_stamped.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: Public domain
-    artist: Vienna Master of Mary of Burgundy / Lieven van Lathem / Nicolas Spierinc / Simon Marmion
+    artist: Vienna Master of Mary of Burgundy / Lieven van Lathem / Nicolas Spierinc
+      / Simon Marmion
     width: 2255
     height: 3160
     kind: item
@@ -1732,9 +1695,11 @@ pictures:
 
       Show it after this change: 门廊外的路边停着一辆熄了引擎和车灯的深色轿车
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
-      title: File:Living room in apartment of Condomínio do Edifício Zaher, Le Blond, Rio de Janeiro, Brazil.jpg
+      title: File:Living room in apartment of Condomínio do Edifício Zaher, Le Blond,
+        Rio de Janeiro, Brazil.jpg
       page: https://commons.wikimedia.org/wiki/File:Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher,_Le_Blond,_Rio_de_Janeiro,_Brazil.jpg
       thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg/500px-Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
       license: CC0
@@ -1757,7 +1722,8 @@ pictures:
 
       Show it after this change: 那摞书里多出一本棉线装订的正方形手绘小画册，封面是黑色涂鸦字体，书页边缘露出狂躁的批注。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: adamson_book_stack
       page: ''
@@ -1771,8 +1737,11 @@ pictures:
 
         Subject (场景): 亚当森的住所·桌上的一摞书：昏暗屋里的桌面上摞着几本书，最上面是一本小说集和一本纸牌魔术书的第二卷，桌面有擦拭过的痕迹，四周空气潮闷。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1791,7 +1760,8 @@ pictures:
 
       Show it after this change: 打印纸旁边多了一张崭新精致的米色卡片，印着花卉卷草纹、一行网址和花体英文，结尾印着一个黑色的符号。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: adamson_desk_notes
       page: ''
@@ -1805,8 +1775,11 @@ pictures:
 
         Subject (场景): 亚当森的卧室·书桌上的两张纸：凌乱的书桌上压着一张皱巴巴的打印纸，上面是工整的手写乱码；旁边一支笔尖歪掉的钢笔躺在四散的墨水里，桌角堆着发臭的快餐盒。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1825,7 +1798,8 @@ pictures:
 
       Show it after this change: 拉开的抽屉里露出一沓照片，其中几张是夜里隔着窗户远远偷拍的、噪点很重，一张角落拍到了一块路牌。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: peter_empty_desk
       page: ''
@@ -1839,8 +1813,11 @@ pictures:
 
         Subject (场景): 皮特的办公室·空荡的办公桌：办公桌上空空荡荡，只剩显示器底座留下的印子和一截空的电源线，抽屉合着。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1859,7 +1836,8 @@ pictures:
 
       Show it after this change: 广场上挤满散步休闲的行人，几处空地上有小型歌舞演出，四块大屏都在转播现场表演
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: File:GoshenIN Downtown Main & Washngton.jpg
       page: https://commons.wikimedia.org/wiki/File:GoshenIN_Downtown_Main_%26_Washngton.jpg
@@ -1884,7 +1862,8 @@ pictures:
 
       Show it after this change: 控制电脑屏幕亮着，开了好几个代码窗口，机柜门敞开，桌上摊着一只打开的工具包
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: plaza_control
       page: ''
@@ -1898,8 +1877,11 @@ pictures:
 
         Subject (场景): 中控室：一间上锁的小房间，一台电脑控制着广场四块大屏，机柜的指示灯一闪一闪。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1918,7 +1900,8 @@ pictures:
 
       Show it after this change: 玻璃积灰上一些被擦去的痕迹连在一起，组成一个图案。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: simpton_dusty_door
       page: ''
@@ -1932,8 +1915,11 @@ pictures:
 
         Subject (场景): 辛普敦大厦·负一楼积灰的玻璃门：通往地下一层的台阶下面，一间像是正在转让的老玩具店，装潢俗套过时，临街玻璃门积着厚厚的灰，透过玻璃看进去空无一人。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1952,7 +1938,8 @@ pictures:
 
       Show it after this change: 夜里客人多了，舞池里有人踩着同一种节奏起舞，桌上摆满酒杯，紫绿灯光显得更亮
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: File:Bar in Bristol.jpg
       page: https://commons.wikimedia.org/wiki/File:Bar_in_Bristol.jpg
@@ -1977,7 +1964,8 @@ pictures:
 
       Show it after this change: 杂物里露出一台摄像机，一根藏起来的数据线顺着墙通到一幅装饰画后面。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: bar_corner_junk
       page: ''
@@ -1991,8 +1979,11 @@ pictures:
 
         Subject (场景): 凌晨十二点闹钟酒吧·角落的杂物堆：酒吧角落堆着旧纸箱、折叠椅和缠成一团的电线，上面落了灰。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -2011,7 +2002,8 @@ pictures:
 
       Show it after this change: 架子后面藏着一台手提电脑，接着一根数据线和一根网线。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: cellar_shelves
       page: ''
@@ -2025,8 +2017,11 @@ pictures:
 
         Subject (场景): 酒吧地窖·地窖两侧的架子：窄长的地窖，中间两人宽的通道，两侧架子上摆满瓶瓶罐罐和酒箱，临街墙高处一个窄小的通风口透进街上的声音和光。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -2045,7 +2040,8 @@ pictures:
 
       Show it after this change: 紧闭的窗帘后面亮起了灯，几扇窗透出昏黄的光
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: greenwood_mansion
       page: ''
@@ -2059,8 +2055,11 @@ pictures:
 
         Subject (场景): 格林伍德宅邸：奥克兰东南部的罗伯勒多大道，紧邻一条穿过市中心的铁道。一栋三层楼的宅子，带独立车库和不太大的庭前花园。花园里不对称地立着两座大理石喷泉，杂草歪倒；米白的墙面喷了漆，正面门廊和对着花园的窗户雕花复杂，却久未打理。门窗紧闭，窗帘拉得死死的。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -2079,9 +2078,11 @@ pictures:
 
       Show it after this change: 娱乐室灯火通明，门把手上的鞭子不见了，台球桌上散着绑带和金属器具，桌面的血迹还是湿的
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
-      title: File:Snooker Room, Effingham Golf Club, Effingham, Surrey - September 2025 - 02.jpg
+      title: File:Snooker Room, Effingham Golf Club, Effingham, Surrey - September
+        2025 - 02.jpg
       page: https://commons.wikimedia.org/wiki/File:Snooker_Room,_Effingham_Golf_Club,_Effingham,_Surrey_-_September_2025_-_02.jpg
       thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Snooker_Room%2C_Effingham_Golf_Club%2C_Effingham%2C_Surrey_-_September_2025_-_02.jpg/500px-Snooker_Room%2C_Effingham_Golf_Club%2C_Effingham%2C_Surrey_-_September_2025_-_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
       license: CC0
@@ -2104,7 +2105,8 @@ pictures:
 
       Show it after this change: 血迹一组一组排开，每一组都构成同一个图案。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: playroom_billiard
       page: ''
@@ -2118,8 +2120,11 @@ pictures:
 
         Subject (场景): 宅邸娱乐室·斑驳的台球桌：标准大小的台球桌，绿色台呢上布满斑驳的褐色血迹，有些还很新鲜，几把靠椅围在旁边。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -2138,7 +2143,8 @@ pictures:
 
       Show it after this change: 公园中心的旧大门前，人群围成一个大圈，圈外架着一台亮着红灯的直播摄像机
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: File:The fountain at Waterfront Park, in Charleston, SC.jpg
       page: https://commons.wikimedia.org/wiki/File:The_fountain_at_Waterfront_Park,_in_Charleston,_SC.jpg
@@ -2163,7 +2169,8 @@ pictures:
 
       Show it after this change: 大门旁的小木桌上摆着一台吐着长纸带的蒸汽时代机械，凳子边靠着一根拐杖
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: other_station
       page: ''
@@ -2177,15 +2184,19 @@ pictures:
 
         Subject (场景): 彼岸·光辉的站台：闹钟酒吧的位置上是一座富丽堂皇的车站，宽阔明亮的大门里人潮涌动，卖报纸和饮料的机械玩偶在人群中游走。铁轨一直连到天际线，一列火车停在站台上。站台上没有时刻表。大门旁摆着一张小木桌和一条凳子。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
     width: 1024
     height: 683
   nora:
-    title: File:Woman working at a desk in an office looking concerned while checking the computer screen.jpg
+    title: File:Woman working at a desk in an office looking concerned while checking
+      the computer screen.jpg
     page: https://commons.wikimedia.org/wiki/File:Woman_working_at_a_desk_in_an_office_looking_concerned_while_checking_the_computer_screen.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Woman_working_at_a_desk_in_an_office_looking_concerned_while_checking_the_computer_screen.jpg/500px-Woman_working_at_a_desk_in_an_office_looking_concerned_while_checking_the_computer_screen.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY 2.0
@@ -2206,8 +2217,11 @@ pictures:
 
       Subject (物件特写): 《瓦普内克剧院》：一本用棉线装订的正方形手绘小画册，封面是黑色涂鸦字体，书页上满是狂躁的批注和修改。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -2224,8 +2238,11 @@ pictures:
 
       Subject (物件特写): 酒吧的摄像机：藏在角落杂物里的一台摄像机，目前不工作，一根藏起来的数据线通往墙上的装饰画后面。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -2247,13 +2264,18 @@ pictures:
     kind: creature
     prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
 
-      This one creature seen from the front, head and upper body filling the frame, facing the viewer as if about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of
-      it falls away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4).
+      This one creature seen from the front, head and upper body filling the frame,
+      facing the viewer as if about to lunge; lit from below by a dim sickly light,
+      its eyes catching the light; the rest of it falls away into darkness against
+      a pure black background, with nothing else in the picture (portrait, about 3:4).
 
       Subject (怪物): 戴金纸王冠的卷心菜：卷心菜模样的生物，身体是一页一页的纸片，底部四根菜叶状触须构成四肢，戴着金黄的纸质王冠。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 768
     height: 1024
@@ -2266,13 +2288,18 @@ pictures:
     kind: creature
     prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
 
-      This one creature seen from the front, head and upper body filling the frame, facing the viewer as if about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of
-      it falls away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4).
+      This one creature seen from the front, head and upper body filling the frame,
+      facing the viewer as if about to lunge; lit from below by a dim sickly light,
+      its eyes catching the light; the rest of it falls away into darkness against
+      a pure black background, with nothing else in the picture (portrait, about 3:4).
 
       Subject (怪物): 头部是一团黑线的赤裸男人：体型类似吉姆的赤裸男性，头部是一大团球形、无规则振动的黑线。黄衣之王概念的一角，在被腐蚀的空间里拥有实体和改变空间的绝对权限，之外依附于吉姆。未被黄衣之王腐蚀的人看不见他。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 768
     height: 1024
@@ -2289,7 +2316,8 @@ pictures:
 
       Show it after this change: 墙上多了一张海报：海底火车的横截面，轨道挂着海带和贝类在水里飘动，远处有鲸鱼的阴影，两个戴灰色方盒的赤裸身体缠绕着站在车厢小桌上，角落标着日期。
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: bar_wall_paintings
       page: ''
@@ -2303,8 +2331,11 @@ pictures:
 
         Subject (场景): 凌晨十二点闹钟酒吧·墙上的装饰画：光滑的水泥墙上不规律地挂着几幅笔触粗粝的油画肖像，墙脚贴着蓝黑相间的瓷砖，高处镶着各色金属块。
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683

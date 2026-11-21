@@ -1,49 +1,7 @@
 pictures:
-  cover:
-    source: source/images/p01_image01.png
-    original: true
-    purpose: reference
-  town_map:
-    source: source/images/p07_image01.png
-    original: true
-    purpose: document
-  ruan_home:
-    source: source/images/p08_image01.png
-    original: true
-    purpose: reference
-  huang_yi:
-    source: source/images/p09_image01.png
-    original: true
-    purpose: reference
-  yang_zongxi:
-    source: source/images/p11_image01.png
-    original: true
-    purpose: reference
-  night_market:
-    source: source/images/p12_image01.png
-    original: true
-    purpose: reference
-  abao:
-    source: source/images/p13_image01.png
-    original: true
-    purpose: reference
-  shipowei:
-    source: source/images/p20_image02.png
-    original: true
-    purpose: reference
-  newspaper:
-    source: source/original.pdf
-    page: 20
-    region:
-    - 0
-    - 0
-    - 1
-    - 1
-    dpi: 300
-    purpose: document
-    original: true
   ocean_park:
-    title: File:AMUSEMENT PARK AT PRIPYAT NEAR THE CHERNOBYL PLANT NOW ABANDONED UKRAINE SEP 2013 (10070220843).jpg
+    title: File:AMUSEMENT PARK AT PRIPYAT NEAR THE CHERNOBYL PLANT NOW ABANDONED UKRAINE
+      SEP 2013 (10070220843).jpg
     page: https://commons.wikimedia.org/wiki/File:AMUSEMENT_PARK_AT_PRIPYAT_NEAR_THE_CHERNOBYL_PLANT_NOW_ABANDONED_UKRAINE_SEP_2013_(10070220843).jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/AMUSEMENT_PARK_AT_PRIPYAT_NEAR_THE_CHERNOBYL_PLANT_NOW_ABANDONED_UKRAINE_SEP_2013_%2810070220843%29.jpg/500px-AMUSEMENT_PARK_AT_PRIPYAT_NEAR_THE_CHERNOBYL_PLANT_NOW_ABANDONED_UKRAINE_SEP_2013_%2810070220843%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY-SA 2.0
@@ -103,14 +61,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 老张的看守室：工地边上一间简陋的看守室，屋里堆着几袋水泥和沙袋，墙角放着看门人的杂物。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -121,14 +83,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 废弃的海洋乐园·侧门下的泥地和缺口：锈迹斑斑的铁皮侧门底部有一处豁开的缺口，只够孩子弯腰爬过；门外是一片晒得半干的泥地，杂草稀疏，远处是被封锁的入园口
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -139,14 +105,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 废弃的海洋乐园·乐园的井盖：水泥地上一块圆形铸铁井盖，四周有海水漫过后留下的白色盐渍和水痕，几条死鱼翻着白肚躺在井盖边上
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -157,14 +127,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 废弃的海洋乐园·旋转木马平台：爬满藤蔓的旋转木马平台，彩漆褪成斑驳难辨的颜色，木马和顶棚积着灰；旁边一张还算完好的长椅，午后强光照得一切发白
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -175,14 +149,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 废弃的海洋乐园·售票亭和海洋塑像：售票亭窗玻璃上贴着一张边角卷起、被雨泡烂的价目表，只认得出“成人”“儿童”几个字；亭子旁立着褪色斑驳的海豚、八爪鱼、海豹和一只黄色小海马塑像
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -193,14 +171,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 阮施宁的家·开了一条缝的家门：窄巷里一栋二层自建房的门只开了一条缝，一个高得几乎占满门框的女人一只手扶着门框，身体把门后挡得严严实实，屋里光线昏暗，看不清里面
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -211,14 +193,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 阮施宁的家·幸运石石椅和剥豆的阿婆：贴得很近的两面老墙，灰水泥剥落露出砖石；墙根一张写着“幸运石”三个字的石头椅子，旁边几个阿婆坐在矮凳上，膝上铁盆里堆着剥好的绿豆粒
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -229,14 +215,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 阮施宁的家·门前的排水沟：门前一条窄窄的露天排水沟，水泥沟沿发黑长着青苔，沟里一层浑浊的积水
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -247,14 +237,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 黄懿的家·墙上的戏服和蝴蝶盔：墙上平直展开一件高甲戏戏服，背后四面靠旗，金银彩线绣着鱼鳞纹，腹部一块双凤牡丹圆形绣片，飘带和战裙垂下；旁边摆着一顶华丽的蝴蝶盔
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -265,14 +259,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 黄懿的家·塞满旧书的书柜：一个塞得满满的书柜，多是古白话小说和武侠小说，不少封面年久字迹模糊，书脊发黄卷边
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -283,14 +281,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 黄懿的家·阮施宁的日记本：一本硬质塑料封皮的密码日记本，右侧固定着一排 8 个按钮和一个中央解锁键，本子合着锁住
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -301,14 +303,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 少儿图书馆·少儿书架：一排少儿书架，《冒险小虎队》《鸡皮疙瘩》《皮皮鲁历险记》封面破破烂烂，《丁丁历险记》书脊裂了口子，最边上斜靠着练习卷和古诗本
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -319,14 +325,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 少儿图书馆·报刊架上的晚报：阅览处的报刊架上夹着当天的《石头屿晚报》，头版标题写着石坡尾清淤发现老旧闸门渗漏，版面角落有天气栏和潮汐表
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -337,14 +347,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 少儿图书馆·借阅台：借阅台上摞着几册待还的书，一枚日期戳和印泥盒放在一旁，台后的管理员正低头盖戳
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -355,14 +369,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 音乐广场·圆形喷泉和水池：下沉式广场中央的圆形喷泉，水从雕塑底部涌出，沿石坡逐级流下汇入环形水池，池沿可以坐人，水面在阳光下晃动
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -373,14 +391,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 音乐广场·弹唱的流浪汉和琴盒：喷泉边一个衣服很脏的流浪汉抱着吉他弹唱，面前打开的琴盒里散着几张皱巴巴的纸币和硬币
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -391,14 +413,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 夜市·塑料玩具摊：灯下一个塑料玩具摊，柜台上堆满花花绿绿的塑料玩具，比孩子的视线还高，女摊主正大声招呼
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -409,14 +435,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 夜市·虾饼和海蛎饼摊：滚烫的油锅里沉着铁勺，裹着米浆的虾饼和海蛎饼滋啦膨胀、翻滚，摊主守在锅边，灯泡下油烟升腾
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -427,14 +457,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 夜市·扁食拌面摊前的队伍：扁食拌面摊前挤着排队的大人，从孩子的高度看去，只见一排垂在眼前的手和衣摆，后面热气腾腾
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -445,14 +479,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 夜市·春卷摊：春卷摊上摊着薄饼皮，盆里是炒好的薄饼菜、炸海苔和碎花生贡糖，摊主站在灯箱招牌下
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -463,14 +501,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 石坡尾·北侧石台阶：一条石砌台阶直通坞底，台阶上堆着木板、管子和一箱机器零件，占去大半路面，只剩侧身能过的缝
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -481,14 +523,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 石坡尾·东岸坍塌的驳岸：坞区东岸一段塌掉的驳岸，形成约四米高的缺口，碎石块乱堆，下方是黑色的淤泥
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -499,14 +545,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 石坡尾·箱涵入口的围挡：警戒线后，退潮露出的整片黑色淤泥泛着水光，坞壁边一处排洪箱涵入口被临时围挡遮住，远处浅水洼连成一片
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -517,14 +567,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 石坡尾·散落的撬棍和钢筋：工地泥地上横七竖八散着几根撬棍和钢筋，沾着干泥
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -535,14 +589,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 排水通道·长满贝壳的石壁：手电光里一段粗糙的石砌墙壁，石缝里密密长满白色贝壳和硬化的海洋生物残骸，墙上没有任何编号或检修标记
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -553,14 +611,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 排水通道·低矮的弯道和积水：通道顶突然压低，拐进一处低矮的弯道，地上一片平静的黑色积水，手电光照不到尽头
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -571,14 +633,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 闸门口·旧闸门：黑暗里横着一道锈蚀的旧闸门，闸板歪斜，周围石壁湿漉漉的，海腥味很重
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -589,14 +655,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 闸门口·她坐过的地方：闸门前一块湿漉漉的石台，地面积着薄薄一层海水
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -607,14 +677,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 有电脑的伙伴家·书桌上的台式电脑：书桌上一台老旧的台式机，显示器上是 Windows XP 蓝天草地桌面，排着黄金矿工、泡泡堂、拳皇、闪翼双星的图标，旁边电风扇在转
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -625,14 +699,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 老张的看守室·堆着的水泥袋和沙袋：简陋看守室的墙边堆着几袋水泥和沙袋，旁边是看门人的杂物，窗口朝着工地
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -652,14 +730,19 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 高得几乎占满门框，垂着眼帘，一只手扶着门框边缘，目光落在孩子们头顶上方
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -670,14 +753,19 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 站在屋内，光线从身后照来，脸上的细节看不清
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -688,19 +776,25 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 坐在矮凳上，膝上放着铁盆，手指熟练地掰开绿色豆壳
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
   huang_grandma:
-    title: File:Colorful, reading, restaurant, wall picture, portrait, man, glasses, meal, plate, glass, loaf of bread, ashtray, interior, furniture Fortepan 732.jpg
+    title: File:Colorful, reading, restaurant, wall picture, portrait, man, glasses,
+      meal, plate, glass, loaf of bread, ashtray, interior, furniture Fortepan 732.jpg
     page: https://commons.wikimedia.org/wiki/File:Colorful,_reading,_restaurant,_wall_picture,_portrait,_man,_glasses,_meal,_plate,_glass,_loaf_of_bread,_ashtray,_interior,_furniture_Fortepan_732.jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b3/Colorful%2C_reading%2C_restaurant%2C_wall_picture%2C_portrait%2C_man%2C_glasses%2C_meal%2C_plate%2C_glass%2C_loaf_of_bread%2C_ashtray%2C_interior%2C_furniture_Fortepan_732.jpg/500px-Colorful%2C_reading%2C_restaurant%2C_wall_picture%2C_portrait%2C_man%2C_glasses%2C_meal%2C_plate%2C_glass%2C_loaf_of_bread%2C_ashtray%2C_interior%2C_furniture_Fortepan_732.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY-SA 3.0
@@ -715,14 +809,19 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 低头给书盖日期戳
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -742,14 +841,19 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 呼吸有点急促，两只耳朵里塞着东西
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -760,14 +864,19 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 守着油锅，铁勺里裹着米浆的虾饼滋啦作响
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -778,14 +887,19 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
       Subject (人物头像): 脑门狭窄，鼻梁扁平，眼睛突出且长时间不眨，额头和下巴向后收缩
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -814,14 +928,20 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
-      Subject (人物头像): 林小舟，小学生（四年级），10 岁，家里有一台装 Windows XP 的旧台式机，伙伴们约好下午来他家玩电脑（AutoKeeper 补充）
+      Subject (人物头像): 林小舟，小学生（四年级），10 岁，家里有一台装 Windows XP 的旧台式机，伙伴们约好下午来他家玩电脑（AutoKeeper
+      补充）
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 936
@@ -832,26 +952,23 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.
+      A head-and-shoulders portrait of this one person, the face clearly visible and
+      lit, against a plain dark background.
 
-      Subject (人物头像): 陈蔓蔓，小学生（四年级），10 岁，图书馆借书证上的借阅记录比谁都长，周末常和阮施宁一起去少儿图书馆（AutoKeeper 补充）
+      Subject (人物头像): 陈蔓蔓，小学生（四年级），10 岁，图书馆借书证上的借阅记录比谁都长，周末常和阮施宁一起去少儿图书馆（AutoKeeper
+      补充）
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 964
-  item-diary:
-    title: A pink binder with a silver spiral binding and a purple password diary with a wh
-    page: https://i.ebayimg.com/images/g/-v8AAOSwhKdkH~mH/s-l1600.jpg
-    thumb: https://i.ebayimg.com/images/g/-v8AAOSwhKdkH~mH/s-l1600.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: item
   item-jianfu_shovel:
     title: item-jianfu_shovel
     page: ''
@@ -859,14 +976,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: item
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A close-up of this one object on a plain dark background.
 
       Subject (物件特写): 铁锹：一把旧铁锹
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -893,7 +1014,8 @@ pictures:
     page: https://commons.wikimedia.org/wiki/File:Swiss_Army_Flashlight_(6539291471).jpg
     thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/Swiss_Army_Flashlight_%286539291471%29.jpg/500px-Swiss_Army_Flashlight_%286539291471%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
     license: CC BY 2.0
-    artist: Kecko from Switzerland (Rheintal SG, the border valley between Switzerland and Austria)
+    artist: Kecko from Switzerland (Rheintal SG, the border valley between Switzerland
+      and Austria)
     width: 3830
     height: 2550
     kind: item
@@ -931,14 +1053,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 闸门口：侧身挤过那道狭窄的裂隙，身后的追赶声渐渐弱了下去。通道更深处，一道旧闸门横在黑暗里，海水的气味从它后面涌过来。闸门口坐着一个穿浅色短袖的小小身影。。现在：闸板的缝隙被推回轨道或用沙袋、水泥袋层层堵死，渗水停了
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -949,13 +1075,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: portrait
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 人物头像：阮施宁，穿着她自己的浅色短袖和裤子；头颅已变成湿润、苍白的鱼头，巨大的眼睛，宽阔的嘴里排着细密的尖齿
 
       Show it after this change: 闸门口空了，只剩几张湿透的卡片和一张纸条
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: File:Fresh fish heads.jpg
       page: https://commons.wikimedia.org/wiki/File:Fresh_fish_heads.jpg
@@ -974,13 +1102,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：废弃的海洋乐园·侧门下的泥地和缺口：锈迹斑斑的铁皮侧门底部有一处豁开的缺口，只够孩子弯腰爬过；门外是一片晒得半干的泥地，杂草稀疏，远处是被封锁的入园口
 
       Show it after this change: 泥地上多出两组痕迹：一串孩子的鞋印通向入口，另一道拖长的爬行痕迹从入口延伸出去，上面挂着半干的黏液
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: park_side_gate_mud
       page: ''
@@ -988,14 +1118,18 @@ pictures:
       license: AI 生成（Codex image_gen）
       artist: Codex image_gen
       kind: scene
-      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00
+        年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
         A wide landscape view of the place (about 3:2).
 
         Subject (场景): 废弃的海洋乐园·侧门下的泥地和缺口：锈迹斑斑的铁皮侧门底部有一处豁开的缺口，只够孩子弯腰爬过；门外是一片晒得半干的泥地，杂草稀疏，远处是被封锁的入园口
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1008,13 +1142,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：黄懿的家·阮施宁的日记本：一本硬质塑料封皮的密码日记本，右侧固定着一排 8 个按钮和一个中央解锁键，本子合着锁住
 
       Show it after this change: 日记本打开，一页画满几个孩子的简笔像写着“好朋友们！”，后面是人鱼、被大鱼围住的孩子、一条布满怪符号通向洞口的路的涂鸦
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: huang_diary
       page: ''
@@ -1022,14 +1158,18 @@ pictures:
       license: AI 生成（Codex image_gen）
       artist: Codex image_gen
       kind: scene
-      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00
+        年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
         A wide landscape view of the place (about 3:2).
 
         Subject (场景): 黄懿的家·阮施宁的日记本：一本硬质塑料封皮的密码日记本，右侧固定着一排 8 个按钮和一个中央解锁键，本子合着锁住
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1042,13 +1182,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：少儿图书馆·少儿书架：一排少儿书架，《冒险小虎队》《鸡皮疙瘩》《皮皮鲁历险记》封面破破烂烂，《丁丁历险记》书脊裂了口子，最边上斜靠着练习卷和古诗本
 
       Show it after this change: 书架间多出几本崭新的深海绘本，封面是深蓝靛紫的海和一群圆滚滚、大眼睛的鱼形小生物
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: library_bookshelf
       page: ''
@@ -1056,14 +1198,18 @@ pictures:
       license: AI 生成（Codex image_gen）
       artist: Codex image_gen
       kind: scene
-      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00
+        年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
         A wide landscape view of the place (about 3:2).
 
         Subject (场景): 少儿图书馆·少儿书架：一排少儿书架，《冒险小虎队》《鸡皮疙瘩》《皮皮鲁历险记》封面破破烂烂，《丁丁历险记》书脊裂了口子，最边上斜靠着练习卷和古诗本
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1076,13 +1222,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：音乐广场：音乐广场是一个下沉式广场，中央设有圆形喷泉，水流从中心雕塑底部涌出，沿石质坡面逐级流下，最终汇入底部的环形水池，水池边缘可供人坐下休息。喷泉边有个流浪汉在弹唱，面前打开的琴盒里散落着几张皱巴巴的纸币和硬币。广场北侧台阶上方站着一位挎着相机的青年女子，手里攥着一本卷了边的笔记本，正低头翻看。
 
       Show it after this change: 喷泉水池边坐着几个一动不动的人，都把手伸进水里
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: File:Chase Tower, Chicago, Illinois (9179416045).jpg
       page: https://commons.wikimedia.org/wiki/File:Chase_Tower,_Chicago,_Illinois_(9179416045).jpg
@@ -1101,13 +1249,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：夜市·塑料玩具摊：灯下一个塑料玩具摊，柜台上堆满花花绿绿的塑料玩具，比孩子的视线还高，女摊主正大声招呼
 
       Show it after this change: 摊主两只耳朵里塞满混浊的粘稠物，正沿着耳廓慢慢往下滑
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: market_toy_stall
       page: ''
@@ -1115,14 +1265,18 @@ pictures:
       license: AI 生成（Codex image_gen）
       artist: Codex image_gen
       kind: scene
-      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00
+        年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
         A wide landscape view of the place (about 3:2).
 
         Subject (场景): 夜市·塑料玩具摊：灯下一个塑料玩具摊，柜台上堆满花花绿绿的塑料玩具，比孩子的视线还高，女摊主正大声招呼
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1135,13 +1289,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：夜市·扁食拌面摊前的队伍：扁食拌面摊前挤着排队的大人，从孩子的高度看去，只见一排垂在眼前的手和衣摆，后面热气腾腾
 
       Show it after this change: 前面一个大人张开手掌，手指之间连着一层蹼状的皮
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: market_noodle_queue
       page: ''
@@ -1149,39 +1305,23 @@ pictures:
       license: AI 生成（Codex image_gen）
       artist: Codex image_gen
       kind: scene
-      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00
+        年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
         A wide landscape view of the place (about 3:2).
 
         Subject (场景): 夜市·扁食拌面摊前的队伍：扁食拌面摊前挤着排队的大人，从孩子的高度看去，只见一排垂在眼前的手和衣摆，后面热气腾腾
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
     width: 1024
     height: 683
-  shipowei_at_chen_gong_shipowei_hour_8_18:
-    title: 石坡尾（坞底淤泥里有几个戴安全帽的工人在施工，挖掘机械伸着长臂在泥里作业）
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
-
-      Edit the attached picture of 场景：石坡尾：石坡尾旁的街道只剩下几家老旧的杂货铺和理发店还在营业。整个坞底的黑色淤泥随着潮水退去彻底暴露在空气里，散发着浓烈的海腥与腐臭味。工地外围拉起了警戒线，施工区域内部，排洪箱涵的入口处被临时围挡遮掩起来。工地边缘独自站着一位上了年纪、皮肤黝黑的渔民。
-
-      Show it after this change: 坞底淤泥里有几个戴安全帽的工人在施工，挖掘机械伸着长臂在泥里作业
-
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
-    based_on:
-      source: source/images/p20_image02.png
-      original: true
-      purpose: reference
-    width: 1024
-    height: 969
   gate_old_sluice_knows_players_clue_c_gate_gap:
     title: 闸门口（看清闸板一侧还卡在轨道里，另一侧滑脱，留出一道仅容一人的缝隙，海水正从缝里渗进来）
     page: ''
@@ -1189,13 +1329,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：闸门口·旧闸门：黑暗里横着一道锈蚀的旧闸门，闸板歪斜，周围石壁湿漉漉的，海腥味很重
 
       Show it after this change: 看清闸板一侧还卡在轨道里，另一侧滑脱，留出一道仅容一人的缝隙，海水正从缝里渗进来
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: gate_old_sluice
       page: ''
@@ -1203,14 +1345,18 @@ pictures:
       license: AI 生成（Codex image_gen）
       artist: Codex image_gen
       kind: scene
-      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00
+        年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
         A wide landscape view of the place (about 3:2).
 
         Subject (场景): 闸门口·旧闸门：黑暗里横着一道锈蚀的旧闸门，闸板歪斜，周围石壁湿漉漉的，海腥味很重
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1223,13 +1369,15 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       Edit the attached picture of 场景：闸门口·她坐过的地方：闸门前一块湿漉漉的石台，地面积着薄薄一层海水
 
       Show it after this change: 石台上留着几张湿透的稀有小浣熊卡片，和一张字迹歪歪扭扭的纸条
 
-      Keep the same place or person, the composition, viewpoint, framing and style; change only what this calls for.'
+      Keep the same place or person, the composition, viewpoint, framing and style;
+      change only what this calls for.'
     based_on:
       title: gate_ruan_seat
       page: ''
@@ -1237,14 +1385,18 @@ pictures:
       license: AI 生成（Codex image_gen）
       artist: Codex image_gen
       kind: scene
-      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+      prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00
+        年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
         A wide landscape view of the place (about 3:2).
 
         Subject (场景): 闸门口·她坐过的地方：闸门前一块湿漉漉的石台，地面积着薄薄一层海水
 
-        Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-        an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+        Style: a realistic photograph of real places, people and things, natural detail;
+        everything in it belongs to that time, but the photograph itself may look
+        like a good modern one; never a painting, an illustration or a render; moody
+        light, clear shapes and strong contrast, so it still reads when shrunk to
+        a few dozen characters; nothing modern.'
       based_on: null
       width: 1024
       height: 683
@@ -1257,14 +1409,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 闸门口：侧身挤过那道狭窄的裂隙，身后的追赶声渐渐弱了下去。通道更深处，一道旧闸门横在黑暗里，海水的气味从它后面涌过来。闸门口坐着一个穿浅色短袖的小小身影。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1275,14 +1431,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A wide landscape view of the place (about 3:2).
 
       Subject (场景): 黄懿的家·摇椅和关着的窗：一张旧藤摇椅上坐着一位戴老花镜读书的老人，额头狭窄，眼睛有些奇特、向外突出；身旁小桌上摆着几碗冰粉、仙草冻，还有切好的西瓜、菠萝和阿达子；摇椅旁那扇朝海那边的窗关得死死的，插销插着，窗缝里塞着布条
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1293,14 +1453,18 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: item
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
       A close-up of this one object on a plain dark background.
 
       Subject (物件特写): 湿透的稀有小浣熊卡片：几张湿透了的稀有小浣熊卡片
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 683
@@ -1311,15 +1475,21 @@ pictures:
     license: AI 生成（Codex image_gen）
     artist: Codex image_gen
     kind: creature
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与 10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
+    prompt: 'A picture for a Call of Cthulhu horror game set in 2009 年夏（原作融合 00 年代与
+      10 年代的时代风貌），中国闽南沿海小城石头屿（原型为福建厦门），老城区、夜市与正在清淤的避风坞石坡尾.
 
-      This one creature seen from the front, head and upper body filling the frame, facing the viewer as if about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of
-      it falls away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4).
+      This one creature seen from the front, head and upper body filling the frame,
+      facing the viewer as if about to lunge; lit from below by a dim sickly light,
+      its eyes catching the light; the rest of it falls away into darkness against
+      a pure black background, with nothing else in the picture (portrait, about 3:4).
 
       Subject (怪物): 积水里扑腾的湿滑东西：4 个正在巡查排水通道的深潜者。鱼类般的头部，硕大的眼球向外突出，几乎无法完全闭合；湿润的皮肤覆着黏液，脖颈两侧的鳃不断开合；指间连着半透明的肉蹼，末端是长而弯曲的指爪，既能在水中移动，也能抓住湿滑的石壁攀爬。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 768
     height: 1024

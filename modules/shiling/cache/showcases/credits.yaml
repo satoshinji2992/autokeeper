@@ -8,52 +8,24 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 2008 年的卧室，床头电子钟显示
-      00:00，窗外夜色，楼下门口一线灯光。
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 2008 年的卧室，床头电子钟显示 00:00，窗外夜色，楼下门口一线灯光。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
-      title: File:Living room in apartment of Condomínio do Edifício Zaher, Le Blond, Rio de Janeiro, Brazil.jpg
+      title: File:Living room in apartment of Condomínio do Edifício Zaher, Le Blond,
+        Rio de Janeiro, Brazil.jpg
       page: https://commons.wikimedia.org/wiki/File:Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher,_Le_Blond,_Rio_de_Janeiro,_Brazil.jpg
       thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg/500px-Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
       license: CC0
       artist: Wilfredor
       width: 8256
       height: 4492
-      kind: scene
-    width: 1024
-    height: 576
-  sc_theatre-e55e35cc.photo:
-    title: A narrow hallway with rich wooden paneling, vintage lighting fixtures, patterned
-    page: https://c8.alamy.com/comp/2BW2X73/the-narrow-corridor-on-one-of-stalins-train-carriages-on-display-at-the-stalin-museum-gori-georgia-2BW2X73.jpg
-    thumb: https://c8.alamy.com/comp/2BW2X73/the-narrow-corridor-on-one-of-stalins-train-carriages-on-display-at-the-stalin-museum-gori-georgia-2BW2X73.jpg
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_theatre-e55e35cc:
-    title: 湖底的列车
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 维多利亚式豪华列车的走廊，红白地毯，窗外是幽暗的液体与漂动的蒸汽，车灯昏黄。
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: A narrow hallway with rich wooden paneling, vintage lighting fixtures, patterned
-      page: https://c8.alamy.com/comp/2BW2X73/the-narrow-corridor-on-one-of-stalins-train-carriages-on-display-at-the-stalin-museum-gori-georgia-2BW2X73.jpg
-      thumb: https://c8.alamy.com/comp/2BW2X73/the-narrow-corridor-on-one-of-stalins-train-carriages-on-display-at-the-stalin-museum-gori-georgia-2BW2X73.jpg
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
       kind: scene
     width: 1024
     height: 576
@@ -75,10 +47,15 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 夜晚的海滨公园，巨型橡胶玩偶内亮着柔光，人群沉默地绕着中央一人转圈。
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 夜晚的海滨公园，巨型橡胶玩偶内亮着柔光，人群沉默地绕着中央一人转圈。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Amanda Parer, Fantastic Planet, 2017 (32326316084).jpg
       page: https://commons.wikimedia.org/wiki/File:Amanda_Parer,_Fantastic_Planet,_2017_(32326316084).jpg
@@ -87,39 +64,6 @@ pictures:
       artist: art_inthecity from Montréal, CA
       width: 3056
       height: 4576
-      kind: scene
-    width: 1024
-    height: 576
-  sc_end_shadow-608c3b5a.photo:
-    title: A person lies relaxed on a vast expanse of green grass, hands behind their head,
-    page: https://media.istockphoto.com/id/996157540/photo/relaxed-young-man-sleeping-on-grass.jpg?s=612x612&w=0&k=20&c=9WTyYPIvrU1JHNqawnKc71udX-MfCZ451MLfmfflwmA=
-    thumb: https://media.istockphoto.com/id/996157540/photo/relaxed-young-man-sleeping-on-grass.jpg?s=612x612&w=0&k=20&c=9WTyYPIvrU1JHNqawnKc71udX-MfCZ451MLfmfflwmA=
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_end_shadow-608c3b5a:
-    title: 寂静的公园
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 人群瘫倒在草坪上，铜管声仍在某处播放，远处警灯闪烁。
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: A person lies relaxed on a vast expanse of green grass, hands behind their head,
-      page: https://media.istockphoto.com/id/996157540/photo/relaxed-young-man-sleeping-on-grass.jpg?s=612x612&w=0&k=20&c=9WTyYPIvrU1JHNqawnKc71udX-MfCZ451MLfmfflwmA=
-      thumb: https://media.istockphoto.com/id/996157540/photo/relaxed-young-man-sleeping-on-grass.jpg?s=612x612&w=0&k=20&c=9WTyYPIvrU1JHNqawnKc71udX-MfCZ451MLfmfflwmA=
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
       kind: scene
     width: 1024
     height: 576
@@ -132,10 +76,14 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment: 白色烟雾弥漫公园，戴防毒面具的小队穿过倒下的人群。
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment: 白色烟雾弥漫公园，戴防毒面具的小队穿过倒下的人群。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on: null
     width: 1024
     height: 576
@@ -157,10 +105,15 @@ pictures:
     kind: scene
     prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
 
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 湖底的列车驶向远方若隐若现的巨大城堡，车窗里灯火温暖。
+      A big cinematic picture that fills a wide screen (about 16:9), the one image
+      of this moment, made from the attached picture: keep its place and its look,
+      and stage the moment in it: 湖底的列车驶向远方若隐若现的巨大城堡，车窗里灯火温暖。
 
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
+      Style: a realistic photograph of real places, people and things, natural detail;
+      everything in it belongs to that time, but the photograph itself may look like
+      a good modern one; never a painting, an illustration or a render; moody light,
+      clear shapes and strong contrast, so it still reads when shrunk to a few dozen
+      characters; nothing modern.'
     based_on:
       title: File:Night Train.jpg
       page: https://commons.wikimedia.org/wiki/File:Night_Train.jpg
@@ -169,39 +122,6 @@ pictures:
       artist: Tiraspolsky
       width: 1936
       height: 1288
-      kind: scene
-    width: 1024
-    height: 576
-  sc_end_remember-f14d4aea.photo:
-    title: 'A vast, empty lawn stretches beneath a bright sky, bordered by a neat hedge and '
-    page: https://media.istockphoto.com/id/1140583913/photo/empty-front-or-back-yard-with-copy-space.jpg?s=612x612&w=0&k=20&c=6Lo60dGFBVdSNO45FwcvbcB6Ud5BQqM9oV8tuveg9qo=
-    thumb: https://media.istockphoto.com/id/1140583913/photo/empty-front-or-back-yard-with-copy-space.jpg?s=612x612&w=0&k=20&c=6Lo60dGFBVdSNO45FwcvbcB6Ud5BQqM9oV8tuveg9qo=
-    license: 网页图片，版权归原作者，只在本机使用
-    artist: ''
-    width: 0
-    height: 0
-    kind: scene
-  sc_end_remember-f14d4aea:
-    title: 空无一物的草坪
-    page: ''
-    thumb: ''
-    license: AI 生成（Codex image_gen）
-    artist: Codex image_gen
-    kind: scene
-    prompt: 'A picture for a Call of Cthulhu horror game set in 2008 年（现代），美国加利福尼亚州奥克兰.
-
-      A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment, made from the attached picture: keep its place and its look, and stage the moment in it: 清晨空旷的草坪，没有设施也没有人，只有一个人独自站着。
-
-      Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to that time, but the photograph itself may look like a good modern one; never a painting,
-      an illustration or a render; moody light, clear shapes and strong contrast, so it still reads when shrunk to a few dozen characters; nothing modern.'
-    based_on:
-      title: 'A vast, empty lawn stretches beneath a bright sky, bordered by a neat hedge and '
-      page: https://media.istockphoto.com/id/1140583913/photo/empty-front-or-back-yard-with-copy-space.jpg?s=612x612&w=0&k=20&c=6Lo60dGFBVdSNO45FwcvbcB6Ud5BQqM9oV8tuveg9qo=
-      thumb: https://media.istockphoto.com/id/1140583913/photo/empty-front-or-back-yard-with-copy-space.jpg?s=612x612&w=0&k=20&c=6Lo60dGFBVdSNO45FwcvbcB6Ud5BQqM9oV8tuveg9qo=
-      license: 网页图片，版权归原作者，只在本机使用
-      artist: ''
-      width: 0
-      height: 0
       kind: scene
     width: 1024
     height: 576

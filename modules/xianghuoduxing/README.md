@@ -4,6 +4,8 @@
 
 ![《向火独行》封面](cover.webp)
 
+[封面来源](../../catalog/cover-credits.md#xianghuoduxing)
+
 《克苏鲁的呼唤》介绍性单人冒险
 
 | 规则 | 时代 | 人数 | 时长 |
@@ -138,7 +140,6 @@
 - [people.yaml](module/people.yaml)
 - [places.yaml](module/places.yaml)
 - [situation.yaml](module/situation.yaml)
-- [source](module/source)
 - [story.yaml](module/story.yaml)
 
 ## 游戏内安装

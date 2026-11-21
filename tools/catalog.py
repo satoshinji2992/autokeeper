@@ -46,6 +46,23 @@ def check_cover(folder: Path) -> None:
         cover.load()
 
 
+def check_art(folder: Path) -> None:
+    """Reject private import material and assets without public distribution permission."""
+    if (folder / "module" / "source").exists():
+        raise ValueError(f"{folder.name}：请在本地保留 source/ 原书与导入资料。")
+    for directory in (folder / "module" / "art", folder / "cache" / "showcases"):
+        path = directory / "credits.yaml"
+        if not path.is_file():
+            continue
+        pictures = yaml.safe_load(path.read_text(encoding="utf-8"))["pictures"]
+        for key, record in pictures.items():
+            while isinstance(record, dict):
+                license_name = str(record.get("license") or "")
+                if "只在本机使用" in license_name or (not license_name and (record.get("original") or record.get("source"))):
+                    raise ValueError(f"{folder.name}：{key} 缺少公开分发授权。")
+                record = record.get("based_on")
+
+
 def thumb(module_id: str, prefix: str = "", width: int = 224) -> str:
     return f'<img src="{prefix}modules/{module_id}/{COVER}" width="{width}" alt="">'
 
@@ -57,6 +74,7 @@ def build(root: Path, *, browse_only: bool = False) -> None:
             continue
         module = Module.load(folder / "module")
         check_cover(folder)
+        check_art(folder)
         if not browse_only:
             library_tree.prepare(folder)
         groups[module.system][module.era or "未注明时代"].append(module)
@@ -78,7 +96,7 @@ def build(root: Path, *, browse_only: bool = False) -> None:
         raw = [(p.name, f"module/{quote(p.name)}") for p in sorted((folder / "module").iterdir()) if not p.name.startswith(".")]
         write(folder / "README.md",
               f"# {label(module.title)}\n\n[返回模组库](../../README.md) · [按规则浏览](../../catalog/{slug(module.system)}/README.md)\n\n"
-              f"![《{label(module.title)}》封面]({COVER})\n\n{module.subtitle}\n\n| 规则 | 时代 | 人数 | 时长 |\n| --- | --- | --- | --- |\n"
+              f"![《{label(module.title)}》封面]({COVER})\n\n[封面来源](../../catalog/cover-credits.md#{module.id})\n\n{module.subtitle}\n\n| 规则 | 时代 | 人数 | 时长 |\n| --- | --- | --- | --- |\n"
               f"| {label(module.system)} | {label(module.era)} | {label(module.players)} | {label(module.duration)} |\n\n"
               f"{module.hook.strip()}\n\n来源：{module.source}\n\n版权说明：{module.license or '请查看模组原始说明'}\n\n"
               "## 主持资料\n\n下列内容含剧透。人物、地点和线索可分层展开查看；修改时以 module/ 内的原文件为准。\n\n" +
