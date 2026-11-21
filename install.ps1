@@ -1,4 +1,4 @@
-# AutoKeeper 一键安装（Windows PowerShell）：
+﻿# AutoKeeper 一键安装（Windows PowerShell）：
 #   irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
 # 没有 uv 就先装 uv，再用 uv tool 装好 autokeeper 命令；再运行一次就是更新。
 # 已经有 uv 的话，这个脚本做的就是：uv tool install autokeeper，然后 autokeeper setup。
