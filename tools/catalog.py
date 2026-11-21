@@ -52,10 +52,15 @@ def check_art(folder: Path) -> None:
         raise ValueError(f"{folder.name}：请在本地保留 source/ 原书与导入资料。")
     for directory in (folder / "module" / "art", folder / "cache" / "showcases"):
         path = directory / "credits.yaml"
-        if not path.is_file():
-            continue
-        pictures = yaml.safe_load(path.read_text(encoding="utf-8"))["pictures"]
-        for key, record in pictures.items():
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        pictures = (data or {}).get("pictures", {})
+        image_keys = {(image.stem if image.stem in pictures else image.stem.removesuffix(".photo"))
+                      for image in directory.rglob("*")
+                      if image.is_file() and image.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"}}
+        for key in sorted(image_keys):
+            record = pictures.get(key)
+            if not isinstance(record, dict) or not record.get("license"):
+                raise ValueError(f"{folder.name}：{key} 缺少图片署名或许可记录。")
             while isinstance(record, dict):
                 license_name = str(record.get("license") or "")
                 if "只在本机使用" in license_name or (not license_name and (record.get("original") or record.get("source"))):
