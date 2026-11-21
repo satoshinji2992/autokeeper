@@ -1,6 +1,6 @@
 // The page's few moving parts: the title painting and the name drawn from the game's own character
-// cells (site/cover-data.json, exported by dev/export_site_art.py), pictures opened over the page,
-// and copy buttons on the commands. Everything else is plain HTML that reads without them.
+// cells (site/cover-data.json, exported by dev/export_site_art.py), picture viewing, catalog search,
+// and copy buttons. The page can still be read without JavaScript.
 "use strict";
 
 // Block characters as rectangles of a cell (x, y, w, h, in fractions of it), drawn in the cell's
@@ -102,6 +102,30 @@ function copying() {
     });
 }
 
+function moduleSearch() {
+    const cards = [...document.querySelectorAll("#module-list li")];
+    if (!cards.length) return;
+    const tools = document.getElementById("module-tools"), input = document.getElementById("module-search");
+    const count = document.getElementById("module-count"), empty = document.getElementById("module-empty");
+    const normal = value => value.normalize("NFKC").toLowerCase().replace(/[–—]/g, "-");
+    const entries = cards.map(card => [card, normal(card.dataset.search)]);
+    function filter() {
+        const terms = normal(input.value).trim().split(/\s+/).filter(Boolean);
+        let matched = 0;
+        for (const [card, text] of entries) {
+            const found = terms.every(term => text.includes(term));
+            card.hidden = !found;
+            matched += Number(found);
+        }
+        count.textContent = terms.length ? `找到 ${matched} 个模组` : `全部 ${cards.length} 个模组`;
+        empty.hidden = matched !== 0;
+    }
+    input.addEventListener("input", filter);
+    filter();
+    tools.hidden = false;
+}
+
 title();
 viewer();
 copying();
+moduleSearch();

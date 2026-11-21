@@ -143,7 +143,7 @@ NPC 有各自的动机、秘密和牵挂。他们会帮忙、隐瞒、撒谎，�
 
 ### 选择下一场故事
 
-游戏自带《追书人》《冬雪之下》《有些人油盐不进》。第一次游玩，可以从适合单人入门的《追书人》开始，也可以去[模组库](https://github.com/satoshinji2992/autokeeper/tree/mod_library)寻找下一场调查。
+游戏自带《追书人》《冬雪之下》《有些人油盐不进》。第一次游玩，可以从适合单人入门的《追书人》开始，也可以去[模组库](https://satoshinji2992.github.io/autokeeper/#modules)寻找下一场调查。
 
 想玩自己的故事，可以导入 PDF、Word 等格式的模组，也可以用一句设定生成原创模组，例如“1931 年上海，一张没有标签的唱片”。从小镇街道到建筑内部，地图会随着调查展开。
 
@@ -205,7 +205,7 @@ curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/inst
 
 ## 文档
 
-[游玩指南](docs/playing.md) · [模组库](https://github.com/satoshinji2992/autokeeper/tree/mod_library) · [模组创作](docs/module-format.md) · [反馈问题](https://github.com/satoshinji2992/autokeeper/issues)
+[游玩指南](docs/playing.md) · [模组库](https://satoshinji2992.github.io/autokeeper/#modules) · [模组创作](docs/module-format.md) · [反馈问题](https://github.com/satoshinji2992/autokeeper/issues)
 
 ## 致谢与许可
 

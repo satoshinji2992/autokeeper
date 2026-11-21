@@ -1,6 +1,6 @@
 # 公开模组库
 
-模组库位于 [AutoKeeper 的 mod_library 分支](https://github.com/satoshinji2992/autokeeper/tree/mod_library)，与联机服务器分开。模组以原文件存放，可逐级浏览规则、时代、模组、人物、地点和线索；主持资料注明剧透。下载不需要密码。
+模组库位于 [AutoKeeper 的 mod_library 分支](https://github.com/satoshinji2992/autokeeper/tree/mod_library)，与联机服务器分开。模组以原文件存放，可逐级浏览规则、时代、模组、人物、地点和线索；主持资料注明剧透。下载不需要密码。玩家可以在[官网模组库](https://satoshinji2992.github.io/autokeeper/#modules)按封面浏览，查看人数、时长和简介。
 
 ## 安装
 
@@ -18,7 +18,7 @@ autokeeper library get shiling --replace
 
 ## 投稿
 
-[投稿说明](https://github.com/satoshinji2992/autokeeper/blob/mod_library/CONTRIBUTING.md)给出了目录结构、校验命令和 PR 流程。向 `mod_library` 分支提交可读原文件即可，不需要上传压缩包、密码或签名密钥。维护者审核并发布目录后，客户端才能安装新的内容。
+[投稿说明](https://github.com/satoshinji2992/autokeeper/blob/mod_library/CONTRIBUTING.md)给出了目录结构、校验命令和 PR 流程。向 `mod_library` 分支提交可读原文件和一张无剧透的 WebP 封面，不需要上传压缩包、密码或签名密钥。维护者审核并发布目录后，客户端才能安装新的内容。
 
 原作者、来源、许可和素材署名随模组保留。公开浏览不改变模组原有授权范围。
 
