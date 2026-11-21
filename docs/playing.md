@@ -60,6 +60,10 @@ uv tool install --python 3.12 autokeeper
 
 Linux 上优先使用 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME` 指定的目录。`autokeeper doctor` 会列出实际使用的存档和配置路径。设置 `AUTOKEEPER_HOME` 可将数据集中存储在指定目录。
 
+### 活跃安装统计
+
+终端的「设置 → 配图与联网 → 参与活跃安装统计」默认关闭。启用后，每台安装在单机或联机时完成一次玩家行动结算，才发送随机安装编号和当天的 UTC 日期。每台安装每天最多记为一次活跃，统计周期内按安装去重。关闭后停止发送，已统计的活动在 30 天后到期。对话、存档、调查员资料和房间资料留在本机。
+
 ## 模型与花费
 
 默认使用本机的 Claude Code 登录，也可以设置 `ANTHROPIC_API_KEY`。DeepSeek 需要 `DEEPSEEK_API_KEY`。不同终端设置环境变量的写法如下，把示例内容换成自己的密钥：
