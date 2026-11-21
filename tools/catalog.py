@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import yaml
+from PIL import Image
 
 from autokeeper.module import library_tree
 from autokeeper.module.schema import Module
@@ -29,13 +30,35 @@ def label(value) -> str:
     return str(value).replace("\n", " ").replace("[", "\\[").replace("]", "\\]").replace("|", "\\|")
 
 
-def build(root: Path) -> None:
+COVER = "cover.webp"
+COVER_LIMIT = 1024 * 1024
+
+
+def check_cover(folder: Path) -> None:
+    path = folder / COVER
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"{folder.name}：请提供 {COVER}。")
+    if path.stat().st_size > COVER_LIMIT:
+        raise ValueError(f"{folder.name}：封面不得超过 1 MiB。")
+    with Image.open(path) as cover:
+        if cover.format != "WEBP" or cover.is_animated:
+            raise ValueError(f"{folder.name}：封面必须是静态 WebP。")
+        cover.load()
+
+
+def thumb(module_id: str, prefix: str = "", width: int = 224) -> str:
+    return f'<img src="{prefix}modules/{module_id}/{COVER}" width="{width}" alt="">'
+
+
+def build(root: Path, *, browse_only: bool = False) -> None:
     groups = defaultdict(lambda: defaultdict(list))
     for folder in sorted((root / "modules").iterdir()):
         if not (folder / "module/module.yaml").is_file():
             continue
         module = Module.load(folder / "module")
-        library_tree.prepare(folder)
+        check_cover(folder)
+        if not browse_only:
+            library_tree.prepare(folder)
         groups[module.system][module.era or "未注明时代"].append(module)
         sections = []
         for kind, title, objects in (("places", "地点", module.locations), ("people", "人物", module.npcs),
@@ -55,7 +78,7 @@ def build(root: Path) -> None:
         raw = [(p.name, f"module/{quote(p.name)}") for p in sorted((folder / "module").iterdir()) if not p.name.startswith(".")]
         write(folder / "README.md",
               f"# {label(module.title)}\n\n[返回模组库](../../README.md) · [按规则浏览](../../catalog/{slug(module.system)}/README.md)\n\n"
-              f"{module.subtitle}\n\n| 规则 | 时代 | 人数 | 时长 |\n| --- | --- | --- | --- |\n"
+              f"![《{label(module.title)}》封面]({COVER})\n\n{module.subtitle}\n\n| 规则 | 时代 | 人数 | 时长 |\n| --- | --- | --- | --- |\n"
               f"| {label(module.system)} | {label(module.era)} | {label(module.players)} | {label(module.duration)} |\n\n"
               f"{module.hook.strip()}\n\n来源：{module.source}\n\n版权说明：{module.license or '请查看模组原始说明'}\n\n"
               "## 主持资料\n\n下列内容含剧透。人物、地点和线索可分层展开查看；修改时以 module/ 内的原文件为准。\n\n" +
@@ -68,18 +91,20 @@ def build(root: Path) -> None:
         nested = []
         for era, modules in sorted(eras.items()):
             nested.append(f"<details>\n<summary>{html.escape(era)}</summary>\n\n" +
-                          "\n".join(f"- [《{label(m.title)}》](modules/{m.id}/README.md) · {label(m.players)} · {label(m.duration)}"
+                          "\n".join(f"- [《{label(m.title)}》](modules/{m.id}/README.md) · {label(m.players)} · {label(m.duration)}\n  <br>{thumb(m.id)}"
                                     for m in modules) + "\n\n</details>")
-            rows.extend(f"| [《{label(m.title)}》](../../modules/{m.id}/README.md) | {label(era)} | {label(m.players)} | {label(m.duration)} |"
+            rows.extend(f"| {thumb(m.id, '../../', 96)} | [《{label(m.title)}》](../../modules/{m.id}/README.md) | {label(era)} | {label(m.players)} | {label(m.duration)} |"
                         for m in modules)
         menu.append(f"<details open>\n<summary>{html.escape(system)}</summary>\n\n" + "\n\n".join(nested) + "\n\n</details>")
         write(root / "catalog" / slug(system) / "README.md",
-              f"# {label(system)}\n\n[返回模组库](../../README.md)\n\n| 模组 | 时代 | 人数 | 时长 |\n| --- | --- | --- | --- |\n" + "\n".join(rows))
+              f"# {label(system)}\n\n[返回模组库](../../README.md)\n\n| 封面 | 模组 | 时代 | 人数 | 时长 |\n| --- | --- | --- | --- | --- |\n" + "\n".join(rows))
     write(root / "README.md",
           "# AutoKeeper 公开模组库\n\n"
           "此分支专门存放模组原文件。无需密码；在游戏中打开「导入模组 → 模组库」，或运行 `autokeeper library list`。\n\n"
           "下载只取所选模组的文件，并校验发布目录的签名、文件大小和哈希。目录固定到 Git 提交，不会在更新时混入不同版本。\n\n"
-          "## 浏览模组\n\n按规则、时代、模组逐级展开，再进入人物、地点和线索页面。简介不揭示真相；主持资料含剧透。\n\n" +
+          "## 浏览模组\n\n"
+          "[在官网按封面浏览](https://satoshinji2992.github.io/autokeeper/#modules)，或在下方按规则和时代展开。"
+          "各模组提供玩家简介，主持资料含剧透。\n\n" +
           "\n\n".join(menu) +
           "\n\n## 上传与修改\n\n"
           "[投稿流程与目录说明](CONTRIBUTING.md) · [模组格式](https://github.com/satoshinji2992/autokeeper/blob/main/docs/module-format.md)\n\n"
@@ -89,4 +114,6 @@ def build(root: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path, nargs="?", default=Path("."))
-    build(parser.parse_args().root.resolve())
+    parser.add_argument("--browse-only", action="store_true", help="只更新浏览页和封面检查")
+    args = parser.parse_args()
+    build(args.root.resolve(), browse_only=args.browse_only)

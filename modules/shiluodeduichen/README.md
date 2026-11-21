@@ -2,6 +2,8 @@
 
 [返回模组库](../../README.md) · [按规则浏览](../../catalog/CoC7/README.md)
 
+![《失落的对称》封面](cover.webp)
+
 Lost Symmetry
 
 | 规则 | 时代 | 人数 | 时长 |

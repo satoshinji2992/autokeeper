@@ -2,6 +2,8 @@
 
 [返回模组库](../../README.md) · [按规则浏览](../../catalog/CoC7/README.md)
 
+![《失灵》封面](cover.webp)
+
 Glitches · 一场关于黄衣之王的单人调查
 
 | 规则 | 时代 | 人数 | 时长 |

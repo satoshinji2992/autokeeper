@@ -2,6 +2,8 @@
 
 [返回模组库](../../README.md) · [按规则浏览](../../catalog/CoC7/README.md)
 
+![《直到我们灰飞烟灭》封面](cover.webp)
+
 Till We Vanish
 
 | 规则 | 时代 | 人数 | 时长 |

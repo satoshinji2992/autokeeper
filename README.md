@@ -6,7 +6,7 @@
 
 ## 浏览模组
 
-按规则、时代、模组逐级展开，再进入人物、地点和线索页面。简介不揭示真相；主持资料含剧透。
+[在官网按封面浏览](https://satoshinji2992.github.io/autokeeper/#modules)，或在下方按规则和时代展开。各模组提供玩家简介，主持资料含剧透。
 
 <details open>
 <summary>CoC7</summary>
@@ -15,6 +15,7 @@
 <summary>1920 年代</summary>
 
 - [《失落的对称》](modules/shiluodeduichen/README.md) · 1-4 人 · 约 3-4 小时
+  <br><img src="modules/shiluodeduichen/cover.webp" width="224" alt="">
 
 </details>
 
@@ -22,6 +23,7 @@
 <summary>1927 年（秋）</summary>
 
 - [《向火独行》](modules/xianghuoduxing/README.md) · 1 人 · 约 2 小时
+  <br><img src="modules/xianghuoduxing/cover.webp" width="224" alt="">
 
 </details>
 
@@ -29,6 +31,7 @@
 <summary>1939 年 2 月（纳粹德国）</summary>
 
 - [《直到我们灰飞烟灭》](modules/tillwevanish/README.md) · 1-4 人（原作建议单人） · 约 1-2 次跑团
+  <br><img src="modules/tillwevanish/cover.webp" width="224" alt="">
 
 </details>
 
@@ -36,6 +39,7 @@
 <summary>2008 年（现代）</summary>
 
 - [《失灵》](modules/shiling/README.md) · 1 人 · 约 3–5 次团（原作未写时长，按篇幅估计）
+  <br><img src="modules/shiling/cover.webp" width="224" alt="">
 
 </details>
 
@@ -43,6 +47,7 @@
 <summary>2009 年夏（原作融合 00 年代与 10 年代的时代风貌）</summary>
 
 - [《鱼！鱼！鱼！》](modules/yuyuyu/README.md) · 2-4 人（原文未写人数） · 约 4-6 小时（原文未写，按各地点时长估算）
+  <br><img src="modules/yuyuyu/cover.webp" width="224" alt="">
 
 </details>
 
@@ -50,6 +55,7 @@
 <summary>现代（2025 年春）</summary>
 
 - [《鲅鱼？鲅鱼！》](modules/bayu/README.md) · 2-5 人 · 3-5 小时（线上文字团）
+  <br><img src="modules/bayu/cover.webp" width="224" alt="">
 
 </details>
 
