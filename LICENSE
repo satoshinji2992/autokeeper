@@ -13,6 +13,7 @@ AutoKeeper 程序不开源，也不随本仓库提供。本仓库只包含玩法
 - modules/ 中的自带模组为同人改编，原作版权归各自原作者与出版方；其中的照片按各模组 art/credits.yaml 所列授权使用。
 - 标题画面及其字符数据（docs/img/title.png、docs/site/cover-data.json）改编自 Dominique Signoret 的画作 Cthulhu and R'lyeh，按 CC BY-SA 3.0 提供。
 - docs/img/variants.png 中的农舍墙面照片（A S M Jobaer，Weathered brick wall with peeling plaster 02）及依它改画的差分图，按 CC BY-SA 4.0 提供。
+- 模组库封面及其网页字符画版本按各图所列的许可提供，见 https://github.com/satoshinji2992/autokeeper/blob/mod_library/catalog/cover-credits.md。
 - 网页字体按 docs/site/fonts/ 中的许可证（SIL Open Font License 1.1）使用。
 
 AutoKeeper 0.0.6.5 及更早版本曾以 MIT 协议发布，这些版本已获得的授权不受本文件影响。

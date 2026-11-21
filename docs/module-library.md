@@ -18,7 +18,7 @@ autokeeper library get shiling --replace
 
 ## 备用下载
 
-GitHub 下载超时时，可通过备用源读取同一发布版本。备用源由第三方加速公开文件，客户端仍校验目录签名以及每个文件的大小和哈希。
+GitHub 下载超时时，0.0.10.6 及更新版本会自动切换备用源。也可以手动选择备用源。备用源由第三方加速公开文件，客户端仍校验目录签名以及每个文件的大小和哈希。
 
 ```sh
 autokeeper library get bayu --server https://gh-proxy.com/https://raw.githubusercontent.com/satoshinji2992/autokeeper/mod_library/catalog/mirror
