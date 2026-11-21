@@ -6,7 +6,7 @@
 
 ## 浏览模组
 
-[在官网按封面浏览](https://satoshinji2992.github.io/autokeeper/#modules)，或在下方按规则和时代展开。各模组提供玩家简介，主持资料含剧透。
+[在官网按封面浏览](https://satoshinji2992.github.io/autokeeper/#modules)，或在下方按规则和时代展开。各模组提供玩家简介，主持资料含剧透。下载超时时见[备用下载](https://github.com/satoshinji2992/autokeeper/blob/main/docs/module-library.md#备用下载)。
 
 <details open>
 <summary>CoC7</summary>

@@ -104,7 +104,8 @@ def build(root: Path, *, browse_only: bool = False) -> None:
           "下载只取所选模组的文件，并校验发布目录的签名、文件大小和哈希。目录固定到 Git 提交，不会在更新时混入不同版本。\n\n"
           "## 浏览模组\n\n"
           "[在官网按封面浏览](https://satoshinji2992.github.io/autokeeper/#modules)，或在下方按规则和时代展开。"
-          "各模组提供玩家简介，主持资料含剧透。\n\n" +
+          "各模组提供玩家简介，主持资料含剧透。"
+          "下载超时时见[备用下载](https://github.com/satoshinji2992/autokeeper/blob/main/docs/module-library.md#备用下载)。\n\n" +
           "\n\n".join(menu) +
           "\n\n## 上传与修改\n\n"
           "[投稿流程与目录说明](CONTRIBUTING.md) · [模组格式](https://github.com/satoshinji2992/autokeeper/blob/main/docs/module-format.md)\n\n"

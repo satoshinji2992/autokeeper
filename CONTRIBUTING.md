@@ -44,9 +44,9 @@ python tools/catalog.py .
 git add modules catalog README.md
 git commit -m "更新模组内容"
 autokeeper library publish-tree . --revision "$(git rev-parse HEAD)"
-git add index.json index.sig
+git add index.json index.sig catalog/mirror/
 git commit -m "发布下载目录"
 git push origin mod_library
 ```
 
-签名私钥只保存在维护者本机配置目录中，不加入仓库或 PR 工作流。下载地址固定到前一个完整 Git 提交，索引和签名在同一次提交中更新。这样在浏览分支继续演进时，客户端下载的仍是一套确定且可校验的文件。
+签名私钥只保存在维护者本机配置目录中，不加入仓库或 PR 工作流。下载地址固定到前一个完整 Git 提交，索引、签名和备用下载目录在同一次提交中更新。这样在浏览分支继续演进时，客户端下载的仍是一套确定且可校验的文件。
