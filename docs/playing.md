@@ -32,7 +32,7 @@ uv tool install --python 3.12 autokeeper
 
 安装完成后，在任意目录运行 `autokeeper`。首次启动会在用户目录安装掷骰组件，并引导选择模型服务、填写 API Key。也可提前运行 `autokeeper setup` 完成初始化。
 
-主界面右下角有「设置」「检查更新」和「玩法说明」。也可以退出游戏后重新运行安装脚本，或执行 `uv tool upgrade autokeeper` 更新。新版本不一定能读取旧版本的存档，联机时房主和玩家要用同一版本。
+安装版启动后会在主界面检查版本，发现更新时右下角显示「有新版本」。在「检查更新」里可以开启「启动时自动安装新版本」。下次启动后，如果仍在主界面且没有开房，游戏会在安装完成后重新启动。也可以退出游戏后重新运行安装脚本，或执行 `uv tool upgrade autokeeper` 更新。新版本不一定能读取旧版本的存档，联机时房主和玩家要用同一版本。
 
 掷骰需要 Node.js 22+ 和 npm。Windows 一键脚本会检查版本，缺少时通过 winget 安装 LTS 版；没有 winget 时，脚本会提示从 [Node.js 官网](https://nodejs.org/) 安装。其他系统手动安装后，重新打开终端并运行 `autokeeper setup`：
 
