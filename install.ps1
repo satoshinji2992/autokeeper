@@ -58,6 +58,13 @@ uv tool install --force --refresh-package autokeeper --python 3.12 @InstallOptio
 if ($LASTEXITCODE -ne 0) { Fail "AutoKeeper installation failed. Check the uv output above before retrying." }
 $Bin = (uv tool dir --bin).Trim()
 
+if (-not $env:AUTOKEEPER_NO_STATS) {
+    try {
+        $StatsUrl = if ($env:AUTOKEEPER_INSTALL_STATS_URL) { $env:AUTOKEEPER_INSTALL_STATS_URL } else { "https://seiyuumatch.org/_autokeeper/v1/install" }
+        Invoke-RestMethod -Method Post -Uri $StatsUrl -ContentType "application/json" -Body '{"os":"windows"}' -TimeoutSec 3 -ErrorAction SilentlyContinue *> $null
+    } catch {}
+}
+
 Write-Host "Setting up AutoKeeper."
 $SetupOptions = @()
 if ($env:AUTOKEEPER_NO_LOGIN) { $SetupOptions = @("--no-login") }

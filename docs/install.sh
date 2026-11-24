@@ -9,6 +9,7 @@
 #   AUTOKEEPER_EXTRAS   可选组件，如 graphrag（模组原文检索，约 1 GB）
 #   AUTOKEEPER_NO_LOGIN=1  跳过交互式模型设置
 #   AUTOKEEPER_NO_MODIFY_PATH=1  不改 shell 配置文件里的 PATH
+#   AUTOKEEPER_NO_STATS=1  跳过匿名安装统计
 set -euo pipefail
 
 VERSION="${AUTOKEEPER_VERSION:-}"
@@ -53,6 +54,12 @@ say "安装 autokeeper 命令（第一次要下载依赖，几分钟）…"
 uv tool install --force --refresh-package autokeeper --python 3.12 "${INSTALL_OPTIONS[@]}" "$spec" \
   || die "autokeeper 没装好：上面是 uv 的报错。检查网络后再运行一次。"
 BIN="$(uv tool dir --bin)"
+
+if [ -z "${AUTOKEEPER_NO_STATS:-}" ] && command -v curl >/dev/null; then
+  stats_url="${AUTOKEEPER_INSTALL_STATS_URL:-https://seiyuumatch.org/_autokeeper/v1/install}"
+  curl -fsS --connect-timeout 2 --max-time 3 -H "Content-Type: application/json" \
+    -d '{"os":"linux"}' "$stats_url" >/dev/null 2>&1 || true
+fi
 
 say "初始化…"
 if [ -z "${AUTOKEEPER_NO_LOGIN:-}" ] && { : </dev/tty; } 2>/dev/null; then  # a terminal to ask in; curl | bash gives the script stdin
