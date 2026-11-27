@@ -4,7 +4,6 @@
 # 没有 uv 就先装 uv，再用 uv tool 装好 autokeeper 命令；再运行一次就是更新。
 # 已经有 uv 的话，这个脚本做的就是：uv tool install autokeeper，然后 autokeeper setup。
 # 可选环境变量：
-#   AUTOKEEPER_REGION=cn  使用国内 PyPI 镜像
 #   AUTOKEEPER_VERSION  装哪个版本，如 0.0.7（默认最新）
 #   AUTOKEEPER_EXTRAS   可选组件，如 graphrag（模组原文检索，约 1 GB）
 #   AUTOKEEPER_NO_LOGIN=1  跳过交互式模型设置
@@ -14,11 +13,8 @@ set -euo pipefail
 
 VERSION="${AUTOKEEPER_VERSION:-}"
 EXTRAS="${AUTOKEEPER_EXTRAS:-}"
-REGION="${AUTOKEEPER_REGION:-}"
-INSTALL_OPTIONS=()
-if [ "$REGION" = "cn" ]; then
-  INSTALL_OPTIONS=(--default-index https://pypi.tuna.tsinghua.edu.cn/simple --python-preference system)
-fi
+OFFICIAL_INDEX=https://pypi.org/simple
+MIRROR_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
@@ -51,8 +47,29 @@ fi
 spec="$name${VERSION:+==$VERSION}"
 
 say "安装 autokeeper 命令（第一次要下载依赖，几分钟）…"
-uv tool install --force --refresh-package autokeeper --python 3.12 "${INSTALL_OPTIONS[@]}" "$spec" \
-  || die "autokeeper 没装好：上面是 uv 的报错。检查网络后再运行一次。"
+install_from() {
+  uv tool install --force --refresh-package autokeeper --python 3.12 --default-index "$1" "$2"
+}
+if output=$(install_from "$OFFICIAL_INDEX" "$spec" 2>&1); then
+  printf '%s\n' "$output"
+else
+  printf '%s\n' "$output" >&2
+  case "${output,,}" in
+    *"timed out"*|*"operation timeout"*|*"connection timeout"*|*"read timeout"*|*"request timeout"*)
+      warn "官方 PyPI 超时，改用清华镜像重试一次。"
+      fallback_spec="$spec"
+      # An out-of-date mirror must not downgrade an existing installation.
+      if [ -z "$VERSION" ] && tool_bin=$(uv tool dir --bin) && [ -x "$tool_bin/autokeeper" ]; then
+        installed=$("$tool_bin/autokeeper" --version 2>/dev/null || true)
+        if [[ "$installed" =~ ^autokeeper[[:space:]]+([0-9]+(\.[0-9]+)+)$ ]]; then
+          fallback_spec="$name>=${BASH_REMATCH[1]}"
+        fi
+      fi
+      install_from "$MIRROR_INDEX" "$fallback_spec" || die "清华镜像安装失败：请查看上面的 uv 报错。"
+      ;;
+    *) die "autokeeper 没装好：上面是 uv 的报错。检查网络后再运行一次。" ;;
+  esac
+fi
 BIN="$(uv tool dir --bin)"
 
 if [ -z "${AUTOKEEPER_NO_STATS:-}" ] && command -v curl >/dev/null; then

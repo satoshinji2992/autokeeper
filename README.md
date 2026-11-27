@@ -183,7 +183,7 @@ NPC 有各自的动机、秘密和牵挂。他们会帮忙、隐瞒、撒谎，�
 
 [中国大陆免代理安装](https://satoshinji2992.github.io/autokeeper/#install) · [卸载](docs/playing.md#卸载)
 
-当前版本 **0.0.10.11**。支持 Windows x64 和 Linux x86_64（不支持 mac 系统）。
+当前版本 **0.0.11.0**。支持 Windows x64 和 Linux x86_64（不支持 mac 系统）。
 
 **Windows PowerShell**
 

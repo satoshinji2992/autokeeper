@@ -30,7 +30,7 @@
                 <a class="button" href="#gallery">实机画面</a>
                 <a class="button" href="https://github.com/satoshinji2992/autokeeper">GitHub</a>
             </nav>
-            <p class="meta">Windows / Linux · 终端与浏览器 · 0.0.10.11</p>
+            <p class="meta">Windows / Linux · 终端与浏览器 · 0.0.11.0</p>
         </div>
     </header>
 
@@ -260,15 +260,15 @@
         <section id="install">
             <h2>开始你的调查</h2>
             <p>支持 Windows x64 和 Linux x86_64（不支持 mac 系统）。</p>
-            <h3>中国大陆免代理安装</h3>
-            <p>安装脚本从清华镜像下载游戏与 Python 依赖。Linux 和 WSL 请先准备 Node.js 22+ 和 npm，Windows 脚本会检查并安装 Node.js。</p>
-            <pre data-copy><span class="label"># Linux、WSL</span><code>curl -fsSL https://satoshinji2992.github.io/autokeeper/install.sh | AUTOKEEPER_REGION=cn bash</code></pre>
-            <pre data-copy><span class="label"># Windows PowerShell</span><code>$env:AUTOKEEPER_REGION = 'cn'
-irm https://satoshinji2992.github.io/autokeeper/install.ps1 | iex</code></pre>
+            <h3>一键安装</h3>
+            <p>优先从官方 PyPI 下载游戏和依赖；超时后才用清华镜像重试。Linux 和 WSL 请先准备 Node.js 22+ 和 npm，Windows 脚本会检查并安装 Node.js。</p>
+            <pre data-copy><span class="label"># Linux、WSL</span><code>curl -fsSL https://satoshinji2992.github.io/autokeeper/install.sh | bash</code></pre>
+            <pre data-copy><span class="label"># Windows PowerShell</span><code>irm https://satoshinji2992.github.io/autokeeper/install.ps1 | iex</code></pre>
             <details>
-                <summary>已有 uv，直接用镜像安装</summary>
-                <pre data-copy><code>uv tool install --python 3.12 --default-index https://pypi.tuna.tsinghua.edu.cn/simple autokeeper
+                <summary>已有 uv，手动安装</summary>
+                <pre data-copy><code>uv tool install --python 3.12 --default-index https://pypi.org/simple autokeeper
 autokeeper setup</code></pre>
+                <p>官方源超时才改用 <code>https://pypi.tuna.tsinghua.edu.cn/simple</code>。镜像可能还没有最新版本。</p>
             </details>
             <ol class="steps">
                 <li>运行 <code>autokeeper</code>，选择模型并填写密钥。</li>

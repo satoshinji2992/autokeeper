@@ -5,10 +5,8 @@
 $ErrorActionPreference = "Stop"
 $Version = $env:AUTOKEEPER_VERSION
 $Extras = $env:AUTOKEEPER_EXTRAS
-$InstallOptions = @()
-if ($env:AUTOKEEPER_REGION -eq "cn") {
-    $InstallOptions = @("--default-index", "https://pypi.tuna.tsinghua.edu.cn/simple", "--python-preference", "system")
-}
+$OfficialIndex = "https://pypi.org/simple"
+$MirrorIndex = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 function Fail($message) { throw $message }  # not exit: under irm | iex that would close the window
 
@@ -54,8 +52,39 @@ if ($Version) {
 }
 
 Write-Host "Installing AutoKeeper. The first installation downloads dependencies."
-uv tool install --force --refresh-package autokeeper --python 3.12 @InstallOptions $Spec
-if ($LASTEXITCODE -ne 0) { Fail "AutoKeeper installation failed. Check the uv output above before retrying." }
+function Invoke-AutoKeeperInstall($Index, $Package) {
+    # Windows PowerShell 5 treats redirected stderr from native programs as errors.
+    $ErrorActionPreference = 'Continue'
+    $Output = uv tool install --force --refresh-package autokeeper --python 3.12 --default-index $Index $Package 2>&1
+    return @{ Code = $LASTEXITCODE; Output = @($Output | ForEach-Object { "$_" }) }
+}
+function Get-InstalledVersion($Exe) {
+    $ErrorActionPreference = 'Continue'
+    try {
+        $Output = & $Exe --version 2>&1
+        if ($LASTEXITCODE -ne 0) { return $null }
+        foreach ($Line in @($Output)) {
+            if ("$Line".Trim() -match '^autokeeper\s+(\d+(?:\.\d+)+)$') { return $Matches[1] }
+        }
+    } catch {}
+    return $null
+}
+$Attempt = Invoke-AutoKeeperInstall $OfficialIndex $Spec
+$Attempt.Output | ForEach-Object { Write-Host $_ }
+if ($Attempt.Code -ne 0 -and ($Attempt.Output -join " ") -match 'timed out|(?:operation|connection|read|request) timeout') {
+    Write-Warning "Official PyPI timed out. Retrying with the Tsinghua mirror once."
+    $FallbackSpec = $Spec
+    if (-not $Version) {
+        $Existing = Join-Path ((uv tool dir --bin).Trim()) "autokeeper.exe"
+        if (Test-Path -LiteralPath $Existing -PathType Leaf) {
+            $InstalledVersion = Get-InstalledVersion $Existing
+            if ($InstalledVersion) { $FallbackSpec = "$Name>=$InstalledVersion" }
+        }
+    }
+    $Attempt = Invoke-AutoKeeperInstall $MirrorIndex $FallbackSpec
+    $Attempt.Output | ForEach-Object { Write-Host $_ }
+}
+if ($Attempt.Code -ne 0) { Fail "AutoKeeper installation failed. Check the uv output above before retrying." }
 $Bin = (uv tool dir --bin).Trim()
 
 if (-not $env:AUTOKEEPER_NO_STATS) {
