@@ -271,6 +271,7 @@ passages:
   b: boat_deck
   kind: opening
   minutes: 2
+  closes: flag:set_sail
   perception: 跳板，仅船停在码头时可走
 - id: boat_deck__boat_cabin
   a: boat_deck
@@ -289,6 +290,7 @@ passages:
   b: reef_rock
   kind: opening
   minutes: 1
+  opens: flag:at_reef
   perception: 仅船停在礁石滩时可跨上礁石
 interior_reviews:
   boat:

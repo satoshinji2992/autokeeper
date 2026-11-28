@@ -1,9 +1,9 @@
 {
   "id": "bayu_sea",
   "name": "海上状况与礁石滩逃生",
-  "description": "记录《鲅鱼？鲅鱼！》的晕船与礁石滩逃生。seasick：近海停船或返航时为某调查员掷体质检定，失败加上“晕船”状态（所有动作一个惩罚骰，由守秘人执行）；在礁石上休息过的人下一次检定额外一个奖励骰。rest：船到礁石滩后在礁石上休息片刻。recover：晕船好转时移除状态。cut_rope：逃生时用锋利工具割一处网绳（左舷挂钩、右舷挂钩、船尾固定栓），船剧烈倾斜，须敏捷检定，合理行为由守秘人给奖励骰。start_engine：至少两处网绳割断后在驾驶室启动引擎，用驾驶或守秘人认可的相关知识技能，每两次检定耗一轮；成功即冲出礁石滩。calm：点燃渔具铺送的香或把木雕小像扔下海，周围海和尚停止行动一轮，每种方式仅一次。",
+  "description": "记录《鲅鱼？鲅鱼！》的晕船与礁石滩逃生。seasick：近海停船或返航时为某调查员掷体质检定，失败加上“晕船”状态（所有动作一个惩罚骰，由守秘人执行）；在礁石上休息过的人下一次检定额外一个奖励骰。rest：船到礁石滩后在礁石上休息片刻。recover：晕船好转时移除状态。cut_rope：逃生时用锋利工具割一处网绳（左舷挂钩、右舷挂钩、船尾固定栓），船剧烈倾斜，须敏捷检定，合理行为由守秘人给奖励骰。start_engine：至少两处网绳割断后在驾驶室启动引擎，用驾驶或守秘人认可的相关知识技能，一轮至多两次检定，成功即冲出礁石滩。calm：点燃渔具铺送的香或把木雕小像扔下海，周围海和尚停止行动一轮，每种方式仅一次。",
   "api_version": 1,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "hooks": [
     "action"
   ],
@@ -11,7 +11,8 @@
     "dice",
     "note",
     "flag",
-    "condition"
+    "condition",
+    "lose_action"
   ],
   "actions": [
     {
@@ -32,11 +33,11 @@
     },
     {
       "name": "start_engine",
-      "description": "至少两处网绳割断后，调查员在驾驶室尝试启动引擎。arguments：who 调查员 id；skill 技能名，默认 驾驶(小型船舶)，无此技能可用守秘人认可的相关知识类技能；bonus -2 到 2。"
+      "description": "至少两处网绳割断后，调查员在驾驶室尝试启动引擎。arguments：who 调查员 id；skill 技能名，默认 驾驶(小型船舶)，无此技能可用守秘人认可的相关知识类技能；bonus -2 到 2。 同一轮最多尝试两次，引擎检定由插件执行。"
     },
     {
       "name": "calm",
-      "description": "逃生时点燃渔具铺老头送的香，或把驾驶室的木雕小像扔下海。arguments：method 为 incense 或 statue。"
+      "description": "逃生时点燃渔具铺老头送的香，或把驾驶室的木雕小像扔下海。arguments：method 为 incense 或 statue。 who 留空按本拍行动者处理。海和尚失去下一次行动，每种物件仅生效一次。"
     }
   ],
   "commands": [],
@@ -50,7 +51,9 @@
     "engine_tries": 0,
     "incense": false,
     "statue": false,
-    "escaped": false
+    "escaped": false,
+    "engine_round": "",
+    "round_tries": 0
   },
   "tests": [
     {
@@ -411,11 +414,18 @@
       "context": {
         "investigators": [
           {
-            "id": "lin_xiao"
+            "id": "lin_xiao",
+            "location": "boat_cabin"
           }
         ],
         "flags": {
           "net_cast": true
+        },
+        "acting": "lin_xiao",
+        "encounter": {
+          "id": "net",
+          "round": 3,
+          "source_event": "e_net"
         }
       },
       "dice": [],
@@ -428,7 +438,7 @@
       "expected_panels": null
     },
     {
-      "name": "启动引擎失败",
+      "name": "同一轮的两次启动检定均失败",
       "event": {
         "hook": "action",
         "action": "start_engine",
@@ -452,20 +462,29 @@
       "context": {
         "investigators": [
           {
-            "id": "lin_xiao"
+            "id": "lin_xiao",
+            "location": "boat_cabin"
           }
         ],
         "flags": {
           "net_cast": true
+        },
+        "acting": "lin_xiao",
+        "encounter": {
+          "id": "net",
+          "round": 3,
+          "source_event": "e_net"
         }
       },
       "dice": [],
       "checks": [
+        false,
         false
       ],
       "expected_state": {
-        "engine_tries": 1,
-        "escaped": false
+        "engine_tries": 2,
+        "escaped": false,
+        "round_tries": 2
       },
       "expected_effects": [],
       "expected_panels": null
@@ -494,20 +513,29 @@
       "context": {
         "investigators": [
           {
-            "id": "zhao_haifeng"
+            "id": "zhao_haifeng",
+            "location": "boat_cabin"
           }
         ],
         "flags": {
           "net_cast": true
+        },
+        "acting": "zhao_haifeng",
+        "encounter": {
+          "id": "net",
+          "round": 3,
+          "source_event": "e_net"
         }
       },
       "dice": [],
       "checks": [
+        false,
         true
       ],
       "expected_state": {
-        "engine_tries": 2,
-        "escaped": true
+        "engine_tries": 3,
+        "escaped": true,
+        "round_tries": 2
       },
       "expected_effects": [
         {
@@ -547,6 +575,26 @@
         ],
         "flags": {
           "net_cast": true
+        },
+        "acting": "lin_xiao",
+        "encounter": {
+          "id": "net",
+          "round": 3,
+          "source_event": "e_net",
+          "participants": [
+            {
+              "id": "sea_monk",
+              "kind": "creature",
+              "side": "foe",
+              "presence": "in"
+            },
+            {
+              "id": "zhang",
+              "kind": "npc",
+              "side": "foe",
+              "presence": "in"
+            }
+          ]
         }
       },
       "dice": [],
@@ -556,8 +604,13 @@
       },
       "expected_effects": [
         {
+          "kind": "lose_action",
+          "who": "sea_monk",
+          "text": "迟疑着停住"
+        },
+        {
           "kind": "note",
-          "text": "香头的青烟飘过船舷，周围的海和尚迟疑了，这一轮停止了动作。"
+          "text": "香头的青烟飘过船舷，海和尚迟疑着停住。"
         }
       ],
       "expected_panels": null
@@ -588,12 +641,130 @@
         ],
         "flags": {
           "net_cast": true
+        },
+        "acting": "lin_xiao",
+        "encounter": {
+          "id": "net",
+          "round": 3,
+          "source_event": "e_net",
+          "participants": [
+            {
+              "id": "sea_monk",
+              "kind": "creature",
+              "side": "foe",
+              "presence": "in"
+            },
+            {
+              "id": "zhang",
+              "kind": "npc",
+              "side": "foe",
+              "presence": "in"
+            }
+          ]
         }
       },
       "dice": [],
       "checks": [],
       "expected_state": {
         "incense": true
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "甲板不能启动引擎",
+      "event": {
+        "hook": "action",
+        "action": "start_engine",
+        "arguments": {
+          "who": "zhao_haifeng"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [
+          "左舷挂钩",
+          "船尾固定栓"
+        ],
+        "engine_tries": 1,
+        "incense": false,
+        "statue": false,
+        "escaped": false
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "zhao_haifeng",
+            "location": "boat_deck"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        },
+        "acting": "zhao_haifeng",
+        "encounter": {
+          "id": "net",
+          "round": 3,
+          "source_event": "e_net"
+        }
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "engine_tries": 1,
+        "round_tries": 0,
+        "escaped": false
+      },
+      "expected_effects": [],
+      "expected_panels": null
+    },
+    {
+      "name": "同一轮两次用完后不能再尝试",
+      "event": {
+        "hook": "action",
+        "action": "start_engine",
+        "arguments": {
+          "who": "zhao_haifeng"
+        }
+      },
+      "state": {
+        "seasick": [],
+        "rested": [],
+        "cut": [
+          "左舷挂钩",
+          "船尾固定栓"
+        ],
+        "engine_tries": 2,
+        "incense": false,
+        "statue": false,
+        "escaped": false,
+        "engine_round": "net:3",
+        "round_tries": 2
+      },
+      "context": {
+        "investigators": [
+          {
+            "id": "zhao_haifeng",
+            "location": "boat_cabin"
+          }
+        ],
+        "flags": {
+          "net_cast": true
+        },
+        "acting": "zhao_haifeng",
+        "encounter": {
+          "id": "net",
+          "round": 3,
+          "source_event": "e_net"
+        }
+      },
+      "dice": [],
+      "checks": [],
+      "expected_state": {
+        "engine_tries": 2,
+        "round_tries": 2,
+        "escaped": false
       },
       "expected_effects": [],
       "expected_panels": null

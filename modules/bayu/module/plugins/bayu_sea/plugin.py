@@ -42,6 +42,8 @@ def handle(event, ctx, api):
     state['rested'] = list(state.get('rested') or [])
     state['cut'] = list(state.get('cut') or [])
     state['engine_tries'] = to_int(state.get('engine_tries', 0))
+    state['engine_round'] = str(state.get('engine_round') or '')
+    state['round_tries'] = clip(to_int(state.get('round_tries', 0)), 0, 2)
     state['incense'] = bool(state.get('incense', False))
     state['statue'] = bool(state.get('statue', False))
     state['escaped'] = bool(state.get('escaped', False))
@@ -50,8 +52,8 @@ def handle(event, ctx, api):
     action = event.get('action') or ''
     args = event.get('arguments') or {}
     who = args.get('who') or ctx.get('acting') or ''
-    ids = [inv.get('id') for inv in (ctx.get('investigators') or [])]
-    if action in ['seasick', 'rest', 'recover', 'cut_rope', 'start_engine'] and who not in ids:
+    investigators = {inv.get('id'): inv for inv in (ctx.get('investigators') or [])}
+    if action in ['seasick', 'rest', 'recover', 'cut_rope', 'start_engine', 'calm'] and who not in investigators:
         return done(state, [])
     if action == 'seasick':
         bonus = clip(to_int(args.get('bonus', 0)), 0, 1)
@@ -95,23 +97,41 @@ def handle(event, ctx, api):
     if action == 'start_engine':
         if not has_flag(ctx, 'net_cast') or state['escaped'] or len(state['cut']) < 2:
             return done(state, [])
+        if who != ctx.get('acting') or investigators[who].get('location') != 'boat_cabin':
+            return done(state, [])
+        encounter = ctx.get('encounter') or {}
+        round_key = encounter['id'] + ':' + str(encounter['round']) if encounter else 'turn:' + str(ctx.get('turn'))
+        if state['engine_round'] != round_key:
+            state['engine_round'] = round_key
+            state['round_tries'] = 0
         skill = args.get('skill') or '驾驶(小型船舶)'
         bonus = clip(to_int(args.get('bonus', 0)), -2, 2)
-        state['engine_tries'] = state['engine_tries'] + 1
-        result = api.check(who, skill, '常规', bonus=bonus)
-        if not result.get('passed'):
-            return done(state, [])
-        state['escaped'] = True
-        return done(state, [{'kind': 'note', 'text': '引擎轰鸣起来，螺旋桨绞断了剩下的网绳。'}, {'kind': 'flag', 'key': 'escaped_reef'}])
-    if action == 'calm':
-        if not has_flag(ctx, 'net_cast') or state['escaped']:
-            return done(state, [])
-        method = args.get('method') or ''
-        if method == 'incense' and not state['incense']:
-            state['incense'] = True
-            return done(state, [{'kind': 'note', 'text': '香头的青烟飘过船舷，周围的海和尚迟疑了，这一轮停止了动作。'}])
-        if method == 'statue' and not state['statue']:
-            state['statue'] = True
-            return done(state, [{'kind': 'note', 'text': '木雕小像落进海里，周围的海和尚迟疑了，这一轮停止了动作。'}])
+        for _ in range(2 - state['round_tries']):
+            state['engine_tries'] += 1
+            state['round_tries'] += 1
+            if api.check(who, skill, '常规', bonus=bonus).get('passed'):
+                state['escaped'] = True
+                return done(state, [
+                    {'kind': 'note', 'text': '引擎轰鸣起来，螺旋桨绞断了剩下的网绳。'},
+                    {'kind': 'flag', 'key': 'escaped_reef'}
+                ])
         return done(state, [])
+    if action == 'calm':
+        if not has_flag(ctx, 'net_cast') or state['escaped'] or who != ctx.get('acting'):
+            return done(state, [])
+        words = {'incense': '香头的青烟飘过船舷', 'statue': '木雕小像落进海里'}
+        method = args.get('method') or ''
+        if method not in words or state[method]:
+            return done(state, [])
+        participants = (ctx.get('encounter') or {}).get('participants') or []
+        monks = [
+            p['id'] for p in participants
+            if p.get('id') == 'sea_monk' and p.get('side') == 'foe' and p.get('presence') == 'in'
+        ]
+        if not monks:
+            return done(state, [])
+        state[method] = True
+        effects = [{'kind': 'lose_action', 'who': monk, 'text': '迟疑着停住'} for monk in monks]
+        effects.append({'kind': 'note', 'text': words[method] + '，海和尚迟疑着停住。'})
+        return done(state, effects)
     return done(state, [])

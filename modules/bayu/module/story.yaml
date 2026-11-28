@@ -9,25 +9,16 @@ conclusions:
   text: 远海礁石滩不是寻常钓点，留在那里很危险
 events:
 - id: e_captain_wait
-  title: 船长到了
-  when: D1 04:40 & !flag:zhang_aboard
+  title: 船长来了
+  when: after:280 & !flag:zhang_aboard | knows:players:clue:c_find_boat & !flag:zhang_aboard
   where: wharf
+  unless_met: zhang
   present:
   - zhang
   sets:
   - zhang_aboard
-  read_aloud: 一个身材敦实、皮肤晒成古铜色的中年男人穿过路灯下的人群走来，蓝色工装上沾着些油污。他冲你们一咧嘴，露出被烟熏黄的牙：“是你们订的船吧？走走，船就在这儿！”
-  text: 调查员在码头等到 4:40 左右，老张到达，带他们找到并登上乘风破浪888号。
-- id: e_captain_boat
-  title: 船长赶到船边
-  when: knows:players:clue:c_find_boat & !flag:zhang_aboard
-  where: wharf
-  present:
-  - zhang
-  sets:
-  - zhang_aboard
-  read_aloud: 你们刚认出那艘船，身后就传来脚步声。一个身材敦实、皮肤晒成古铜色、穿蓝色工装的中年男人走到船边，嗓门洪亮：“哟，自己找着啦？行，省事儿！走，上船！”
-  text: 调查员凭侦查找到船后，老张到达码头，接待他们并带他们登上乘风破浪888号。
+  read_aloud: 一个身材敦实、皮肤晒成古铜色的中年男人走到泊位，蓝色工装上沾着油污。他咧嘴一笑，露出被烟熏黄的牙：“是你们订的船吧？来，船就在这儿！”
+  text: 调查员通过侦查先找到船，或等到凌晨 4:40 左右，老张在码头露面并招呼调查员登船。两条途径到的是同一次会面。若已实际交谈，由该场交流接着进行。
 - id: e_nearshore
   title: 近海停船
   when: flag:set_sail & !flag:at_nearshore
@@ -122,17 +113,13 @@ events:
 - id: e_home_with_zhang
   title: 回到码头
   when: flag:back_ashore & !flag:zhang_overboard
-  where: boat_deck
   sets:
   - home_with_zhang
   text: 调查员和老张都回到了岸上。
   ending: both_survive
-  present:
-  - zhang
 - id: e_home_alone
   title: 空船回港
   when: flag:back_ashore & flag:zhang_overboard
-  where: boat_deck
   sets:
   - home_alone
   text: 只有调查员回到了码头。
@@ -168,8 +155,10 @@ endings:
 - id: drowned
   title: 回到大海的怀抱
   condition: flag:boat_sunk
-  text: 落水的瞬间，冰冷的海水从鼻腔、嘴巴灌进来，预想中的窒息却没有到来，取而代之的是解脱般的清凉，原本干渴得几乎着火的喉咙终于平息。昏暗的水下，你看见自己指间长出近乎透明的薄膜，身边似乎有头发从头皮上脱落，漂散在海水里……你不会死，而是在逐渐变成海和尚，以头发为代价，换来物种的转变。
-  reward: 落水的调查员此后一切数值与海和尚一致
+  text: 渔船沉入海中。落水的调查员没有窒息。灼烧般的干渴慢慢平息，近乎透明的薄膜从他们的指间长出，脱落的头发在水中散开。他们正在变成海和尚。
+  reward: 落水的调查员转化为海和尚
+  outcome_condition: 转化
+  outcome_where: boat
 - id: early_return
   title: 见好就收
   condition: flag:early_home

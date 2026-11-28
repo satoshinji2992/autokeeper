@@ -88,6 +88,8 @@
 
 ## 游戏内安装
 
+当前模组版本需要 AutoKeeper 0.0.11.1 或更新版本。
+
 ```sh
 autokeeper library get bayu
 ```
