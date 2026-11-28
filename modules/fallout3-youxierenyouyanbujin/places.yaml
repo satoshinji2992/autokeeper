@@ -26,6 +26,9 @@ locations:
     - 门廊
     prompt: 木板小屋的门廊，门灯亮着，几级木台阶通向大街，栏杆边堆着旧花盆，门虚掩着。
   looks:
+  - when: flag:meeting_window_forced
+    change: 后窗的搭扣歪在窗框上。一串泥鞋印从门廊边的花盆绕到窗下。
+    'on': meeting_porch_body
   - when: knows:players:clue:c_mccurdy_body
     change: 门廊地板上躺着一具衣衫褴褛、满身污秽和伤疤的男尸，眼睛还睁着。
     'on': meeting_porch_body
@@ -485,6 +488,7 @@ locations:
   name: 温室天文台
   within: hart_house
   art: greenhouse
+  ascii_fallback: true
   weather:
   - dust
   aliases:

@@ -192,7 +192,7 @@ mechanics:
   why: e_chaos_dawn、e_cut_off、survived_day。
   runs: 守秘人
 - name: 观看望远镜结算
-  rules: 调查员看望远镜时自动崩溃，损失 1D8 理智，退出本次调查，置 viewed_telescope，对应 e_viewed。可选内讧：投理智，失败失 1D8 并崩溃；成功则受福，获得 1D10 克苏鲁神话并失去等量理智，成为内奸（慎用）。
+  rules: 调查员确实通过接目镜看进去时，在本人本拍定案的 scene.flags 选 viewed_telescope。e_viewed 自动令本人损失 1D8 理智并退出本次调查，不另掷理智。有旁观者只交代亲眼看见的反应。仅观察镜筒或翻阅记录本不触发，其他调查员可继续毁镜或熬到黎明。
   why: c_greenhouse_scope、e_viewed。
   runs: 守秘人
 - name: 麦克迪突袭时序

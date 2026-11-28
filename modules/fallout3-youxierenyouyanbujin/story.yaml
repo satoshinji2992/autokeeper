@@ -20,6 +20,7 @@ conclusions:
 events:
 - id: e_mccurdy_attack
   title: 麦克迪突袭
+  sets: [meeting_window_forced]
   when: D1 19:30
   where: meeting_house
   read_aloud: 厨房那边的窗户“咔”地响了一声。一个衣衫褴褛、浑身污秽的人影翻了进来，两眼空洞，喉咙里发出野兽一样的低吼。
@@ -152,6 +153,18 @@ events:
   when: flag:town_lost
   ending: e_town_lost
   text: 【小镇的时钟·结局（AutoKeeper 补充）】调查员没有切断联系，第四夜照旧有人看了望远镜（hart_fourth_night），小镇落入有福者手中，进入结局 e_town_lost。
+- id: e_viewed
+  title: 看见大智慧
+  when: flag:viewed_telescope
+  where: greenhouse
+  text: 本拍调查员真的通过接目镜看进去了，KP 才在 settle.scene.flags 写 viewed_telescope。使本人崩溃的理智损失和退场由引擎结算。其他人可继续调查。
+  read_aloud: '{name}贴上接目镜后，双手紧扣镜筒，身子突然一软，任旁人怎么呼唤也没有应声。'
+  effects:
+  - kind: retire
+    who: actor
+    condition: 退出调查
+    sanity_loss: 1D8
+    note: 你把眼睛贴上接目镜。起初只是错觉般的光斑，一分钟后，一个庞大、冰冷、非人的意识碾过你的心智。你抓着镜筒不放，直到再也分不清今夕何年。你由此退出这次调查。
 endings:
 - id: e_cut_off
   title: 黎明之后
@@ -163,11 +176,6 @@ endings:
   condition: flag:abandoned_town
   text: 你们开出镇界，后视镜里的斯托威尔依旧灯火如常。那架望远镜还在镇西的温室里，每晚都有新人被领去看它。
   reward: 抛弃镇民逃离：理智 -1D6
-- id: e_viewed
-  title: 看见大智慧
-  condition: flag:viewed_telescope
-  text: 你把眼睛贴上接目镜。起初只是错觉般的光斑，一分钟后，信号接上了——一个庞大、冰冷、非人的意识碾过你的心智。你抓着镜筒不放，直到再也分不清今夕何年。
-  reward: 看望远镜的调查员自动崩溃，损失 1D8 理智，退出本次调查（守秘人可选内讧规则见 keeper_notes）
 - id: e_town_lost
   title: 一切如常
   condition: flag:town_lost
@@ -233,11 +241,7 @@ showcases:
     when: ending:e_abandoned
     title: 抛下小镇
     prompt: 夜里一辆老式汽车的后视镜，镜子里是灯火如常的小镇渐渐远去，镇西一栋房子后面的玻璃温室还亮着灯
-  - id: sc_end_viewed
-    kind: 结局
-    when: ending:e_viewed
-    title: 看见大智慧
-    prompt: 望远镜的接目镜里，昴星团附近的星空裂开一道深渊，一个庞大、冰冷、非人的意识的轮廓压过整片星空
+    base: main_street
   - id: sc_end_lost
     kind: 结局
     when: ending:e_town_lost

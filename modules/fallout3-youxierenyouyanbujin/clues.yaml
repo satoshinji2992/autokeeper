@@ -8,6 +8,12 @@ clues:
   points_to:
   - k_broken
   text: 后屋传来窗框被撬开的吱呀声，有人正绕着房子找没关的门窗。
+- id: c_porch_tracks
+  title: 窗下的泥鞋印
+  where: meeting_house
+  feature: 门廊
+  requires: [flag:meeting_window_forced]
+  text: 泥鞋印从门廊绕到后窗，窗台上留着半个同样的鞋跟印。街对面有扇亮着灯的窗户，正对这段路。
 - id: c_mccurdy_body
   title: 麦克迪的尸体
   where: meeting_house

@@ -763,6 +763,32 @@
      "description": "进入结局时恢复的理智骰式，如 1D6；reward只负责说明，数值写在这里",
      "title": "Sanity Gain",
      "type": "string"
+    },
+    "outcome_condition": {
+     "anyOf": [
+      {
+       "enum": [
+        "死亡",
+        "永久疯狂",
+        "退出调查",
+        "转化",
+        "失踪"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "实际受结局影响的调查员的离场状态",
+     "title": "Outcome Condition"
+    },
+    "outcome_where": {
+     "default": "",
+     "description": "状态作用地点 id（含内部房间），留空则作用于整桌；按终局提交时的位置判定",
+     "title": "Outcome Where",
+     "type": "string"
     }
    },
    "required": [
@@ -806,6 +832,12 @@
      "default": "",
      "description": "事件实际发生的地点；异地事件只进入世界记录，不搬运调查员、不向异地玩家展示现场或结算当场伤害",
      "title": "Where",
+     "type": "string"
+    },
+    "unless_met": {
+     "default": "",
+     "description": "首次会面才演出的 NPC id；已有实际会面记录时跳过",
+     "title": "Unless Met",
      "type": "string"
     },
     "check": {
@@ -886,9 +918,23 @@
      "title": "Damage"
     },
     "effects": {
-     "description": "原文明示无须检定、确定发生的身体后果；kind=die 指明目标与原文依据。可能死亡或需先检定的攻击不填",
+     "description": "确定发生的后果。die 指明死亡目标与依据；retire 由本拍定案 scene.flags 触发，只使该行动者离场。",
      "items": {
-      "$ref": "#/$defs/Die"
+      "discriminator": {
+       "mapping": {
+        "die": "#/$defs/Die",
+        "retire": "#/$defs/Retire"
+       },
+       "propertyName": "kind"
+      },
+      "oneOf": [
+       {
+        "$ref": "#/$defs/Die"
+       },
+       {
+        "$ref": "#/$defs/Retire"
+       }
+      ]
      },
      "title": "Effects",
      "type": "array"
@@ -1938,6 +1984,12 @@
      ],
      "default": null,
      "title": "Art"
+    },
+    "ascii_fallback": {
+     "default": false,
+     "description": "没有照片或照片无法显示时，使用 art 对应的手绘字符场景",
+     "title": "Ascii Fallback",
+     "type": "boolean"
     },
     "public": {
      "default": false,
@@ -2995,7 +3047,8 @@
        "attitude",
        "track",
        "unreal",
-       "regain"
+       "regain",
+       "lose_action"
       ],
       "type": "string"
      },
@@ -3185,6 +3238,52 @@
     "shape"
    ],
    "title": "Region",
+   "type": "object"
+  },
+  "Retire": {
+   "properties": {
+    "kind": {
+     "const": "retire",
+     "title": "Kind",
+     "type": "string"
+    },
+    "who": {
+     "default": "actor",
+     "description": "actor 指本拍行动者；可限定为一个调查员 id",
+     "minLength": 1,
+     "title": "Who",
+     "type": "string"
+    },
+    "condition": {
+     "default": "退出调查",
+     "enum": [
+      "死亡",
+      "永久疯狂",
+      "退出调查",
+      "转化",
+      "失踪"
+     ],
+     "title": "Condition",
+     "type": "string"
+    },
+    "sanity_loss": {
+     "default": "",
+     "description": "本人直接损失的理智骰式",
+     "pattern": "^(?: *\\+? *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}|半?[dD][bB])(?: *[+-] *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}|半?[dD][bB]))* *(?:/ *\\+? *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}|半?[dD][bB])(?: *[+-] *(?:\\d{0,2}[dD]\\d{1,3}|\\d{1,3}|半?[dD][bB]))* *){0,2})?$",
+     "title": "Sanity Loss",
+     "type": "string"
+    },
+    "note": {
+     "description": "仅交付给退出者本人；旁人实际所见写在事件的 read_aloud",
+     "title": "Note",
+     "type": "string"
+    }
+   },
+   "required": [
+    "kind",
+    "note"
+   ],
+   "title": "Retire",
    "type": "object"
   },
   "RoomRect": {
